@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Pocket League Online</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="game-wrap">
+    <canvas id="game"></canvas>
+  </div>
+
+  <div id="hud" class="hud hidden">
+    <div id="score-blue" class="score blue">BLUE 0</div>
+    <div id="clock">05:00</div>
+    <div id="score-orange" class="score orange">0 ORANGE</div>
+  </div>
+
+  <button id="leave-game" class="floating-btn hidden" type="button">Leave</button>
+
+  <main id="ui-root" class="ui-root">
+    <section id="setup-card" class="panel">
+      <h1>Pocket League Online</h1>
+      <p class="muted">Firebase lobby multiplayer. Host creates a code; friends join with the code; game starts once everyone is ready.</p>
+      <div id="firebase-warning" class="warning hidden">
+        Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
+      </div>
+      <label>
+        Player name
+        <input id="player-name" maxlength="18" placeholder="Player" autocomplete="nickname" />
+      </label>
+      <div class="row two">
+        <button id="create-lobby" type="button">Create Lobby</button>
+        <div class="join-row">
+          <input id="join-code" maxlength="6" placeholder="CODE" />
+          <button id="join-lobby" type="button">Join</button>
+        </div>
+      </div>
+      <p id="connection-status" class="status">Connecting to Firebase…</p>
+    </section>
+
+    <section id="lobby-card" class="panel wide hidden">
+      <div class="panel-head">
+        <div>
+          <h2>Lobby <span id="lobby-code-label">----</span></h2>
+          <p id="lobby-status" class="muted">Waiting for players…</p>
+        </div>
+        <button id="copy-code" type="button" class="secondary">Copy Code</button>
+      </div>
+
+      <div class="grid two-col">
+        <div class="subpanel">
+          <h3>Match setup</h3>
+          <label>
+            Game mode
+            <select id="mode-select">
+              <option value="standard">Standard</option>
+              <option value="ice">Ice Rink</option>
+              <option value="snooker">Snooker Cue</option>
+              <option value="flying">Flying Scoutsman</option>
+            </select>
+          </label>
+          <label>
+            Team size
+            <select id="team-size-select">
+              <option value="1">1v1</option>
+              <option value="2">2v2</option>
+              <option value="3">3v3</option>
+              <option value="4">4v4</option>
+              <option value="5">5v5</option>
+            </select>
+          </label>
+          <label>
+            Opponent difficulty
+            <select id="difficulty-select">
+              <option value="rookie">Rookie</option>
+              <option value="pro" selected>Pro</option>
+              <option value="allstar">All-Star</option>
+            </select>
+          </label>
+          <label>
+            Opponent playstyle
+            <select id="playstyle-select">
+              <option value="balanced" selected>Balanced</option>
+              <option value="defensive">Defensive</option>
+              <option value="aggressive">Aggressive</option>
+              <option value="chaotic">Chaotic</option>
+            </select>
+          </label>
+          <p id="max-humans-label" class="hint">Max humans: 2</p>
+        </div>
+
+        <div class="subpanel">
+          <h3>Your player</h3>
+          <label>
+            Team
+            <select id="team-select">
+              <option value="blue">Blue</option>
+              <option value="orange">Orange</option>
+            </select>
+          </label>
+          <label>
+            Role
+            <select id="role-select">
+              <option value="attack">Attack</option>
+              <option value="midfield" selected>Midfield</option>
+              <option value="defence">Back / Defence</option>
+              <option value="goalkeeper">Goalkeeper</option>
+            </select>
+          </label>
+          <button id="ready-btn" type="button" class="ready">Ready</button>
+          <button id="leave-lobby" type="button" class="secondary">Leave Lobby</button>
+        </div>
+      </div>
+
+      <div class="grid two-col">
+        <div class="subpanel">
+          <h3>Blue squad</h3>
+          <div id="blue-team-list" class="team-list"></div>
+        </div>
+        <div class="subpanel">
+          <h3>Orange squad</h3>
+          <div id="orange-team-list" class="team-list"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="mobile-controls" class="mobile-controls hidden" aria-hidden="true">
+    <div id="stick-zone" class="stick-zone">
+      <div class="stick-ring"><div id="stick-knob" class="stick-knob"></div></div>
+      <div class="stick-label">DRIVE</div>
+    </div>
+    <div class="action-cluster">
+      <button data-action="boost" class="touch-btn boost">BOOST</button>
+      <button data-action="jump" class="touch-btn jump">JUMP</button>
+      <button data-action="drift" class="touch-btn drift">DRIFT</button>
+      <button data-action="cam" class="touch-btn small">CAM</button>
+      <button data-action="reset" class="touch-btn small">RESET</button>
+    </div>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
