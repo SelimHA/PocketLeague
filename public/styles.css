@@ -438,3 +438,54 @@ body.game-running #lobby-card { display: none !important; }
     pointer-events: none;
   }
 }
+
+
+/* V21: visible live boost counters for desktop and phone controls */
+.boost-container::after {
+  content: attr(data-boost);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-family: "Arial Black", Impact, sans-serif;
+  font-size: 14px;
+  line-height: 1;
+  text-shadow: 0 2px 8px rgba(0,0,0,.86);
+  letter-spacing: .03em;
+  pointer-events: none;
+}
+.boost-label { min-width: 96px; text-align: right; }
+@media (pointer: coarse) and (orientation: portrait) {
+  .boost-label, .boost-container { display: none !important; }
+  .boost-touch {
+    --boost-pct: 0%;
+    position: relative !important;
+    overflow: hidden;
+    isolation: isolate;
+    background:
+      linear-gradient(0deg, rgba(255, 178, 0, .78) 0 var(--boost-pct), rgba(255, 96, 0, .20) var(--boost-pct) 100%),
+      linear-gradient(180deg, rgba(255,196,0,.34), rgba(255,84,0,.18)) !important;
+  }
+  .boost-touch::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 12%, rgba(255,255,255,.30), transparent 36%);
+    opacity: .72;
+    z-index: -1;
+    pointer-events: none;
+  }
+  .boost-touch.boost-empty {
+    filter: grayscale(.25) brightness(.86);
+    border-color: rgba(255,255,255,.18);
+  }
+  .boost-btn-title, .boost-btn-value {
+    display: block;
+    pointer-events: none;
+    text-align: center;
+    text-shadow: 0 2px 10px rgba(0,0,0,.72);
+  }
+  .boost-btn-title { font-size: clamp(13px, 3.4vw, 18px); letter-spacing: .10em; }
+  .boost-btn-value { font-size: clamp(28px, 8vw, 44px); line-height: .92; margin-top: 3px; }
+}
