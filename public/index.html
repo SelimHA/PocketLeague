@@ -22,7 +22,7 @@
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel">
       <h1>Pocket League Online</h1>
-      <p class="muted">Firebase lobby multiplayer. Host creates a code; friends join with the code; game starts once everyone is ready.</p>
+      <p class="muted">Play solo with AI or host a Firebase lobby. Online hosts create a code; friends join with the code; game starts once everyone is ready.</p>
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
       </div>
@@ -31,11 +31,12 @@
         <input id="player-name" maxlength="18" placeholder="Player" autocomplete="nickname" />
       </label>
       <div class="row two">
-        <button id="create-lobby" type="button">Create Lobby</button>
-        <div class="join-row">
-          <input id="join-code" maxlength="6" placeholder="CODE" />
-          <button id="join-lobby" type="button">Join</button>
-        </div>
+        <button id="single-player" type="button" class="primary">Single Player</button>
+        <button id="create-lobby" type="button">Create Online Lobby</button>
+      </div>
+      <div class="join-row full">
+        <input id="join-code" maxlength="6" placeholder="CODE" />
+        <button id="join-lobby" type="button">Join Online Lobby</button>
       </div>
       <p id="connection-status" class="status">Connecting to Firebase…</p>
     </section>
