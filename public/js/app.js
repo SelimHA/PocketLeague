@@ -1,7 +1,4 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getDatabase, ref, get, set, update, onValue, remove, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 import { FIREBASE_CONFIG } from "./config.js";
 import {
   DEFAULT_META,
@@ -35,11 +32,15 @@ const ui = {
 };
 
 const canvas = $("#game");
+let initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getDatabase, ref, get, set, update, onValue, remove, onDisconnect, serverTimestamp;
+let firebaseBootPromise = null;
+let firebaseBootDone = false;
+let firebaseBootError = null;
 let firebaseReady = false;
 let auth = null;
 let db = null;
 let uid = null;
-let playerName = localStorage.getItem("pl_online_name") || "Player";
+let playerName = localStorage.getItem("rlcss_online_name") || localStorage.getItem("pl_online_name") || "Player";
 let lobbyCode = null;
 let currentLobby = null;
 let currentMeta = null;
@@ -54,11 +55,12 @@ let unsubLobby = null;
 let unsubInputs = null;
 let unsubState = null;
 let inputTimer = 0;
-let localBallCam = localStorage.getItem("pl_ball_cam") === "1";
+let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
 const bindings = defaultBindings();
 const mobileInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
-let mobileCamPulse = false;
+let mobileDriftTimer = 0;
+let mobileDriftCooldownTimer = 0;
 let camKeyLatch = false;
 let touchDevice = matchMedia("(pointer: coarse)").matches;
 
@@ -73,33 +75,72 @@ function hasPlaceholderConfig(config) {
 }
 
 async function bootFirebase() {
+  firebaseBootDone = false;
+  firebaseBootError = null;
   if (hasPlaceholderConfig(FIREBASE_CONFIG)) {
     ui.firebaseWarning.classList.remove("hidden");
     ui.connection.textContent = "Single player is available. Add Firebase config to enable online multiplayer.";
-    ui.create.disabled = true;
-    ui.join.disabled = true;
-    return;
+    firebaseBootDone = true;
+    return false;
   }
   try {
+    ui.connection.textContent = "Connecting to online services… single player is ready now.";
+    const [appMod, authMod, dbMod] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js")
+    ]);
+    ({ initializeApp } = appMod);
+    ({ getAuth, signInAnonymously, onAuthStateChanged } = authMod);
+    ({ getDatabase, ref, get, set, update, onValue, remove, onDisconnect, serverTimestamp } = dbMod);
     const app = initializeApp(FIREBASE_CONFIG);
     auth = getAuth(app);
     db = getDatabase(app);
-    onAuthStateChanged(auth, user => {
-      if (user) {
-        uid = user.uid;
-        firebaseReady = true;
-        ui.connection.textContent = "Connected. Create a lobby or join with a code.";
-        ui.create.disabled = false;
-        ui.join.disabled = false;
-      }
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Firebase sign-in timed out. Check Anonymous Auth and Authorized Domains.")), 12000);
+      onAuthStateChanged(auth, user => {
+        if (user) {
+          clearTimeout(timer);
+          uid = user.uid;
+          firebaseReady = true;
+          ui.connection.textContent = "Connected. Create a lobby or join with a code.";
+          ui.create.disabled = false;
+          ui.join.disabled = false;
+          resolve();
+        }
+      });
+      signInAnonymously(auth).catch(err => {
+        clearTimeout(timer);
+        reject(err);
+      });
     });
-    await signInAnonymously(auth);
+    firebaseBootDone = true;
+    return true;
   } catch (err) {
     console.error(err);
-    ui.connection.textContent = `Firebase error: ${err.message}`;
-    ui.create.disabled = true;
-    ui.join.disabled = true;
+    firebaseReady = false;
+    firebaseBootDone = true;
+    firebaseBootError = err;
+    ui.connection.textContent = `Online error: ${err.message}. Single player still works.`;
+    // Keep the buttons enabled so a tap gives a useful retry/error message instead of appearing dead.
+    ui.create.disabled = false;
+    ui.join.disabled = false;
+    return false;
   }
+}
+
+async function ensureFirebaseReady() {
+  if (firebaseReady && uid && db) return true;
+  if (!firebaseBootPromise) firebaseBootPromise = bootFirebase();
+  if (!firebaseBootDone) {
+    ui.connection.textContent = "Connecting to Firebase… try Single Player now, or wait for online.";
+    await firebaseBootPromise;
+  }
+  if (firebaseReady && uid && db) return true;
+  const reason = firebaseBootError ? firebaseBootError.message : "Firebase is not ready yet.";
+  ui.connection.textContent = `Online multiplayer is not ready: ${reason}`;
+  if (firebaseBootError) firebaseBootPromise = null;
+  return false;
 }
 
 function sanitizeName(name) {
@@ -119,9 +160,10 @@ function randomCode() {
 
 async function createLobby() {
   isSinglePlayer = false;
-  if (!firebaseReady || !uid) return;
+  if (!(await ensureFirebaseReady())) return;
+  setStatus("Creating lobby…");
   playerName = sanitizeName(ui.name.value);
-  localStorage.setItem("pl_online_name", playerName);
+  localStorage.setItem("rlcss_online_name", playerName);
   let code = randomCode();
   for (let i = 0; i < 8; i++) {
     const snap = await get(lobbyRef(code));
@@ -130,15 +172,21 @@ async function createLobby() {
   }
   const meta = { ...DEFAULT_META, hostId: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: "waiting" };
   const player = { name: playerName, team: "blue", role: "midfield", ready: false, joinedAt: serverTimestamp(), isHost: true };
-  await set(lobbyRef(code), { meta, players: { [uid]: player }, inputs: {}, state: null });
-  await enterLobby(code);
+  try {
+    await set(lobbyRef(code), { meta, players: { [uid]: player }, inputs: {}, state: null });
+    await enterLobby(code);
+    setStatus(`Lobby ${code} created.`);
+  } catch (err) {
+    console.error(err);
+    setStatus(`Create lobby failed: ${err.message}`);
+  }
 }
 
 async function joinLobby() {
   isSinglePlayer = false;
-  if (!firebaseReady || !uid) return;
+  if (!(await ensureFirebaseReady())) return;
   playerName = sanitizeName(ui.name.value);
-  localStorage.setItem("pl_online_name", playerName);
+  localStorage.setItem("rlcss_online_name", playerName);
   const code = ui.joinCode.value.trim().toUpperCase();
   if (!code) return setStatus("Enter a lobby code first.");
   const snap = await get(lobbyRef(code));
@@ -151,16 +199,22 @@ async function joinLobby() {
   if (humans >= maxHumans) return setStatus(`Lobby is full for ${MODE_CONFIGS[meta.mode].label}.`);
   const counts = countTeams(data.players || {});
   const team = counts.blue <= counts.orange ? "blue" : "orange";
-  await set(lobbyRef(code, `players/${uid}`), { name: playerName, team, role: "midfield", ready: false, joinedAt: serverTimestamp(), isHost: false });
-  await enterLobby(code);
+  try {
+    await set(lobbyRef(code, `players/${uid}`), { name: playerName, team, role: "midfield", ready: false, joinedAt: serverTimestamp(), isHost: false });
+    await enterLobby(code);
+  } catch (err) {
+    console.error(err);
+    setStatus(`Join lobby failed: ${err.message}`);
+  }
 }
 
 function startSinglePlayer() {
+  document.body.classList.add("game-running");
   cleanupLobbyListeners();
   isSinglePlayer = true;
   singlePlayerId = uid || LOCAL_UID;
   playerName = sanitizeName(ui.name.value);
-  localStorage.setItem("pl_online_name", playerName);
+  localStorage.setItem("rlcss_online_name", playerName);
   lobbyCode = "SOLO";
 
   // Single player should launch immediately. The previous rebuild put solo
@@ -356,12 +410,18 @@ async function maybeAutoStart() {
 
 function updateGameVisibility() {
   const running = currentMeta && currentMeta.status === "running";
+  document.body.classList.toggle("game-running", !!running);
   ui.hud.classList.toggle("hidden", !running);
   ui.leaveGame.classList.toggle("hidden", !running);
   ui.boostLabel.classList.toggle("hidden", !running);
   ui.boostBox.classList.toggle("hidden", !running);
   ui.controlsHint.classList.toggle("hidden", !running || isPhonePortrait());
-  ui.lobby.classList.toggle("hidden", running);
+  if (isSinglePlayer) {
+    ui.setup.classList.toggle("hidden", running);
+    ui.lobby.classList.add("hidden");
+  } else {
+    ui.lobby.classList.toggle("hidden", running);
+  }
   ui.mobile.classList.toggle("hidden", !running || !isPhonePortrait());
   if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
   if (running && (isSinglePlayer || currentMeta?.hostId === activePlayerId()) && !hostSim) {
@@ -422,6 +482,7 @@ async function leaveToMenu(message = "") {
   singlePlayerId = null;
   lobbyCode = null; currentLobby = null; currentMeta = null; currentPlayers = {}; latestState = null; latestInputs = {};
   ui.lobby.classList.remove("solo");
+  document.body.classList.remove("game-running");
   ui.setup.classList.remove("hidden");
   ui.lobby.classList.add("hidden");
   ui.hud.classList.add("hidden");
@@ -488,7 +549,7 @@ window.addEventListener("keydown", e => {
   if (e.code === bindings.cam && !camKeyLatch) {
     camKeyLatch = true;
     localBallCam = !localBallCam;
-    localStorage.setItem("pl_ball_cam", localBallCam ? "1" : "0");
+    localStorage.setItem("rlcss_ball_cam", localBallCam ? "1" : "0");
     if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
   }
 });
@@ -505,45 +566,80 @@ function isPhonePortrait() {
 function setupMobileControls() {
   const zone = ui.stickZone;
   const knob = ui.stickKnob;
+  if (!zone || !knob) return;
   let activeId = null;
   function setStick(clientX, clientY) {
     const rect = zone.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    const max = Math.min(rect.width, rect.height) * 0.32;
-    const dx = clamp(clientX - cx, -max, max);
-    const dy = clamp(clientY - cy, -max, max);
+    const max = Math.max(48, Math.min(rect.width, rect.height) * 0.34);
+    const rawDx = clientX - cx;
+    const rawDy = clientY - cy;
+    const mag = Math.hypot(rawDx, rawDy);
+    const scale = mag > max ? max / mag : 1;
+    const dx = rawDx * scale;
+    const dy = rawDy * scale;
     const nx = dx / max;
     const ny = dy / max;
     mobileInput.steer = clamp(nx, -1, 1);
     mobileInput.throttle = clamp(-ny, -1, 1);
     knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    zone.classList.add("active");
   }
   function resetStick() {
     activeId = null;
-    mobileInput.steer = 0; mobileInput.throttle = 0;
+    mobileInput.steer = 0;
+    mobileInput.throttle = 0;
     knob.style.transform = "translate(-50%, -50%)";
+    zone.classList.remove("active");
   }
-  zone.addEventListener("pointerdown", e => { activeId = e.pointerId; zone.setPointerCapture(activeId); setStick(e.clientX, e.clientY); });
+  zone.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    activeId = e.pointerId;
+    zone.setPointerCapture(activeId);
+    setStick(e.clientX, e.clientY);
+  });
   zone.addEventListener("pointermove", e => { if (e.pointerId === activeId) setStick(e.clientX, e.clientY); });
   zone.addEventListener("pointerup", e => { if (e.pointerId === activeId) resetStick(); });
   zone.addEventListener("pointercancel", e => { if (e.pointerId === activeId) resetStick(); });
 
+  function triggerMobileDrift(btn) {
+    if (mobileDriftTimer || mobileDriftCooldownTimer) return;
+    mobileInput.drift = true;
+    btn.disabled = true;
+    btn.classList.add("drift-latched");
+    mobileDriftTimer = window.setTimeout(() => {
+      mobileInput.drift = false;
+      mobileDriftTimer = 0;
+      btn.classList.remove("drift-latched");
+      btn.classList.add("drift-cooling");
+      mobileDriftCooldownTimer = window.setTimeout(() => {
+        btn.disabled = false;
+        btn.classList.remove("drift-cooling");
+        mobileDriftCooldownTimer = 0;
+      }, 260);
+    }, 850);
+  }
+
   document.querySelectorAll(".touch-btn").forEach(btn => {
     const action = btn.dataset.action;
     btn.addEventListener("pointerdown", e => {
-      e.preventDefault(); btn.setPointerCapture(e.pointerId); btn.classList.add("active");
+      e.preventDefault();
+      btn.setPointerCapture(e.pointerId);
+      btn.classList.add("active");
       if (action === "cam") {
         localBallCam = !localBallCam;
-        localStorage.setItem("pl_ball_cam", localBallCam ? "1" : "0");
+        localStorage.setItem("rlcss_ball_cam", localBallCam ? "1" : "0");
         if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
+      } else if (action === "drift") {
+        triggerMobileDrift(btn);
       } else if (action in mobileInput) {
         mobileInput[action] = true;
       }
     });
-    const up = e => {
+    const up = () => {
       btn.classList.remove("active");
-      if (action in mobileInput && action !== "jump" && action !== "reset") mobileInput[action] = false;
+      if (action in mobileInput && !["jump", "reset", "drift"].includes(action)) mobileInput[action] = false;
       if (action === "jump" || action === "reset") setTimeout(() => { mobileInput[action] = false; }, 80);
     };
     btn.addEventListener("pointerup", up);
@@ -776,5 +872,5 @@ function renderLoop() {
 }
 
 setupMobileControls();
-bootFirebase();
+firebaseBootPromise = bootFirebase();
 renderLoop();
