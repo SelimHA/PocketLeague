@@ -194,58 +194,101 @@
       <div class="settings-pane" data-settings-pane="audio" role="tabpanel" hidden>
         <div class="settings-section audio-settings-section">
           <h3>Audio</h3>
-          <label class="toggle-label"><input id="music-enabled" type="checkbox" /> Enable music</label>
-          <label class="range-label">
-            Game sound volume
-            <input id="game-volume" type="range" min="0" max="1" step="0.01" />
-            <span id="game-volume-value" class="setting-value">75%</span>
-          </label>
-          <label class="range-label">
-            Music volume
-            <input id="music-volume" type="range" min="0" max="1" step="0.01" />
-            <span id="music-volume-value" class="setting-value">45%</span>
-          </label>
-          <div class="voice-test-card">
-            <div>
-              <strong>Voice check</strong>
-              <span>Record a short mic sample and play it back through your speakers/headphones.</span>
-            </div>
-            <button id="voice-test-playback" type="button" class="secondary small-action">Test mic playback</button>
+
+          <div class="audio-settings-grid">
+            <section class="audio-subsection">
+              <h4>Game audio</h4>
+              <label class="range-label">
+                Game sound volume
+                <input id="game-volume" type="range" min="0" max="1" step="0.01" />
+                <span id="game-volume-value" class="setting-value">75%</span>
+              </label>
+            </section>
+
+            <section class="audio-subsection">
+              <h4>Music</h4>
+              <label class="toggle-label"><input id="music-enabled" type="checkbox" /> Enable music</label>
+              <label class="range-label">
+                Music volume
+                <input id="music-volume" type="range" min="0" max="1" step="0.01" />
+                <span id="music-volume-value" class="setting-value">45%</span>
+              </label>
+              <label>
+                Menu / match music track
+                <select id="music-track-select">
+                  <option value="shuffle">Shuffle enabled songs</option>
+                  <option value="nitro">Nitro Boost Dreams</option>
+                  <option value="turbo">Turbo Boost Dreams</option>
+                  <option value="starlight">Boosting Through Starlight</option>
+                  <option value="ignite">Boost Ignite</option>
+                  <option value="hearts">Nitro Hearts Racing</option>
+                  <option value="overdrive">Neon Overdrive</option>
+                  <option value="anthem2">Boost Mode Anthem 2</option>
+                  <option value="anthem">Boost Mode Anthem</option>
+                </select>
+              </label>
+              <details id="music-track-details" class="track-toggle-details">
+                <summary>Choose which songs can play</summary>
+                <p class="hint">Collapsed by default. Turn off any tracks you do not want in shuffle or menu playback.</p>
+                <div id="music-track-toggles" class="music-track-toggles"></div>
+              </details>
+              <div class="audio-actions">
+                <button id="preview-music" type="button" class="secondary small-action">Preview music</button>
+                <button id="previous-music" type="button" class="secondary small-action">Restart / previous</button>
+                <button id="next-music" type="button" class="secondary small-action">Next song</button>
+              </div>
+              <p id="music-now-playing" class="hint">Loading first song… All included music is AI-generated.</p>
+            </section>
+
+            <section class="audio-subsection">
+              <h4>Voice chat</h4>
+              <label>
+                Voice activation
+                <select id="voice-activation-mode">
+                  <option value="open">Always on while joined</option>
+                  <option value="push">Push-to-talk button</option>
+                </select>
+              </label>
+              <label class="range-label">
+                Voice chat volume
+                <input id="voice-volume" type="range" min="0" max="1" step="0.01" />
+                <span id="voice-volume-value" class="setting-value">85%</span>
+              </label>
+              <label>
+                Active speaker overlay (PC only)
+                <select id="voice-speaker-mode">
+                  <option value="always">Always on</option>
+                  <option value="menus">Only in menus</option>
+                  <option value="off">Always off</option>
+                </select>
+              </label>
+              <div class="voice-test-card">
+                <div>
+                  <strong>Voice check</strong>
+                  <span>Record a short mic sample and play it back through your selected speakers/headphones.</span>
+                </div>
+                <button id="voice-test-playback" type="button" class="secondary small-action">Test mic playback</button>
+              </div>
+              <p id="voice-test-status" class="hint">Voice check is local only and does not join lobby voice chat.</p>
+            </section>
+
+            <section class="audio-subsection audio-devices-section">
+              <h4>Voice devices</h4>
+              <div class="audio-device-actions">
+                <button id="refresh-audio-devices" type="button" class="secondary small-action">Refresh devices</button>
+                <span id="audio-device-status" class="hint">Press refresh if your mic/headphones do not appear.</span>
+              </div>
+              <label>
+                Microphone
+                <select id="voice-input-device"><option value="">Default microphone</option></select>
+              </label>
+              <label>
+                Playback device
+                <select id="voice-output-device"><option value="">Default speaker/headphones</option></select>
+              </label>
+              <p class="hint">Some phones/browsers do not allow choosing a playback device, so the output list may only show the default device.</p>
+            </section>
           </div>
-          <label>
-            Active speaker overlay (PC only)
-            <select id="voice-speaker-mode">
-              <option value="always">Always on</option>
-              <option value="menus">Only in menus</option>
-              <option value="off">Always off</option>
-            </select>
-          </label>
-          <p id="voice-test-status" class="hint">Voice check is local only and does not join lobby voice chat.</p>
-          <label>
-            Menu / match music track
-            <select id="music-track-select">
-              <option value="shuffle">Shuffle enabled songs</option>
-              <option value="nitro">Nitro Boost Dreams</option>
-              <option value="turbo">Turbo Boost Dreams</option>
-              <option value="starlight">Boosting Through Starlight</option>
-              <option value="ignite">Boost Ignite</option>
-              <option value="hearts">Nitro Hearts Racing</option>
-              <option value="overdrive">Neon Overdrive</option>
-              <option value="anthem2">Boost Mode Anthem 2</option>
-              <option value="anthem">Boost Mode Anthem</option>
-            </select>
-          </label>
-          <details id="music-track-details" class="track-toggle-details">
-            <summary>Choose which songs can play</summary>
-            <p class="hint">Collapsed by default. Turn off any tracks you do not want in shuffle or menu playback.</p>
-            <div id="music-track-toggles" class="music-track-toggles"></div>
-          </details>
-          <div class="audio-actions">
-            <button id="preview-music" type="button" class="secondary small-action">Preview music</button>
-            <button id="previous-music" type="button" class="secondary small-action">Restart / previous</button>
-            <button id="next-music" type="button" class="secondary small-action">Next song</button>
-          </div>
-          <p id="music-now-playing" class="hint">Music tries to start when the site opens. If your browser blocks autoplay, tap any button once. All included music is AI-generated.</p>
         </div>
       </div>
 
