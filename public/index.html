@@ -62,7 +62,7 @@
       </label>
       <div class="account-strip" aria-live="polite">
         <span id="account-status">Playing as guest</span>
-        <button id="open-account" type="button" class="secondary small-action">Account</button>
+        <button id="open-account" type="button" class="secondary small-action account-cta">Create / Sign in</button>
         <button id="open-settings" type="button" class="secondary small-action">Settings</button>
         <button id="open-leaderboard" type="button" class="secondary small-action">Leaderboard</button>
       </div>
@@ -259,23 +259,38 @@
               <option value="600">10 minutes</option>
             </select>
           </label>
-          <label>
-            Opponent difficulty
-            <select id="difficulty-select">
-              <option value="rookie">Rookie</option>
-              <option value="pro" selected>Pro</option>
-              <option value="allstar">All-Star</option>
-            </select>
-          </label>
-          <label>
-            Opponent playstyle
-            <select id="playstyle-select">
-              <option value="balanced" selected>Balanced</option>
-              <option value="defensive">Defensive</option>
-              <option value="aggressive">Aggressive</option>
-              <option value="chaotic">Chaotic</option>
-            </select>
-          </label>
+          <details id="advanced-ai-options" class="advanced-options">
+            <summary>Advanced AI &amp; strategy</summary>
+            <p class="hint">Keep the simple presets, or open this to tune each AI teammate/opponent. Defaults are still good for quick matches.</p>
+            <label>
+              Team strategy preset
+              <select id="team-strategy-select">
+                <option value="balanced" selected>Balanced rotation</option>
+                <option value="defensive">Defensive shape</option>
+                <option value="aggressive">Aggressive pressure</option>
+                <option value="rotational">Rocket-style rotation</option>
+                <option value="chaotic">Chaotic chase</option>
+              </select>
+            </label>
+            <label>
+              AI difficulty
+              <select id="difficulty-select">
+                <option value="rookie">Rookie</option>
+                <option value="pro" selected>Pro</option>
+                <option value="allstar">All-Star</option>
+              </select>
+            </label>
+            <label>
+              Base AI behaviour
+              <select id="playstyle-select">
+                <option value="balanced" selected>Balanced</option>
+                <option value="defensive">Defensive</option>
+                <option value="aggressive">Aggressive</option>
+                <option value="chaotic">Chaotic</option>
+              </select>
+            </label>
+            <div id="advanced-ai-list" class="advanced-ai-list" aria-live="polite"></div>
+          </details>
           <label>
             Game chat visibility
             <select id="chat-scope-select">

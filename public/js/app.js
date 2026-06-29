@@ -31,7 +31,7 @@ const ui = {
   accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountAuthFields: $("#account-auth-fields"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
   openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
-  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
+  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
   hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), toggleVoice: $("#toggle-voice"), muteVoice: $("#mute-voice"), pauseOverlay: $("#pause-overlay"), pauseOpenSettings: $("#pause-open-settings"), pauseResume: $("#pause-resume"),
@@ -343,6 +343,8 @@ let controllerBindBaseline = null;
 let controllerBindStartedAt = 0;
 const controllerNavLatches = {};
 let controllerNavLastMove = 0;
+let controllerNavSuppressUntil = 0;
+let controllerUiLastFocusAt = 0;
 const mobileInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
 let mobileDriftTimer = 0;
 let mobileDriftCooldownTimer = 0;
@@ -733,7 +735,8 @@ function updateAccountUi() {
       ? `Signed in: ${accountName()}`
       : (anon ? "Playing as guest" : "Offline / guest only");
   }
-  if (ui.openAccount) ui.openAccount.textContent = signedIn ? "Profile" : "Account";
+  if (ui.openAccount) ui.openAccount.textContent = signedIn ? "Profile" : "Create / Sign in";
+  if (ui.openAccount) ui.openAccount.classList.toggle("account-cta", !signedIn);
   if (ui.accountAuthFields) ui.accountAuthFields.classList.toggle("hidden", signedIn);
   if (ui.createAccount) ui.createAccount.classList.toggle("hidden", signedIn);
   if (ui.signInAccount) ui.signInAccount.classList.toggle("hidden", signedIn);
@@ -977,6 +980,7 @@ function currentSoloMetaPatch() {
     matchLength: Number(ui.matchLength?.value || gameSettings.matchLength || DEFAULT_META.matchLength),
     difficulty: ui.difficulty?.value || DEFAULT_META.difficulty,
     playstyle: ui.playstyle?.value || DEFAULT_META.playstyle,
+    aiStrategy: ui.aiStrategy?.value || DEFAULT_META.aiStrategy || DEFAULT_META.playstyle,
     chatScope: ui.chatScope?.value || DEFAULT_META.chatScope,
     voiceScope: ui.voiceScope?.value || DEFAULT_META.voiceScope
   };
@@ -1102,6 +1106,7 @@ function startSinglePlayer() {
   ui.lobbyCode.textContent = "SOLO";
   renderLobby();
   updateGameVisibility();
+  setTimeout(focusFirstMenuElement, 80);
   if (ui.lobbyStatus) ui.lobbyStatus.textContent = "Solo setup: configure teams, modes and AI, then start.";
   setStatus("Solo setup opened. Configure the match, then press Start Match.");
 }
@@ -1163,6 +1168,7 @@ async function enterLobby(code) {
   unsubChat = onValue(lobbyRef(code, "chat"), snap => { currentChat = snap.val() || {}; renderChat(); });
   clearInterval(inputTimer);
   inputTimer = setInterval(sendInput, 33);
+  setTimeout(focusFirstMenuElement, 120);
 }
 
 function cleanupLobbyListeners() {
@@ -1194,6 +1200,7 @@ function renderLobby() {
   if (ui.matchLength) ui.matchLength.value = String(currentMeta.matchLength || DEFAULT_META.matchLength);
   ui.difficulty.value = currentMeta.difficulty;
   ui.playstyle.value = currentMeta.playstyle;
+  if (ui.aiStrategy) ui.aiStrategy.value = currentMeta.aiStrategy || currentMeta.playstyle || "balanced";
   if (ui.chatScope) ui.chatScope.value = currentMeta.chatScope || DEFAULT_META.chatScope;
   if (ui.voiceScope) ui.voiceScope.value = currentMeta.voiceScope || DEFAULT_META.voiceScope;
   ui.team.value = local.team || "blue";
@@ -1203,6 +1210,7 @@ function renderLobby() {
   ui.ready.classList.toggle("not-ready", !isSinglePlayer && !!local.ready);
   ui.ready.textContent = isSinglePlayer ? "Start Match" : (local.ready ? "Unready" : "Ready");
   ui.mode.disabled = ui.teamSize.disabled = ui.difficulty.disabled = ui.playstyle.disabled = !isHost || currentMeta.status !== "waiting";
+  if (ui.aiStrategy) ui.aiStrategy.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.pitchSize) ui.pitchSize.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.matchLength) ui.matchLength.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.chatScope) ui.chatScope.disabled = !isHost || currentMeta.status !== "waiting";
@@ -1232,9 +1240,64 @@ function renderLobby() {
   }
   renderTeamList("blue", ui.blueList);
   renderTeamList("orange", ui.orangeList);
+  renderAdvancedAiOptions();
   renderChat();
   if (voiceActive) reconcileVoicePeers();
   updateVoiceUi();
+}
+
+
+function aiTuningValue(meta, team, slot, field, fallback = "normal") {
+  const value = meta?.aiTuning?.[team]?.[slot]?.[field];
+  return ["low", "normal", "high"].includes(value) ? value : fallback;
+}
+
+function optionSet(selected, values) {
+  return values.map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+}
+
+function renderAdvancedAiOptions() {
+  if (!ui.advancedAiList || !currentMeta) return;
+  const meta = currentMeta || DEFAULT_META;
+  const isHost = (isSinglePlayer || meta.hostId === activePlayerId()) && meta.status === "waiting";
+  const humanByTeam = { blue: [], orange: [] };
+  Object.values(currentPlayers || {}).forEach(p => humanByTeam[p.team === "orange" ? "orange" : "blue"].push(p));
+  const rows = [];
+  for (const team of ["blue", "orange"]) {
+    for (let i = 0; i < meta.teamSize; i++) {
+      if (humanByTeam[team]?.[i]) continue;
+      const role = meta.aiRoles?.[team]?.[i] || defaultRoleForSlot(i, meta.teamSize);
+      const aggression = aiTuningValue(meta, team, i, "aggression", "normal");
+      const defence = aiTuningValue(meta, team, i, "defence", "normal");
+      const boost = aiTuningValue(meta, team, i, "boost", "normal");
+      const disabled = isHost ? "" : "disabled";
+      rows.push(`
+        <div class="advanced-ai-row ${team}">
+          <div class="advanced-ai-title"><span class="dot"></span><strong>${team === "blue" ? "Blue" : "Orange"} AI ${i + 1}</strong></div>
+          <label>Role
+            <select class="advanced-ai-control" data-ai-team="${team}" data-ai-slot="${i}" data-ai-field="role" ${disabled}>
+              ${ROLES.map(r => `<option value="${r}" ${r === role ? "selected" : ""}>${roleLabel(r)}</option>`).join("")}
+            </select>
+          </label>
+          <label>Aggression
+            <select class="advanced-ai-control" data-ai-team="${team}" data-ai-slot="${i}" data-ai-field="aggression" ${disabled}>
+              ${optionSet(aggression, [["low", "Patient"], ["normal", "Normal"], ["high", "Press hard"]])}
+            </select>
+          </label>
+          <label>Defence
+            <select class="advanced-ai-control" data-ai-team="${team}" data-ai-slot="${i}" data-ai-field="defence" ${disabled}>
+              ${optionSet(defence, [["low", "Loose"], ["normal", "Normal"], ["high", "Hold shape"]])}
+            </select>
+          </label>
+          <label>Boost use
+            <select class="advanced-ai-control" data-ai-team="${team}" data-ai-slot="${i}" data-ai-field="boost" ${disabled}>
+              ${optionSet(boost, [["low", "Conserve"], ["normal", "Normal"], ["high", "Use often"]])}
+            </select>
+          </label>
+        </div>`);
+    }
+  }
+  ui.advancedAiList.innerHTML = rows.length ? rows.join("") : `<p class="hint">All slots are currently filled by human players. AI options appear when the selected team size leaves AI slots.</p>`;
 }
 
 function renderTeamList(team, root) {
@@ -1492,9 +1555,15 @@ function gamepadSnapshot(pad) {
   };
 }
 
+function suppressControllerNav(ms = 650) {
+  controllerNavSuppressUntil = Math.max(controllerNavSuppressUntil, performance.now() + ms);
+  Object.keys(controllerNavLatches).forEach(k => { controllerNavLatches[k] = true; });
+}
+
 function startControllerBindDetect(key, type) {
   const pad = getFirstRawGamepad();
   pendingControllerBind = { key, type };
+  suppressControllerNav(12000);
   controllerBindBaseline = gamepadSnapshot(pad || { axes: [], buttons: [] });
   controllerBindStartedAt = performance.now();
   renderSettingsUi();
@@ -1506,6 +1575,7 @@ function finishControllerBindDetect(value) {
   controllerSettings[pendingControllerBind.key] = Number(value);
   pendingControllerBind = null;
   controllerBindBaseline = null;
+  suppressControllerNav(700);
   saveControllerSettings();
   if (ui.controllerStatus) ui.controllerStatus.textContent = "Controller binding detected and saved.";
 }
@@ -1513,6 +1583,7 @@ function finishControllerBindDetect(value) {
 function cancelControllerBindDetect(message = "Controller detect cancelled.") {
   pendingControllerBind = null;
   controllerBindBaseline = null;
+  suppressControllerNav(700);
   renderSettingsUi();
   if (ui.controllerStatus) ui.controllerStatus.textContent = message;
 }
@@ -1562,12 +1633,29 @@ function menuFocusableElements() {
   return [...items, ...pauseItems];
 }
 
+function markControllerUiActive() {
+  document.body.classList.add("using-controller");
+  controllerUiLastFocusAt = performance.now();
+}
+
 function focusMenuElement(delta = 1) {
   const items = menuFocusableElements();
   if (!items.length) return;
-  const idx = Math.max(0, items.indexOf(document.activeElement));
+  markControllerUiActive();
+  const currentIndex = items.indexOf(document.activeElement);
+  const idx = currentIndex >= 0 ? currentIndex : (delta >= 0 ? -1 : 0);
   const next = items[(idx + delta + items.length) % items.length];
-  next.focus({ preventScroll: false });
+  next.focus({ preventScroll: true });
+  next.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: "smooth" });
+}
+
+function focusFirstMenuElement() {
+  const items = menuFocusableElements();
+  if (!items.length) return;
+  if (isVisibleElement(document.activeElement) && items.includes(document.activeElement)) return;
+  markControllerUiActive();
+  items[0].focus({ preventScroll: true });
+  items[0].scrollIntoView?.({ block: "nearest", inline: "nearest" });
 }
 
 function clickFocusedMenuElement() {
@@ -1597,6 +1685,7 @@ function navButtonEdge(name, pressed) {
 }
 
 function settingsTabDelta(delta) {
+  if (pendingControllerBind || pendingKeyBind) return false;
   if (!ui.settingsCard || ui.settingsCard.classList.contains("hidden")) return false;
   const tabs = ["gameplay", "camera", "keyboard", "controller"];
   const idx = Math.max(0, tabs.indexOf(activeSettingsTab));
@@ -1605,7 +1694,7 @@ function settingsTabDelta(delta) {
 }
 
 function pollControllerMenuNavigation() {
-  if (pendingControllerBind) return;
+  if (pendingControllerBind || pendingKeyBind || performance.now() < controllerNavSuppressUntil) return;
   const activeMenu = !document.body.classList.contains("game-running") || (currentMeta?.paused && (!ui.settingsCard?.classList.contains("hidden") || !ui.pauseOverlay?.classList.contains("hidden")));
   if (!activeMenu) return;
   const pad = getFirstRawGamepad();
@@ -1639,7 +1728,7 @@ function pollController() {
   controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
   controllerLook = { x: 0, y: 0, active: false };
   if (!pad) return controllerInput;
-  if (pendingControllerBind) return controllerInput;
+  if (pendingControllerBind || pendingKeyBind) return controllerInput;
 
   const steerAxis = axisValue(pad, controllerSettings.steerAxis);
   const driveTrigger = Math.max(triggerValueFromAxis(pad, controllerSettings.throttleAxis), buttonValue(pad, controllerSettings.throttleAxis));
@@ -2127,6 +2216,7 @@ function showMenuPanel(which = "setup") {
     if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
     if (ui.settingsCard) ui.settingsCard.classList.toggle("hidden", !showSettings || !currentMeta?.paused);
     if (showSettings) { renderSettingsUi(); setSettingsTab(activeSettingsTab); }
+    setTimeout(focusFirstMenuElement, 0);
     return;
   }
   settingsOpenedFromPause = false;
@@ -2142,6 +2232,7 @@ function showMenuPanel(which = "setup") {
   if (showAccount && ui.accountUsername && !ui.accountUsername.value) ui.accountUsername.value = normalizeUsername(ui.name?.value || accountProfile?.username || "");
   if (showAccount) updateAccountUi();
   if (showSettings) { renderSettingsUi(); setSettingsTab(activeSettingsTab); }
+  setTimeout(focusFirstMenuElement, 0);
 }
 
 // UI events
@@ -2164,6 +2255,7 @@ if (ui.keybindList) ui.keybindList.addEventListener("click", e => {
   const btn = e.target.closest("[data-bind-action]");
   if (!btn) return;
   pendingKeyBind = btn.dataset.bindAction;
+  suppressControllerNav(12000);
   btn.textContent = "Press a key…";
   btn.classList.add("listening");
 });
@@ -2234,7 +2326,7 @@ ui.ready.addEventListener("click", () => {
   if (isSinglePlayer) startSoloMatch();
   else updateLocalPlayer({ ready: !(currentPlayers[activePlayerId()]?.ready) });
 });
-ui.team.addEventListener("change", () => updateLocalPlayer({ team: ui.team.value, ready: false }));
+ui.team.addEventListener("change", () => { updateVehiclePreview(true); updateLocalPlayer({ team: ui.team.value, ready: false }); });
 ui.role.addEventListener("change", () => updateLocalPlayer({ role: ui.role.value, ready: false }));
 if (ui.vehicle) ui.vehicle.addEventListener("change", () => { updateVehiclePreview(true); updateLocalPlayer({ model: ui.vehicle.value, ready: false }); });
 ui.mode.addEventListener("change", () => updateMetaPatch({ mode: ui.mode.value }));
@@ -2254,6 +2346,7 @@ if (ui.matchLength) ui.matchLength.addEventListener("change", () => {
 });
 ui.difficulty.addEventListener("change", () => updateMetaPatch({ difficulty: ui.difficulty.value }));
 ui.playstyle.addEventListener("change", () => updateMetaPatch({ playstyle: ui.playstyle.value }));
+if (ui.aiStrategy) ui.aiStrategy.addEventListener("change", () => updateMetaPatch({ aiStrategy: ui.aiStrategy.value }));
 if (ui.chatScope) ui.chatScope.addEventListener("change", () => updateMetaPatch({ chatScope: ui.chatScope.value }));
 if (ui.voiceScope) ui.voiceScope.addEventListener("change", () => updateMetaPatch({ voiceScope: ui.voiceScope.value }));
 if (ui.chatForm) ui.chatForm.addEventListener("submit", safeUi(async e => {
@@ -2287,11 +2380,33 @@ document.querySelectorAll("[data-chat-channel]").forEach(btn => btn.addEventList
   });
 });
 
+if (ui.advancedAiList) ui.advancedAiList.addEventListener("change", e => {
+  const sel = e.target.closest(".advanced-ai-control");
+  if (!sel || !currentMeta || (!isSinglePlayer && currentMeta.hostId !== activePlayerId())) return;
+  const team = sel.dataset.aiTeam;
+  const slot = Number(sel.dataset.aiSlot);
+  const field = sel.dataset.aiField;
+  if (!team || !Number.isFinite(slot) || !field) return;
+  if (field === "role") {
+    const roles = JSON.parse(JSON.stringify(currentMeta.aiRoles || { blue: {}, orange: {} }));
+    if (!roles[team]) roles[team] = {};
+    roles[team][slot] = sel.value;
+    updateMetaPatch({ aiRoles: roles });
+    return;
+  }
+  const tuning = JSON.parse(JSON.stringify(currentMeta.aiTuning || { blue: {}, orange: {} }));
+  if (!tuning[team]) tuning[team] = {};
+  if (!tuning[team][slot]) tuning[team][slot] = {};
+  tuning[team][slot][field] = sel.value;
+  updateMetaPatch({ aiTuning: tuning });
+});
+
 window.addEventListener("keydown", e => {
   if (pendingKeyBind) {
     e.preventDefault();
     bindings[pendingKeyBind] = e.code;
     pendingKeyBind = null;
+    suppressControllerNav(700);
     saveBindings();
     return;
   }
@@ -3286,6 +3401,7 @@ let previewScene = null;
 let previewCamera = null;
 let previewVehicle = null;
 let previewVehicleModel = "";
+let previewVehicleTeam = "";
 
 function initVehiclePreview() {
   if (!ui.vehiclePreview || previewRenderer) return;
@@ -3311,17 +3427,17 @@ function initVehiclePreview() {
   previewScene.add(pad);
 }
 
-function createPreviewVehicleMesh(modelKey) {
+function createPreviewVehicleMesh(modelKey, team = "blue") {
   const vehicle = VEHICLE_CONFIGS[modelKey] || VEHICLE_CONFIGS.default;
   const g = new THREE.Group();
   const [bodyW, bodyH, bodyD] = vehicle.body || VEHICLE_CONFIGS.default.body;
   const [cabinW, cabinH, cabinD] = vehicle.cabin || VEHICLE_CONFIGS.default.cabin;
   const [cabinX, cabinY, cabinZ] = vehicle.cabinOffset || VEHICLE_CONFIGS.default.cabinOffset;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, bodyD), carMaterial("blue", true, modelKey));
+  const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, bodyD), carMaterial(team, true, modelKey));
   body.position.y = bodyH / 2;
   const cabin = new THREE.Mesh(new THREE.BoxGeometry(cabinW, cabinH, cabinD), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.22, metalness: 0.38 }));
   cabin.position.set(cabinX, cabinY, cabinZ);
-  const accent = new THREE.Mesh(new THREE.BoxGeometry(Math.max(1.45, bodyW * 0.72), 0.30, 0.26), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x0a91ff, emissiveIntensity: 0.35 }));
+  const accent = new THREE.Mesh(new THREE.BoxGeometry(Math.max(1.45, bodyW * 0.72), 0.30, 0.26), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: team === "blue" ? 0x0a91ff : 0xff6a00, emissiveIntensity: 0.35 }));
   accent.position.set(0, bodyH * 0.76, bodyD / 2 + 0.10);
   const wheelScale = vehicle.wheelScale || 1;
   const wheelX = bodyW / 2 + 0.04;
@@ -3371,15 +3487,17 @@ function createPreviewVehicleMesh(modelKey) {
 
 function updateVehiclePreview(force = false) {
   const modelKey = VEHICLE_CONFIGS[ui.vehicle?.value] ? ui.vehicle.value : "default";
+  const team = ui.team?.value === "orange" ? "orange" : "blue";
   const cfg = VEHICLE_CONFIGS[modelKey] || VEHICLE_CONFIGS.default;
   if (ui.vehiclePreviewName) ui.vehiclePreviewName.textContent = cfg.label || "Vehicle";
   if (ui.vehiclePreviewDesc) ui.vehiclePreviewDesc.textContent = cfg.description || "Selectable body with tiny handling differences.";
   if (!ui.vehiclePreview) return;
   initVehiclePreview();
-  if (!previewScene || (!force && previewVehicleModel === modelKey && previewVehicle)) return;
+  if (!previewScene || (!force && previewVehicleModel === modelKey && previewVehicleTeam === team && previewVehicle)) return;
   if (previewVehicle) previewScene.remove(previewVehicle);
-  previewVehicle = createPreviewVehicleMesh(modelKey);
+  previewVehicle = createPreviewVehicleMesh(modelKey, team);
   previewVehicleModel = modelKey;
+  previewVehicleTeam = team;
   previewScene.add(previewVehicle);
 }
 

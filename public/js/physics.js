@@ -256,6 +256,7 @@ export const DEFAULT_META = {
   pitchSize: "standard",
   difficulty: "pro",
   playstyle: "balanced",
+  aiStrategy: "balanced",
   chatScope: "all",
   voiceScope: "team",
   paused: false,
@@ -362,6 +363,23 @@ export function maxHumansFor(mode, teamSize) {
   return cfg.maxHumans(clamp(Number(teamSize) || 1, 1, 5));
 }
 
+
+function sanitiseAiTuning(raw = {}) {
+  const out = { blue: {}, orange: {} };
+  for (const team of ["blue", "orange"]) {
+    const src = raw?.[team] || {};
+    for (const [slot, cfg] of Object.entries(src)) {
+      const n = clamp(Number(slot), 0, 4);
+      const clean = {};
+      for (const field of ["aggression", "defence", "boost"]) {
+        if (["low", "normal", "high"].includes(cfg?.[field])) clean[field] = cfg[field];
+      }
+      if (Object.keys(clean).length) out[team][n] = clean;
+    }
+  }
+  return out;
+}
+
 export function serialiseMeta(meta = {}) {
   const out = { ...DEFAULT_META, ...meta };
   out.teamSize = clamp(Number(out.teamSize) || 1, 1, 5);
@@ -370,6 +388,8 @@ export function serialiseMeta(meta = {}) {
   if (!MODE_CONFIGS[out.mode]) out.mode = "standard";
   if (!["rookie", "pro", "allstar"].includes(out.difficulty)) out.difficulty = "pro";
   if (!["balanced", "defensive", "aggressive", "chaotic"].includes(out.playstyle)) out.playstyle = "balanced";
+  if (!["balanced", "defensive", "aggressive", "rotational", "chaotic"].includes(out.aiStrategy)) out.aiStrategy = out.playstyle || "balanced";
+  out.aiTuning = sanitiseAiTuning(out.aiTuning);
   if (!STADIUM_THEMES[out.theme]) out.theme = "v10";
   if (!["all", "team"].includes(out.chatScope)) out.chatScope = "all";
   if (!["all", "team", "off"].includes(out.voiceScope)) out.voiceScope = "team";
@@ -541,14 +561,28 @@ function aiSkill(meta) {
 }
 
 function styleConfig(meta) {
-  const p = meta.playstyle || "balanced";
+  const p = meta.aiStrategy || meta.playstyle || "balanced";
   return p === "defensive"
-    ? { attack: 0.72, defence: 1.42, chase: 0.82, chaos: 0 }
+    ? { attack: 0.70, defence: 1.46, chase: 0.82, chaos: 0 }
     : p === "aggressive"
-      ? { attack: 1.45, defence: 0.72, chase: 1.18, chaos: 0 }
-      : p === "chaotic"
-        ? { attack: 1.15, defence: 0.84, chase: 1.45, chaos: 1 }
-        : { attack: 1, defence: 1, chase: 1, chaos: 0 };
+      ? { attack: 1.48, defence: 0.72, chase: 1.18, chaos: 0 }
+      : p === "rotational"
+        ? { attack: 1.08, defence: 1.14, chase: 0.94, chaos: 0, rotation: 1 }
+        : p === "chaotic"
+          ? { attack: 1.15, defence: 0.84, chase: 1.45, chaos: 1 }
+          : { attack: 1, defence: 1, chase: 1, chaos: 0 };
+}
+
+function aiTuningForCar(meta, car) {
+  const match = String(car.id || "").match(/^AI_(blue|orange)_(\d+)$/);
+  const slot = match ? Number(match[2]) : Math.max(0, Number(car.slotIndex || 0) % Math.max(1, Number(meta.teamSize || 1)));
+  const raw = meta.aiTuning?.[car.team]?.[slot] || {};
+  const factor = value => value === "high" ? 1.18 : value === "low" ? 0.84 : 1;
+  return {
+    aggression: factor(raw.aggression),
+    defence: factor(raw.defence),
+    boost: factor(raw.boost)
+  };
 }
 
 function predictBall(state, seconds) {
@@ -581,8 +615,15 @@ function predictBall(state, seconds) {
 
 export function makeAIInput(car, state, meta) {
   const cfg = MODE_CONFIGS[state.mode] || MODE_CONFIGS.standard;
-  const skill = aiSkill(meta);
-  const style = styleConfig(meta);
+  const tune = aiTuningForCar(meta, car);
+  const skill = { ...aiSkill(meta) };
+  const style = { ...styleConfig(meta) };
+  skill.speed *= (0.96 + (tune.aggression - 1) * 0.35 + (tune.boost - 1) * 0.20);
+  skill.boost *= tune.boost;
+  skill.jump *= (0.94 + (tune.aggression - 1) * 0.28);
+  style.attack *= tune.aggression;
+  style.defence *= tune.defence;
+  style.chase *= (0.98 + (tune.aggression - 1) * 0.36);
   const ownSign = car.team === "blue" ? -1 : 1;
   const enemySign = -ownSign;
   const ownGoalZ = ownSign * (state.arena.l / 2 - 7);
@@ -609,6 +650,12 @@ export function makeAIInput(car, state, meta) {
     tx = predicted.x * 0.94;
     tz = predicted.z - enemySign * (cfg.snooker ? 13 : 7);
     if (style.defence > 1.2) tz = ball.z - enemySign * 14;
+  }
+
+  if (style.rotation) {
+    const lane = ((car.slotIndex % Math.max(1, state.teamSize)) - (Math.max(1, state.teamSize) - 1) / 2) * 5.5;
+    tx += lane;
+    if (car.role !== "attack") tz = (tz + ownGoalZ * 0.18) * 0.92;
   }
 
   if (style.chaos) {
