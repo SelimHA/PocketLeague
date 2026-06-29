@@ -29,7 +29,7 @@ const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountAuthFields: $("#account-auth-fields"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), musicTrackSelect: $("#music-track-select"), previewMusic: $("#preview-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
@@ -60,6 +60,7 @@ const SFX = (() => {
   let skidGain = null;
   let startedLoops = false;
   let muted = false;
+  let sfxVolume = 0.75;
   let seed = 7331;
 
   const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
@@ -70,7 +71,7 @@ const SFX = (() => {
     if (!AudioContext) return;
     ctx = new AudioContext();
     master = ctx.createGain();
-    master.gain.value = 0.72;
+    master.gain.value = sfxVolume;
     master.connect(ctx.destination);
 
     engineOsc = ctx.createOscillator();
@@ -135,7 +136,12 @@ const SFX = (() => {
     }
   }
 
-  function ready() { return ctx && master && !muted; }
+  function setVolume(value = 0.75) {
+    sfxVolume = clamp(Number(value), 0, 1);
+    if (master && ctx) master.gain.setTargetAtTime(sfxVolume, ctx.currentTime, 0.035);
+  }
+
+  function ready() { return ctx && master && !muted && sfxVolume > 0.001; }
 
   function tone(freq, duration, volume = 0.08, type = "sine", when = 0, bend = 1) {
     if (!ready()) return;
@@ -200,7 +206,7 @@ const SFX = (() => {
     skidGain.gain.setTargetAtTime(muted ? 0 : skid * 0.070, t, 0.045);
   }
 
-  return { resume, ui, countdown, kickoff, jump, ballHit, wallHit, bounce, boostPad, carBump, goal, update };
+  return { resume, setVolume, ui, countdown, kickoff, jump, ballHit, wallHit, bounce, boostPad, carBump, goal, update };
 })();
 
 const canvas = $("#game");
@@ -250,7 +256,7 @@ let voicePresenceUnsub = null;
 let voiceRenderKey = "";
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
-const SETTINGS_VERSION = "v32";
+const SETTINGS_VERSION = "v36";
 const KEY_ACTIONS = [
   ["forward", "Drive forward"], ["backward", "Brake / reverse"], ["left", "Steer left"], ["right", "Steer right"],
   ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide"], ["cam", "Ball cam"], ["reset", "Reset"],
@@ -260,6 +266,18 @@ const DEFAULT_FOV = 65;
 const DEFAULT_GAME_SETTINGS = {
   pitchSize: DEFAULT_META.pitchSize || "standard",
   matchLength: DEFAULT_META.matchLength || 300
+};
+const MUSIC_TRACKS = {
+  nitro: { label: "Nitro Boost Dreams", src: "./songs/nitro-boost-dreams.mp3" },
+  turbo: { label: "Turbo Boost Dreams", src: "./songs/turbo-boost-dreams.mp3" },
+  starlight: { label: "Boosting Through Starlight", src: "./songs/boosting-through-starlight.mp3" }
+};
+const MUSIC_ORDER = ["nitro", "turbo", "starlight"];
+const DEFAULT_AUDIO_SETTINGS = {
+  gameVolume: 0.75,
+  musicVolume: 0.45,
+  musicEnabled: true,
+  musicTrack: "shuffle"
 };
 function loadBindings() {
   const base = defaultBindings();
@@ -286,6 +304,19 @@ function sanitiseGameSettings(raw = {}) {
 function loadGameSettings() {
   try { return sanitiseGameSettings(JSON.parse(localStorage.getItem("rlcss_gameplay_settings") || "{}") || {}); }
   catch (_) { return { ...DEFAULT_GAME_SETTINGS }; }
+}
+function sanitiseAudioSettings(raw = {}) {
+  const track = raw.musicTrack === "shuffle" || MUSIC_TRACKS[raw.musicTrack] ? raw.musicTrack : DEFAULT_AUDIO_SETTINGS.musicTrack;
+  return {
+    gameVolume: clamp(Number(raw.gameVolume ?? raw.sfxVolume ?? DEFAULT_AUDIO_SETTINGS.gameVolume), 0, 1),
+    musicVolume: clamp(Number(raw.musicVolume ?? DEFAULT_AUDIO_SETTINGS.musicVolume), 0, 1),
+    musicEnabled: raw.musicEnabled !== false,
+    musicTrack: track
+  };
+}
+function loadAudioSettings() {
+  try { return sanitiseAudioSettings(JSON.parse(localStorage.getItem("rlcss_audio_settings") || "{}") || {}); }
+  catch (_) { return { ...DEFAULT_AUDIO_SETTINGS }; }
 }
 const bindings = loadBindings();
 const DEFAULT_CONTROLLER = {
@@ -327,6 +358,7 @@ function loadControllerSettings() {
   catch (_) { return { ...DEFAULT_CONTROLLER }; }
 }
 let gameSettings = loadGameSettings();
+let audioSettings = loadAudioSettings();
 let cameraFov = clamp(Number(localStorage.getItem("rlcss_camera_fov")) || DEFAULT_FOV, 55, 85);
 let controllerSettings = loadControllerSettings();
 let pendingKeyBind = null;
@@ -351,10 +383,119 @@ let mobileDriftCooldownTimer = 0;
 let camKeyLatch = false;
 let touchDevice = matchMedia("(pointer: coarse)").matches;
 
+const Music = (() => {
+  let audio = null;
+  let unlocked = false;
+  let currentTrack = "";
+  let shuffleIndex = -1;
+
+  function init() {
+    if (audio) return audio;
+    audio = new Audio();
+    audio.preload = "auto";
+    audio.crossOrigin = "anonymous";
+    audio.addEventListener("ended", () => next(true));
+    audio.addEventListener("error", () => updateNowPlaying("Music file could not be loaded."));
+    applySettings(false);
+    return audio;
+  }
+
+  function chooseTrack(forceNext = false) {
+    if (audioSettings.musicTrack !== "shuffle") return audioSettings.musicTrack;
+    if (forceNext || shuffleIndex < 0) shuffleIndex = (shuffleIndex + 1 + Math.floor(Math.random() * MUSIC_ORDER.length)) % MUSIC_ORDER.length;
+    return MUSIC_ORDER[shuffleIndex] || MUSIC_ORDER[0];
+  }
+
+  function setSource(trackKey) {
+    const safe = MUSIC_TRACKS[trackKey] ? trackKey : MUSIC_ORDER[0];
+    init();
+    if (currentTrack === safe && audio.src) return;
+    currentTrack = safe;
+    audio.src = MUSIC_TRACKS[safe].src;
+    audio.load();
+    updateNowPlaying();
+  }
+
+  function applySettings(tryPlay = true) {
+    init();
+    audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
+    audio.loop = audioSettings.musicTrack !== "shuffle";
+    if (!audioSettings.musicEnabled || audioSettings.musicVolume <= 0) {
+      audio.pause();
+      updateNowPlaying(audioSettings.musicEnabled ? "Music volume is at 0%." : "Music is disabled.");
+      return;
+    }
+    setSource(chooseTrack(false));
+    updateNowPlaying();
+    if (tryPlay && unlocked) play();
+  }
+
+  function unlockAndMaybePlay() {
+    unlocked = true;
+    if (audioSettings.musicEnabled) play();
+  }
+
+  function play() {
+    init();
+    if (!audioSettings.musicEnabled || audioSettings.musicVolume <= 0) return;
+    setSource(chooseTrack(false));
+    audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
+    const promise = audio.play?.();
+    if (promise?.catch) promise.catch(() => updateNowPlaying("Tap Preview music to start music."));
+    updateNowPlaying();
+  }
+
+  function pause() {
+    if (audio) audio.pause();
+    updateNowPlaying("Music paused.");
+  }
+
+  function togglePreview() {
+    init();
+    unlocked = true;
+    if (!audioSettings.musicEnabled) {
+      audioSettings.musicEnabled = true;
+      saveAudioSettingsLocal();
+      renderSettingsUi();
+    }
+    if (audio.paused) play();
+    else pause();
+  }
+
+  function next(fromEnded = false) {
+    init();
+    unlocked = true;
+    if (audioSettings.musicTrack === "shuffle") {
+      setSource(chooseTrack(true));
+    } else if (fromEnded) {
+      audio.currentTime = 0;
+    } else {
+      const currentIndex = MUSIC_ORDER.indexOf(currentTrack);
+      const nextKey = MUSIC_ORDER[(currentIndex + 1 + MUSIC_ORDER.length) % MUSIC_ORDER.length] || MUSIC_ORDER[0];
+      audioSettings.musicTrack = nextKey;
+      saveAudioSettingsLocal();
+      renderSettingsUi();
+      setSource(nextKey);
+    }
+    if (audioSettings.musicEnabled) play();
+  }
+
+  function updateNowPlaying(message = "") {
+    if (!ui.musicNowPlaying) return;
+    const label = MUSIC_TRACKS[currentTrack]?.label || (audioSettings.musicTrack === "shuffle" ? "Shuffle all songs" : "Music");
+    ui.musicNowPlaying.textContent = message || `Now playing: ${label}`;
+    if (ui.previewMusic) ui.previewMusic.textContent = audio && !audio.paused ? "Pause music" : "Preview music";
+  }
+
+  return { applySettings, unlockAndMaybePlay, play, pause, next, togglePreview, updateNowPlaying };
+})();
+
 ui.name.value = playerName;
 populateChoiceSelects();
 applyGameSettingsToSelectors({ forceLobbyDefaults: true });
 renderSettingsUi();
+SFX.setVolume(audioSettings.gameVolume);
+Music.applySettings(false);
 
 function populateChoiceSelects() {
   fillSelect(ui.theme, STADIUM_THEMES, DEFAULT_META.theme);
@@ -414,6 +555,7 @@ function cloudSettingsPayload() {
     camera: { fov: cameraFov },
     controller: sanitiseControllerSettings(controllerSettings),
     gameplay: sanitiseGameSettings(gameSettings),
+    audio: sanitiseAudioSettings(audioSettings),
     ui: { settingsTab: activeSettingsTab },
     updatedAt: serverTimestamp()
   };
@@ -427,6 +569,7 @@ function saveLocalSettings() {
   localStorage.setItem("rlcss_key_bindings", JSON.stringify(bindings));
   localStorage.setItem("rlcss_camera_fov", String(cameraFov));
   localStorage.setItem("rlcss_controller_settings", JSON.stringify(sanitiseControllerSettings(controllerSettings)));
+  localStorage.setItem("rlcss_audio_settings", JSON.stringify(sanitiseAudioSettings(audioSettings)));
   localStorage.setItem("rlcss_settings_tab", activeSettingsTab);
   saveGameSettingsLocal();
 }
@@ -464,6 +607,9 @@ function applyLoadedSettings(raw = {}) {
     cameraFov = clamp(Number(raw.camera?.fov ?? raw.cameraFov) || DEFAULT_FOV, 55, 85);
     controllerSettings = sanitiseControllerSettings(raw.controller || raw.controllerSettings || {});
     gameSettings = sanitiseGameSettings(raw.gameplay || raw.gameSettings || {});
+    audioSettings = sanitiseAudioSettings(raw.audio || raw.audioSettings || audioSettings);
+    SFX.setVolume(audioSettings.gameVolume);
+    Music.applySettings(false);
     if (raw.ui?.settingsTab) activeSettingsTab = raw.ui.settingsTab;
     saveLocalSettings();
     applyCameraSettings();
@@ -524,6 +670,12 @@ function buttonOptions(selected) {
 function renderSettingsUi() {
   if (ui.fovRange) ui.fovRange.value = String(cameraFov);
   if (ui.fovValue) ui.fovValue.textContent = `${Math.round(cameraFov)}°`;
+  if (ui.gameVolume) ui.gameVolume.value = String(audioSettings.gameVolume);
+  if (ui.gameVolumeValue) ui.gameVolumeValue.textContent = `${Math.round(audioSettings.gameVolume * 100)}%`;
+  if (ui.musicVolume) ui.musicVolume.value = String(audioSettings.musicVolume);
+  if (ui.musicVolumeValue) ui.musicVolumeValue.textContent = `${Math.round(audioSettings.musicVolume * 100)}%`;
+  if (ui.musicEnabled) ui.musicEnabled.checked = audioSettings.musicEnabled;
+  if (ui.musicTrackSelect) ui.musicTrackSelect.value = audioSettings.musicTrack;
   applyGameSettingsToSelectors({ forceLobbyDefaults: false });
   if (ui.keybindList) {
     ui.keybindList.innerHTML = KEY_ACTIONS.map(([action, label]) => `
@@ -567,7 +719,7 @@ function renderSettingsUi() {
 }
 
 function setSettingsTab(tab = "gameplay") {
-  const safe = ["gameplay", "camera", "keyboard", "controller"].includes(tab) ? tab : "gameplay";
+  const safe = ["gameplay", "camera", "audio", "keyboard", "controller"].includes(tab) ? tab : "gameplay";
   activeSettingsTab = safe;
   localStorage.setItem("rlcss_settings_tab", safe);
   document.querySelectorAll("[data-settings-tab]").forEach(btn => {
@@ -1709,7 +1861,7 @@ function navButtonEdge(name, pressed) {
 function settingsTabDelta(delta) {
   if (pendingControllerBind || pendingKeyBind) return false;
   if (!ui.settingsCard || ui.settingsCard.classList.contains("hidden")) return false;
-  const tabs = ["gameplay", "camera", "keyboard", "controller"];
+  const tabs = ["gameplay", "camera", "audio", "keyboard", "controller"];
   const idx = Math.max(0, tabs.indexOf(activeSettingsTab));
   setSettingsTab(tabs[(idx + delta + tabs.length) % tabs.length]);
   return true;
@@ -2310,6 +2462,46 @@ if (ui.settingsMatchLength) ui.settingsMatchLength.addEventListener("change", ()
   applyGameSettingsToSelectors({ forceLobbyDefaults: !lobbyCode });
   queueSettingsSave();
 });
+function saveAudioSettingsLocal() {
+  audioSettings = sanitiseAudioSettings(audioSettings);
+  localStorage.setItem("rlcss_audio_settings", JSON.stringify(audioSettings));
+}
+function commitAudioSettings({ play = true } = {}) {
+  saveAudioSettingsLocal();
+  SFX.setVolume(audioSettings.gameVolume);
+  Music.applySettings(play);
+  renderSettingsUi();
+  queueSettingsSave();
+}
+if (ui.gameVolume) ui.gameVolume.addEventListener("input", () => {
+  audioSettings.gameVolume = clamp(Number(ui.gameVolume.value), 0, 1);
+  if (ui.gameVolumeValue) ui.gameVolumeValue.textContent = `${Math.round(audioSettings.gameVolume * 100)}%`;
+  SFX.setVolume(audioSettings.gameVolume);
+  commitAudioSettings({ play: false });
+});
+if (ui.musicVolume) ui.musicVolume.addEventListener("input", () => {
+  audioSettings.musicVolume = clamp(Number(ui.musicVolume.value), 0, 1);
+  if (ui.musicVolumeValue) ui.musicVolumeValue.textContent = `${Math.round(audioSettings.musicVolume * 100)}%`;
+  commitAudioSettings({ play: true });
+});
+if (ui.musicEnabled) ui.musicEnabled.addEventListener("change", () => {
+  audioSettings.musicEnabled = !!ui.musicEnabled.checked;
+  commitAudioSettings({ play: true });
+});
+if (ui.musicTrackSelect) ui.musicTrackSelect.addEventListener("change", () => {
+  audioSettings.musicTrack = ui.musicTrackSelect.value;
+  commitAudioSettings({ play: true });
+});
+if (ui.previewMusic) ui.previewMusic.addEventListener("click", () => {
+  SFX.resume();
+  Music.togglePreview();
+  queueSettingsSave();
+});
+if (ui.nextMusic) ui.nextMusic.addEventListener("click", () => {
+  SFX.resume();
+  Music.next(false);
+  queueSettingsSave();
+});
 if (ui.controllerEnabled) ui.controllerEnabled.addEventListener("change", () => {
   controllerSettings.enabled = !!ui.controllerEnabled.checked;
   saveControllerSettings();
@@ -2428,6 +2620,8 @@ if (ui.advancedAiList) ui.advancedAiList.addEventListener("change", e => {
 });
 
 window.addEventListener("keydown", e => {
+  SFX.resume();
+  Music.unlockAndMaybePlay();
   if (pendingKeyBind) {
     e.preventDefault();
     bindings[pendingKeyBind] = e.code;
@@ -2478,7 +2672,7 @@ window.addEventListener("keyup", e => {
 });
 window.addEventListener("gamepadconnected", () => renderSettingsUi());
 window.addEventListener("gamepaddisconnected", () => renderSettingsUi());
-["pointerdown", "touchstart", "click"].forEach(type => window.addEventListener(type, () => SFX.resume(), { passive: true }));
+["pointerdown", "touchstart", "click"].forEach(type => window.addEventListener(type, () => { SFX.resume(); Music.unlockAndMaybePlay(); }, { passive: true }));
 
 // Mobile/touch controls
 function isPhonePortrait() {

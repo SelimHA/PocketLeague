@@ -46,9 +46,9 @@
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V32 Cloud Settings & Controller Upgrade</div>
+      <div class="menu-kicker">V36 Audio & Music Upgrade</div>
       <h1>RLCSS</h1>
-      <p class="menu-subtitle">Rocket-style car football with richer arenas, voice/text chat, leaderboards, custom matches and full desktop controller support.</p>
+      <p class="menu-subtitle">Rocket-style car football with richer arenas, voice/text chat, leaderboards, custom matches and full desktop controller support, music loops and audio settings.</p>
       <div class="controller-hero" aria-label="Controller recommendation">
         <strong>Best with controller on PC</strong>
         <span>Left stick drives, triggers accelerate/brake, right stick pans the camera. Keyboard and phone touch controls still work.</span>
@@ -120,6 +120,7 @@
       <div class="settings-tabs" role="tablist" aria-label="Settings sections">
         <button type="button" class="settings-tab active" data-settings-tab="gameplay" role="tab" aria-selected="true">Gameplay</button>
         <button type="button" class="settings-tab" data-settings-tab="camera" role="tab" aria-selected="false">Camera</button>
+        <button type="button" class="settings-tab" data-settings-tab="audio" role="tab" aria-selected="false">Audio</button>
         <button type="button" class="settings-tab" data-settings-tab="keyboard" role="tab" aria-selected="false">Keyboard</button>
         <button type="button" class="settings-tab" data-settings-tab="controller" role="tab" aria-selected="false">Controller</button>
       </div>
@@ -157,6 +158,39 @@
             <input id="fov-range" type="range" min="55" max="85" step="1" />
             <span id="fov-value" class="setting-value">65°</span>
           </label>
+        </div>
+      </div>
+
+
+
+      <div class="settings-pane" data-settings-pane="audio" role="tabpanel" hidden>
+        <div class="settings-section audio-settings-section">
+          <h3>Audio</h3>
+          <label class="toggle-label"><input id="music-enabled" type="checkbox" /> Enable music</label>
+          <label class="range-label">
+            Game sound volume
+            <input id="game-volume" type="range" min="0" max="1" step="0.01" />
+            <span id="game-volume-value" class="setting-value">75%</span>
+          </label>
+          <label class="range-label">
+            Music volume
+            <input id="music-volume" type="range" min="0" max="1" step="0.01" />
+            <span id="music-volume-value" class="setting-value">45%</span>
+          </label>
+          <label>
+            Menu / match music track
+            <select id="music-track-select">
+              <option value="nitro">Nitro Boost Dreams</option>
+              <option value="turbo">Turbo Boost Dreams</option>
+              <option value="starlight">Boosting Through Starlight</option>
+              <option value="shuffle">Shuffle all songs</option>
+            </select>
+          </label>
+          <div class="audio-actions">
+            <button id="preview-music" type="button" class="secondary small-action">Preview music</button>
+            <button id="next-music" type="button" class="secondary small-action">Next song</button>
+          </div>
+          <p id="music-now-playing" class="hint">Music starts after your first tap/click because browsers block autoplay.</p>
         </div>
       </div>
 

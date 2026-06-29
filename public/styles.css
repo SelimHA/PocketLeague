@@ -1527,3 +1527,30 @@ body.using-controller summary:focus-visible {
   .squad-panel > summary { padding: 12px 13px; font-size: 12px; }
   .squad-panel .team-list { padding: 10px; }
 }
+
+/* V36: audio/music settings */
+.audio-settings-section {
+  display: grid;
+  gap: 12px;
+}
+.audio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.audio-actions .small-action {
+  min-width: 132px;
+}
+.settings-tabs {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.audio-settings-section select,
+.audio-settings-section input[type="range"] {
+  width: 100%;
+}
+@media (pointer: coarse) and (orientation: portrait) {
+  .settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .audio-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .audio-actions .small-action { min-width: 0; }
+}
