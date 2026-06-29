@@ -1,0 +1,27 @@
+{
+  "rules": {
+    "lobbies": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.child('meta/hostId').val() == auth.uid) || data.child('meta/hostId').val() == auth.uid)",
+        "players": {
+          "$uid": {
+            ".write": "auth != null && auth.uid == $uid",
+            ".validate": "newData.hasChildren(['name','team','role','ready']) && newData.child('name').isString() && newData.child('name').val().length <= 18 && (newData.child('team').val() == 'blue' || newData.child('team').val() == 'orange') && (newData.child('role').val() == 'goalkeeper' || newData.child('role').val() == 'defence' || newData.child('role').val() == 'midfield' || newData.child('role').val() == 'attack') && newData.child('ready').isBoolean()"
+          }
+        },
+        "inputs": {
+          "$uid": {
+            ".write": "auth != null && auth.uid == $uid"
+          }
+        },
+        "state": {
+          ".write": "auth != null && root.child('lobbies').child($code).child('meta').child('hostId').val() == auth.uid"
+        },
+        "meta": {
+          ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() == auth.uid) || data.child('hostId').val() == auth.uid)"
+        }
+      }
+    }
+  }
+}
