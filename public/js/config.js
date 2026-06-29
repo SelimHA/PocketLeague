@@ -10,3 +10,12 @@ export const FIREBASE_CONFIG = {
   appId: "1:1024169843400:web:6bad6a69977424a10923fd",
   measurementId: "G-87HGQ3J7PQ"
 };
+
+// WebRTC voice chat configuration.
+// The default public STUN server works for many home/mobile networks.
+// If voice connects for some players but not others, add your own TURN server here.
+export const WEBRTC_CONFIG = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" }
+  ]
+};

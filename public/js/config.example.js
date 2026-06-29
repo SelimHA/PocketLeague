@@ -9,3 +9,13 @@ export const FIREBASE_CONFIG = {
   messagingSenderId: "PASTE_SENDER_ID",
   appId: "PASTE_APP_ID"
 };
+
+// Optional WebRTC voice chat configuration.
+// Keep the STUN entry below, or add a TURN server if some networks cannot connect peer-to-peer.
+export const WEBRTC_CONFIG = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" }
+    // Example TURN entry:
+    // { urls: "turn:YOUR_TURN_HOST:3478", username: "TURN_USER", credential: "TURN_PASSWORD" }
+  ]
+};

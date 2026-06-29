@@ -5,6 +5,91 @@
         ".read": "auth != null",
         ".write": "auth != null"
       }
+    },
+    "profiles": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid",
+        "username": {
+          ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9_-]{3,18}$/)"
+        },
+        "displayName": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 18"
+        },
+        "$other": {
+          ".validate": true
+        }
+      }
+    },
+    "usernames": {
+      "$name": {
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() || data.val() === auth.uid || newData.val() === auth.uid)",
+        ".validate": "$name.matches(/^[a-z0-9_-]{3,18}$/) && newData.isString() && newData.val() === auth.uid"
+      }
+    },
+    "leaderboard": {
+      ".read": "auth != null",
+      ".indexOn": [
+        "points",
+        "wins",
+        "games"
+      ],
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        "uid": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "username": {
+          ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9_-]{3,18}$/)"
+        },
+        "displayName": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 18"
+        },
+        "points": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "wins": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "draws": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "losses": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "games": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "goalsFor": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "goalsAgainst": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "$other": {
+          ".validate": true
+        }
+      }
+    },
+    "voice": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "presence": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        },
+        "signals": {
+          "$targetUid": {
+            ".read": "auth != null && auth.uid === $targetUid",
+            "$signalId": {
+              ".write": "auth != null && (auth.uid === newData.child('from').val() || auth.uid === $targetUid)"
+            }
+          }
+        }
+      }
     }
   }
 }

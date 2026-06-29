@@ -1062,3 +1062,48 @@ body:not(.game-running) .chat-panel { display: none !important; }
     background: rgba(5, 7, 13, .86);
   }
 }
+
+/* V30: compact WebRTC voice controls */
+.voice-toggle,
+.voice-mute {
+  left: 76px;
+  right: auto;
+  top: 16px;
+  padding: 7px 12px;
+  min-height: 0;
+  min-width: 0;
+  font-size: 11px;
+  letter-spacing: .06em;
+  background: rgba(5, 7, 13, .68);
+  color: white;
+  border: 1px solid rgba(255,255,255,.18);
+  box-shadow: 0 10px 26px rgba(0,0,0,.34);
+  backdrop-filter: blur(8px);
+}
+.voice-mute { left: 146px; }
+.voice-toggle.voice-live {
+  color: #06111b;
+  background: linear-gradient(180deg, #9fffd2, #39d37d);
+  border-color: rgba(156,255,210,.75);
+}
+.voice-toggle.voice-connecting {
+  color: #160c02;
+  background: linear-gradient(180deg, #ffe38a, #ffb347);
+}
+.voice-mute.voice-muted {
+  color: white;
+  background: linear-gradient(180deg, rgba(255,112,112,.92), rgba(176,34,34,.78));
+  border-color: rgba(255,160,160,.45);
+}
+@media (pointer: coarse) and (orientation: portrait) {
+  .voice-toggle,
+  .voice-mute {
+    top: max(6px, env(safe-area-inset-top));
+    padding: 5px 7px;
+    font-size: 9px;
+    z-index: 34;
+    opacity: .86;
+  }
+  .voice-toggle { left: calc(max(7px, env(safe-area-inset-left)) + 48px); }
+  .voice-mute { left: calc(max(7px, env(safe-area-inset-left)) + 96px); }
+}

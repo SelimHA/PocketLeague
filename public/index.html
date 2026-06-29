@@ -22,6 +22,8 @@
   <button id="leave-game" class="floating-btn hidden" type="button">Leave</button>
   <button id="pause-game" class="floating-btn pause-btn hidden" type="button">Pause</button>
   <button id="toggle-chat" class="floating-btn chat-toggle hidden" type="button" aria-expanded="false" aria-controls="chat-panel" title="Toggle chat (T)">Chat</button>
+  <button id="toggle-voice" class="floating-btn voice-toggle hidden" type="button" aria-pressed="false" title="Join/leave voice chat (V)">Voice</button>
+  <button id="mute-voice" class="floating-btn voice-mute hidden" type="button" aria-pressed="false" title="Mute/unmute microphone (M)">Mic</button>
   <div id="pause-overlay" class="pause-overlay hidden">PAUSED</div>
 
   <div id="boost-label" class="boost-label hidden">BOOST</div>
@@ -30,14 +32,14 @@
   <div id="controls-hint" class="controls-hint hidden">
     <div id="cam-indicator">BALL CAM: <span id="cam-state">OFF</span></div>
     <strong>WASD</strong>: DRIVE &amp; STEER &nbsp;|&nbsp; <strong class="boost-text">SHIFT</strong>: BOOST<br />
-    <strong>SPACE</strong>: JUMP &nbsp;|&nbsp; <strong>CTRL</strong>: DRIFT &nbsp;|&nbsp; <strong>B</strong>: BALL CAM &nbsp;|&nbsp; <strong>R</strong>: RESET &nbsp;|&nbsp; <strong>T</strong>: CHAT
+    <strong>SPACE</strong>: JUMP &nbsp;|&nbsp; <strong>CTRL</strong>: DRIFT &nbsp;|&nbsp; <strong>B</strong>: BALL CAM &nbsp;|&nbsp; <strong>R</strong>: RESET &nbsp;|&nbsp; <strong>T</strong>: CHAT &nbsp;|&nbsp; <strong>V</strong>: VOICE &nbsp;|&nbsp; <strong>M</strong>: MIC
   </div>
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V29 Accounts, Leaderboard & Chat Toggle</div>
+      <div class="menu-kicker">V30 Accounts, Leaderboard, Chat & Voice</div>
       <h1>RLCSS</h1>
-      <p class="menu-subtitle">Rocket-style physics, smoother desktop performance, player accounts, lobby chat, host pause, leaderboard stats, arenas, vehicles, sound effects and Firebase lobbies.</p>
+      <p class="menu-subtitle">Rocket-style physics, smoother desktop performance, player accounts, lobby chat, push-to-join voice chat, host pause, leaderboard stats, arenas, vehicles, sound effects and Firebase lobbies.</p>
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
       </div>
@@ -166,6 +168,14 @@
               <option value="team">Same team only</option>
             </select>
           </label>
+          <label>
+            Voice chat channel
+            <select id="voice-scope-select">
+              <option value="team" selected>Same team only</option>
+              <option value="all">Everyone in lobby</option>
+              <option value="off">Voice disabled</option>
+            </select>
+          </label>
           <p id="max-humans-label" class="hint">Max humans: 2</p>
         </div>
 
@@ -263,7 +273,7 @@
         </div>
       </div>
     </div>
-    <div class="mobile-help">Left thumb drives/steers · slide across BOOST/JUMP/DRIFT · CAM/RESET stay separate</div>
+    <div class="mobile-help">Left thumb drives/steers · slide across BOOST/JUMP/DRIFT · tiny top buttons open chat/voice</div>
   </div>
 
   <script type="module" src="./js/app.js"></script>

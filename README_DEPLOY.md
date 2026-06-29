@@ -1,6 +1,6 @@
-# Pocket League Online Multiplayer — Firebase Deployment Guide
+# RLCSS Online Multiplayer — Firebase Deployment Guide
 
-This folder is a Firebase-ready multiplayer rewrite of the Pocket League browser game.
+This folder is a Firebase-ready multiplayer rewrite of the RLCSS browser game.
 
 It uses:
 
@@ -12,7 +12,7 @@ It uses:
 ## Files
 
 ```text
-pocket-league-firebase/
+rlcss-firebase/
 ├─ firebase.json
 ├─ database.rules.json
 ├─ .firebaserc.example
@@ -26,6 +26,14 @@ pocket-league-firebase/
       ├─ config.js
       └─ config.example.js
 ```
+
+
+## V17 fixes
+
+- Single Player now opens a **Solo Setup** screen first, so you can configure mode, team size, your team/role, AI roles, opponent difficulty, and opponent playstyle before starting.
+- Press **Start Match** in the solo setup to launch immediately with AI filling the remaining slots.
+- Create Lobby now uses smaller Firebase writes with timeouts, so it should either show the lobby code or show a clear Firebase/Auth/Rules error instead of staying stuck on “Creating lobby…”.
+- If online lobby creation fails on a no-terminal deployment, paste the included `database.rules.json` into **Firebase Console → Realtime Database → Rules → Publish**.
 
 ## Implemented multiplayer features
 
@@ -167,7 +175,7 @@ firebase login
 
 ## 6. Connect this folder to your Firebase project
 
-From the `pocket-league-firebase` folder, either run:
+From the `rlcss-firebase` folder, either run:
 
 ```bash
 firebase use --add
@@ -193,7 +201,7 @@ Then edit `.firebaserc`:
 
 ## 7. Deploy Hosting and Realtime Database rules
 
-From the `pocket-league-firebase` folder:
+From the `rlcss-firebase` folder:
 
 ```bash
 firebase deploy
@@ -234,3 +242,134 @@ For a stronger production version:
 - Firebase Realtime Database web setup: https://firebase.google.com/docs/database/web/start
 - Firebase Realtime Database read/write docs: https://firebase.google.com/docs/database/web/read-and-write
 - Firebase Realtime Database security rules: https://firebase.google.com/docs/database/security
+
+
+## Phone / no-terminal database rules
+
+If you deployed the site through Netlify or another GitHub UI and did not run `firebase deploy`, the Realtime Database rules in `database.rules.json` will not be applied automatically. Multiplayer lobby creation will fail until the rules are installed.
+
+From Firebase Console on your phone:
+
+1. Open **Build → Realtime Database → Rules**.
+2. Replace the rules with the contents of `database.rules.json`.
+3. Tap **Publish**.
+4. Make sure **Build → Authentication → Sign-in method → Anonymous** is enabled.
+
+The app now shows a visible error message if Firebase Auth or Database writes fail, instead of making the Create Lobby button look dead.
+
+## V18 hotfix notes
+
+This version fixes a Single Player button crash caused by a missing browser-side `clamp()` helper in `public/js/app.js`. Symptoms were: tapping **Single Player Setup** appeared to do nothing.
+
+It also simplifies `database.rules.json` for the prototype multiplayer lobby flow:
+
+```json
+{
+  "rules": {
+    "lobbies": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
+```
+
+If you are hosting with Netlify/GitHub rather than Firebase CLI deploys, upload these rules manually in Firebase Console: **Realtime Database → Rules → paste → Publish**. Without the updated rules, online lobby creation may stay stuck or fail before showing a usable code.
+
+## V28 notes
+
+- Desktop performance pass: lower desktop DPR cap, lower shadow map size, no dynamic point lights on stadium props/boost pads, static props no longer cast shadows, fewer decorative props, and resize checks are skipped unless the canvas actually changed.
+- Physics feel pass: slightly stronger acceleration/boost, tighter normal grip, more responsive powerslide yaw, better aerial control, and slightly stronger front-facing touches while keeping the heavier V26 ball feel.
+- Added two selectable vehicles: Muscle GT and Utility Van.
+- Added in-game text chat with Game and Team channels. Host can configure Game chat as everyone-visible or same-team-only per lobby. Chat can be muted locally.
+- Added host-only pause/resume during matches; `P` also toggles pause for the host on desktop.
+
+## V29 notes — accounts, leaderboard, and chat toggle
+
+- Added optional username/password accounts.
+  - The UI asks for a username and password.
+  - Internally, the static web app uses Firebase Email/Password Auth by converting the username to a private game-only email like `username@rlcss.local`.
+  - Guest/anonymous play still works for lobbies and single player.
+- Added persistent leaderboard stats for signed-in accounts.
+  - Stats are stored in the same Firebase Realtime Database under `leaderboard/{uid}`.
+  - Rank is by points: win = 3, draw = 1, loss = 0.
+  - The app also stores `profiles/{uid}` and `usernames/{username}`.
+- Updated chat UX.
+  - Chat is hidden by default on phones and can be opened with the tiny top-left **Chat** button.
+  - Desktop also has the Chat button.
+  - Press **T** to toggle chat and **Enter** to open/focus the message box.
+
+## Firebase changes needed for V29
+
+### 1. Enable Email/Password sign-in
+
+Keep **Anonymous** enabled, then also enable **Email/Password**:
+
+1. Firebase Console → **Build → Authentication**.
+2. Open **Sign-in method**.
+3. Enable **Email/Password**.
+4. Save.
+
+Do not enable email-link/passwordless unless you specifically want to build that flow later.
+
+### 2. Publish the new Realtime Database rules
+
+This version adds database paths for accounts and leaderboard:
+
+```text
+lobbies/{code}
+profiles/{uid}
+usernames/{username}
+leaderboard/{uid}
+```
+
+If you deploy with Firebase CLI, `firebase deploy` will publish `database.rules.json` automatically.
+
+If you deploy with Netlify/GitHub/static upload, you must manually paste the included `database.rules.json` into:
+
+```text
+Firebase Console → Build → Realtime Database → Rules → Publish
+```
+
+### 3. Config files to check/update
+
+Usually you only need these files:
+
+```text
+public/js/config.js
+firebase.json
+database.rules.json
+.firebaserc
+```
+
+- `public/js/config.js`: must contain your Firebase Web App config and the correct `databaseURL`.
+- `database.rules.json`: must be deployed or manually pasted into Realtime Database Rules.
+- `.firebaserc`: only needed for Firebase CLI deploys; make sure the project ID is correct.
+- `firebase.json`: should keep `public` as the Hosting public folder.
+
+### 4. Separate/new database?
+
+A separate database is not required. The leaderboard uses the same Realtime Database because it keeps setup simple for a static app.
+
+If you decide to create a separate Firebase project or separate Realtime Database instance later, update the `databaseURL` in `public/js/config.js` and publish the same `database.rules.json` to that database.
+
+### Security note
+
+This is still a static/Firebase-only prototype. Because match results are written by clients, the leaderboard is fine for friends/testing but not cheat-proof. A production competitive leaderboard should be verified by a server-authoritative backend or Cloud Functions.
+
+## V30 voice chat notes
+
+V30 adds optional WebRTC voice chat for online lobbies.
+
+- Voice chat is opt-in: players must press **Voice** or press **V** during a running online match.
+- Press **Mic On / Mic Off** or **M** to mute/unmute your own microphone.
+- The host can configure voice before the match starts:
+  - same team only
+  - everyone in the lobby
+  - disabled
+- Firebase Realtime Database is used only for WebRTC signalling under `voice/{lobbyCode}`. Audio streams are peer-to-peer and are not stored in Firebase.
+- Browsers require HTTPS and microphone permission for voice chat. Firebase Hosting and Netlify HTTPS domains are fine.
+- The default `public/js/config.js` includes a public STUN server. Most home/mobile networks work with this. If some players can join voice and others cannot, add a TURN server to `WEBRTC_CONFIG` in `public/js/config.js`.
+- If you deploy by Netlify/GitHub only, manually paste the updated `database.rules.json` into Firebase Console -> Realtime Database -> Rules -> Publish, because static deploys do not update database rules.

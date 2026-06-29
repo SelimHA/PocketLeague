@@ -1,5 +1,5 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js";
-import { FIREBASE_CONFIG } from "./config.js";
+import * as AppConfig from "./config.js";
 import {
   DEFAULT_META,
   MODE_CONFIGS,
@@ -18,6 +18,8 @@ import {
   defaultRoleForSlot
 } from "./physics.js";
 
+const FIREBASE_CONFIG = AppConfig.FIREBASE_CONFIG;
+const WEBRTC_CONFIG = AppConfig.WEBRTC_CONFIG || { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 const $ = sel => document.querySelector(sel);
 const LOCAL_UID = "LOCAL_PLAYER";
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -27,10 +29,10 @@ const ui = {
   accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
   openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
-  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), chatScope: $("#chat-scope-select"),
+  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
-  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), pauseOverlay: $("#pause-overlay"),
+  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), toggleVoice: $("#toggle-voice"), muteVoice: $("#mute-voice"), pauseOverlay: $("#pause-overlay"),
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
@@ -235,6 +237,15 @@ let chatMuted = localStorage.getItem("rlcss_chat_muted") === "1";
 let chatOpen = localStorage.getItem("rlcss_chat_open") === "1";
 let chatOpenPreferenceSet = localStorage.getItem("rlcss_chat_open") !== null;
 let chatRenderKey = "";
+let voiceActive = false;
+let voiceMuted = localStorage.getItem("rlcss_voice_muted") === "1";
+let voiceConnecting = false;
+let voiceLocalStream = null;
+let voicePresence = {};
+let voicePeers = new Map();
+let voiceSignalUnsub = null;
+let voicePresenceUnsub = null;
+let voiceRenderKey = "";
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
 const bindings = defaultBindings();
@@ -602,6 +613,10 @@ function lobbyRef(code, path = "") {
   return ref(db, path ? `lobbies/${code}/${path}` : `lobbies/${code}`);
 }
 
+function voiceRef(code, path = "") {
+  return ref(db, path ? `voice/${code}/${path}` : `voice/${code}`);
+}
+
 function randomCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let out = "";
@@ -624,7 +639,8 @@ function currentSoloMetaPatch() {
     teamSize: Number(ui.teamSize?.value || DEFAULT_META.teamSize),
     difficulty: ui.difficulty?.value || DEFAULT_META.difficulty,
     playstyle: ui.playstyle?.value || DEFAULT_META.playstyle,
-    chatScope: ui.chatScope?.value || DEFAULT_META.chatScope
+    chatScope: ui.chatScope?.value || DEFAULT_META.chatScope,
+    voiceScope: ui.voiceScope?.value || DEFAULT_META.voiceScope
   };
 }
 
@@ -839,6 +855,7 @@ function renderLobby() {
   ui.difficulty.value = currentMeta.difficulty;
   ui.playstyle.value = currentMeta.playstyle;
   if (ui.chatScope) ui.chatScope.value = currentMeta.chatScope || DEFAULT_META.chatScope;
+  if (ui.voiceScope) ui.voiceScope.value = currentMeta.voiceScope || DEFAULT_META.voiceScope;
   ui.team.value = local.team || "blue";
   ui.role.value = local.role || "midfield";
   if (ui.vehicle) ui.vehicle.value = (VEHICLE_CONFIGS[local.model] ? local.model : "default");
@@ -847,6 +864,7 @@ function renderLobby() {
   ui.ready.textContent = isSinglePlayer ? "Start Match" : (local.ready ? "Unready" : "Ready");
   ui.mode.disabled = ui.teamSize.disabled = ui.difficulty.disabled = ui.playstyle.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.chatScope) ui.chatScope.disabled = !isHost || currentMeta.status !== "waiting";
+  if (ui.voiceScope) ui.voiceScope.disabled = !isHost || currentMeta.status !== "waiting" || voiceActive;
   if (ui.theme) ui.theme.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.vehicle) ui.vehicle.disabled = currentMeta.status !== "waiting";
   ui.copy.disabled = isSinglePlayer;
@@ -854,9 +872,10 @@ function renderLobby() {
   const maxHumans = maxHumansFor(currentMeta.mode, currentMeta.teamSize);
   const humanCount = Object.keys(currentPlayers).length;
   const chatCopy = (currentMeta.chatScope || "all") === "team" ? "Game chat: same-team" : "Game chat: everyone";
+  const voiceCopy = currentMeta.voiceScope === "off" ? "Voice: off" : (currentMeta.voiceScope === "all" ? "Voice: everyone" : "Voice: team");
   ui.maxHumans.textContent = isSinglePlayer
-    ? `Solo mode · ${themeLabel(currentMeta.theme)} · ${chatCopy} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`
-    : `Lobby theme: ${themeLabel(currentMeta.theme)} · ${chatCopy} · Max humans: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
+    ? `Solo mode · ${themeLabel(currentMeta.theme)} · ${chatCopy} · ${voiceCopy} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`
+    : `Lobby theme: ${themeLabel(currentMeta.theme)} · ${chatCopy} · ${voiceCopy} · Max humans: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
   const allReady = humanCount > 0 && Object.values(currentPlayers).every(p => p.ready);
   if (currentMeta.status === "waiting") {
     ui.lobbyStatus.textContent = isSinglePlayer
@@ -870,6 +889,8 @@ function renderLobby() {
   renderTeamList("blue", ui.blueList);
   renderTeamList("orange", ui.orangeList);
   renderChat();
+  if (voiceActive) reconcileVoicePeers();
+  updateVoiceUi();
 }
 
 function renderTeamList(team, root) {
@@ -926,6 +947,7 @@ async function updateLocalPlayer(patch) {
     return;
   }
   await update(lobbyRef(lobbyCode, `players/${uid}`), patch);
+  if (voiceActive && ("team" in patch || "name" in patch)) publishVoicePresence();
 }
 
 function readyStateAllowsStart() {
@@ -970,6 +992,7 @@ function updateGameVisibility() {
     ui.toggleChat.setAttribute("aria-expanded", chatOpen ? "true" : "false");
   }
   if (ui.chatPanel) ui.chatPanel.classList.toggle("hidden", !running || !chatOpen);
+  updateVoiceUi();
   ui.boostLabel.classList.toggle("hidden", !running);
   ui.boostBox.classList.toggle("hidden", !running);
   ui.controlsHint.classList.toggle("hidden", !running || isPhonePortrait());
@@ -1040,6 +1063,7 @@ function stopHostLoop() {
 }
 
 async function leaveToMenu(message = "") {
+  await stopVoice(true);
   if (!isSinglePlayer && lobbyCode && uid && db) {
     await remove(lobbyRef(lobbyCode, `players/${uid}`)).catch(() => {});
     await remove(lobbyRef(lobbyCode, `inputs/${uid}`)).catch(() => {});
@@ -1060,6 +1084,8 @@ async function leaveToMenu(message = "") {
   if (ui.pauseOverlay) ui.pauseOverlay.classList.add("hidden");
   if (ui.chatPanel) ui.chatPanel.classList.add("hidden");
   if (ui.toggleChat) ui.toggleChat.classList.add("hidden");
+  if (ui.toggleVoice) ui.toggleVoice.classList.add("hidden");
+  if (ui.muteVoice) ui.muteVoice.classList.add("hidden");
   ui.boostLabel.classList.add("hidden");
   ui.boostBox.classList.add("hidden");
   ui.controlsHint.classList.add("hidden");
@@ -1188,6 +1214,300 @@ async function sendChatMessage(text) {
   await set(msgRef, { ...payload, createdAt: serverTimestamp() });
 }
 
+// ---------------------------------------------------------------------------
+// V30: actual WebRTC voice chat. Firebase RTDB is used only for signalling
+// (presence, offers, answers and ICE candidates); the audio stream itself is
+// peer-to-peer between browsers. Voice is opt-in per player and can be scoped
+// per lobby to everyone, same-team-only, or disabled.
+// ---------------------------------------------------------------------------
+function voiceScopeLabel(scope = currentMeta?.voiceScope) {
+  if (scope === "off") return "off";
+  return scope === "all" ? "everyone" : "team";
+}
+
+function localVoicePlayer() {
+  return currentPlayers?.[activePlayerId()] || {};
+}
+
+function canUseVoice() {
+  return !!(navigator.mediaDevices?.getUserMedia && window.RTCPeerConnection && db && uid && lobbyCode && !isSinglePlayer && currentMeta?.status === "running" && currentMeta?.voiceScope !== "off");
+}
+
+function voiceIceConfig() {
+  const fallback = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+  const cfg = WEBRTC_CONFIG && typeof WEBRTC_CONFIG === "object" ? WEBRTC_CONFIG : fallback;
+  return cfg.iceServers ? cfg : fallback;
+}
+
+function updateVoiceUi() {
+  const runningOnline = !!(!isSinglePlayer && currentMeta?.status === "running" && lobbyCode);
+  const disabledByHost = currentMeta?.voiceScope === "off";
+  const show = runningOnline && !disabledByHost;
+  if (ui.toggleVoice) {
+    ui.toggleVoice.classList.toggle("hidden", !show);
+    ui.toggleVoice.classList.toggle("voice-live", voiceActive);
+    ui.toggleVoice.classList.toggle("voice-connecting", voiceConnecting);
+    ui.toggleVoice.disabled = !runningOnline || disabledByHost || voiceConnecting;
+    ui.toggleVoice.setAttribute("aria-pressed", voiceActive ? "true" : "false");
+    const count = Math.max(0, voicePeers.size);
+    ui.toggleVoice.textContent = voiceActive ? `Voice ${voiceScopeLabel()} ${count ? count + 1 : 1}` : "Voice";
+    ui.toggleVoice.title = disabledByHost ? "Voice chat disabled by host" : "Join/leave voice chat (V)";
+  }
+  if (ui.muteVoice) {
+    ui.muteVoice.classList.toggle("hidden", !show || !voiceActive);
+    ui.muteVoice.classList.toggle("voice-muted", voiceMuted);
+    ui.muteVoice.setAttribute("aria-pressed", voiceMuted ? "true" : "false");
+    ui.muteVoice.textContent = voiceMuted ? "Mic Off" : "Mic On";
+  }
+  if (disabledByHost && voiceActive) stopVoice(true);
+}
+
+async function publishVoicePresence() {
+  if (!voiceActive || !db || !uid || !lobbyCode) return;
+  const local = localVoicePlayer();
+  await set(voiceRef(lobbyCode, `presence/${uid}`), {
+    name: sanitizeName(local.name || playerName || ui.name?.value),
+    team: local.team === "orange" ? "orange" : "blue",
+    muted: !!voiceMuted,
+    updatedAt: serverTimestamp(),
+    clientTime: Date.now()
+  }).catch(err => console.warn("Voice presence update failed", err));
+}
+
+function setupVoiceSubscriptions() {
+  if (!voiceActive || !lobbyCode || !uid || !db) return;
+  if (!voicePresenceUnsub) {
+    voicePresenceUnsub = onValue(voiceRef(lobbyCode, "presence"), snap => {
+      voicePresence = snap.val() || {};
+      reconcileVoicePeers();
+      updateVoiceUi();
+    });
+  }
+  if (!voiceSignalUnsub) {
+    voiceSignalUnsub = onValue(voiceRef(lobbyCode, `signals/${uid}`), snap => {
+      const signals = snap.val() || {};
+      Object.entries(signals)
+        .sort(([, a], [, b]) => Number(a?.clientTime || 0) - Number(b?.clientTime || 0))
+        .forEach(([id, signal]) => {
+          handleVoiceSignal(id, signal).catch(err => console.warn("Voice signal failed", err));
+        });
+    });
+  }
+  onDisconnect(voiceRef(lobbyCode, `presence/${uid}`)).remove().catch(() => {});
+  onDisconnect(voiceRef(lobbyCode, `signals/${uid}`)).remove().catch(() => {});
+}
+
+function clearVoiceSubscriptions() {
+  if (typeof voicePresenceUnsub === "function") voicePresenceUnsub();
+  if (typeof voiceSignalUnsub === "function") voiceSignalUnsub();
+  voicePresenceUnsub = null;
+  voiceSignalUnsub = null;
+}
+
+function voicePeerEligible(remoteId) {
+  if (!voiceActive || !remoteId || remoteId === uid || currentMeta?.voiceScope === "off") return false;
+  const remotePlayer = currentPlayers?.[remoteId];
+  if (!remotePlayer) return false;
+  const remotePresence = voicePresence?.[remoteId] || {};
+  if ((currentMeta?.voiceScope || "team") === "team") {
+    const localTeam = localVoicePlayer().team === "orange" ? "orange" : "blue";
+    const remoteTeam = (remotePresence.team || remotePlayer.team) === "orange" ? "orange" : "blue";
+    return localTeam === remoteTeam;
+  }
+  return true;
+}
+
+function reconcileVoicePeers() {
+  if (!voiceActive || !uid) return;
+  for (const remoteId of Array.from(voicePeers.keys())) {
+    if (!voicePeerEligible(remoteId)) closeVoicePeer(remoteId, true);
+  }
+  for (const remoteId of Object.keys(voicePresence || {})) {
+    if (!voicePeerEligible(remoteId) || voicePeers.has(remoteId)) continue;
+    // Lexicographic ordering avoids both browsers creating simultaneous offers.
+    if (String(uid) < String(remoteId)) createVoicePeer(remoteId, true).catch(err => console.warn("Voice offer failed", err));
+  }
+}
+
+async function startVoice() {
+  if (voiceActive || voiceConnecting) return;
+  if (!canUseVoice()) {
+    setStatus(currentMeta?.voiceScope === "off" ? "Voice chat is disabled by the host." : "Voice needs an online running match, HTTPS, and microphone permission.");
+    return;
+  }
+  voiceConnecting = true;
+  updateVoiceUi();
+  try {
+    voiceLocalStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false
+    });
+    voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = !voiceMuted; });
+    voiceActive = true;
+    setupVoiceSubscriptions();
+    await publishVoicePresence();
+    reconcileVoicePeers();
+    setStatus(`Voice chat joined (${voiceScopeLabel()}).`);
+  } catch (err) {
+    console.error(err);
+    setStatus(`Voice chat failed: ${err.message || err}. Check browser mic permission and HTTPS.`);
+    stopLocalVoiceTracks();
+  } finally {
+    voiceConnecting = false;
+    updateVoiceUi();
+  }
+}
+
+async function stopVoice(silent = false) {
+  if (!voiceActive && !voiceConnecting && !voiceLocalStream) {
+    updateVoiceUi();
+    return;
+  }
+  const code = lobbyCode;
+  const local = uid;
+  const remoteIds = Array.from(voicePeers.keys());
+  for (const remoteId of remoteIds) sendVoiceSignal(remoteId, { type: "leave" }).catch(() => {});
+  closeAllVoicePeers();
+  clearVoiceSubscriptions();
+  stopLocalVoiceTracks();
+  voiceActive = false;
+  voiceConnecting = false;
+  voicePresence = {};
+  if (db && code && local) {
+    await remove(voiceRef(code, `presence/${local}`)).catch(() => {});
+    await remove(voiceRef(code, `signals/${local}`)).catch(() => {});
+  }
+  if (!silent) setStatus("Voice chat left.");
+  updateVoiceUi();
+}
+
+function stopLocalVoiceTracks() {
+  if (voiceLocalStream) voiceLocalStream.getTracks().forEach(track => track.stop());
+  voiceLocalStream = null;
+}
+
+function toggleVoice() {
+  return voiceActive ? stopVoice() : startVoice();
+}
+
+function setVoiceMuted(next) {
+  voiceMuted = !!next;
+  localStorage.setItem("rlcss_voice_muted", voiceMuted ? "1" : "0");
+  if (voiceLocalStream) voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = !voiceMuted; });
+  publishVoicePresence();
+  updateVoiceUi();
+}
+
+function toggleVoiceMuted() {
+  setVoiceMuted(!voiceMuted);
+}
+
+async function sendVoiceSignal(targetUid, payload) {
+  if (!db || !lobbyCode || !uid || !targetUid) return;
+  const signalRef = push(voiceRef(lobbyCode, `signals/${targetUid}`));
+  await set(signalRef, {
+    ...payload,
+    from: uid,
+    clientTime: Date.now(),
+    createdAt: serverTimestamp()
+  });
+}
+
+async function createVoicePeer(remoteId, makeOffer = false) {
+  if (!voiceLocalStream || voicePeers.has(remoteId) || !voicePeerEligible(remoteId)) return voicePeers.get(remoteId);
+  const pc = new RTCPeerConnection(voiceIceConfig());
+  const peer = { id: remoteId, pc, audio: null };
+  voicePeers.set(remoteId, peer);
+
+  voiceLocalStream.getTracks().forEach(track => pc.addTrack(track, voiceLocalStream));
+
+  pc.onicecandidate = event => {
+    if (event.candidate) sendVoiceSignal(remoteId, { type: "candidate", candidate: event.candidate.toJSON() }).catch(() => {});
+  };
+  pc.ontrack = event => {
+    const stream = event.streams?.[0];
+    if (!stream) return;
+    if (!peer.audio) {
+      const audio = document.createElement("audio");
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.dataset.voicePeer = remoteId;
+      audio.style.display = "none";
+      document.body.appendChild(audio);
+      peer.audio = audio;
+    }
+    peer.audio.srcObject = stream;
+    peer.audio.play?.().catch(() => {});
+  };
+  pc.onconnectionstatechange = () => {
+    if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
+      window.setTimeout(() => {
+        const current = voicePeers.get(remoteId);
+        if (current?.pc === pc && ["failed", "closed", "disconnected"].includes(pc.connectionState)) closeVoicePeer(remoteId, true);
+      }, pc.connectionState === "disconnected" ? 4000 : 400);
+    }
+    updateVoiceUi();
+  };
+
+  if (makeOffer) {
+    const offer = await pc.createOffer({ offerToReceiveAudio: true });
+    await pc.setLocalDescription(offer);
+    await sendVoiceSignal(remoteId, { type: "offer", sdp: pc.localDescription.toJSON() });
+  }
+  updateVoiceUi();
+  return peer;
+}
+
+async function handleVoiceSignal(signalId, signal) {
+  if (!signal || !signal.from || signal.from === uid) {
+    if (lobbyCode && uid && signalId) remove(voiceRef(lobbyCode, `signals/${uid}/${signalId}`)).catch(() => {});
+    return;
+  }
+  if (!voiceActive || currentMeta?.voiceScope === "off") {
+    if (lobbyCode && uid && signalId) remove(voiceRef(lobbyCode, `signals/${uid}/${signalId}`)).catch(() => {});
+    return;
+  }
+  const from = signal.from;
+  try {
+    if (signal.type === "leave") {
+      closeVoicePeer(from, true);
+      return;
+    }
+    if (signal.type === "offer") {
+      const peer = voicePeers.get(from) || await createVoicePeer(from, false);
+      if (!peer || !voicePeerEligible(from)) return;
+      await peer.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      const answer = await peer.pc.createAnswer();
+      await peer.pc.setLocalDescription(answer);
+      await sendVoiceSignal(from, { type: "answer", sdp: peer.pc.localDescription.toJSON() });
+    } else if (signal.type === "answer") {
+      const peer = voicePeers.get(from);
+      if (peer && !peer.pc.currentRemoteDescription) await peer.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+    } else if (signal.type === "candidate") {
+      const peer = voicePeers.get(from);
+      if (peer && signal.candidate) await peer.pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
+    }
+  } finally {
+    if (lobbyCode && uid && signalId) remove(voiceRef(lobbyCode, `signals/${uid}/${signalId}`)).catch(() => {});
+  }
+}
+
+function closeVoicePeer(remoteId, keepPresence = false) {
+  const peer = voicePeers.get(remoteId);
+  if (!peer) return;
+  try { peer.pc.onicecandidate = null; peer.pc.ontrack = null; peer.pc.close(); } catch (_) {}
+  if (peer.audio) {
+    try { peer.audio.srcObject = null; peer.audio.remove(); } catch (_) {}
+  }
+  voicePeers.delete(remoteId);
+  if (!keepPresence && voicePresence?.[remoteId]) delete voicePresence[remoteId];
+  updateVoiceUi();
+}
+
+function closeAllVoicePeers() {
+  for (const remoteId of Array.from(voicePeers.keys())) closeVoicePeer(remoteId, true);
+}
+
 function safeUi(handler, label) {
   return event => {
     SFX.resume();
@@ -1242,6 +1562,8 @@ ui.leaveLobby.addEventListener("click", safeUi(() => leaveToMenu("Left lobby."),
 ui.leaveGame.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
 if (ui.pauseGame) ui.pauseGame.addEventListener("click", safeUi(togglePause, "Toggle pause"));
 if (ui.toggleChat) ui.toggleChat.addEventListener("click", safeUi(toggleChatOpen, "Toggle chat"));
+if (ui.toggleVoice) ui.toggleVoice.addEventListener("click", safeUi(toggleVoice, "Toggle voice"));
+if (ui.muteVoice) ui.muteVoice.addEventListener("click", safeUi(toggleVoiceMuted, "Toggle microphone"));
 ui.ready.addEventListener("click", () => {
   if (isSinglePlayer) startSoloMatch();
   else updateLocalPlayer({ ready: !(currentPlayers[activePlayerId()]?.ready) });
@@ -1255,6 +1577,7 @@ ui.teamSize.addEventListener("change", () => updateMetaPatch({ teamSize: Number(
 ui.difficulty.addEventListener("change", () => updateMetaPatch({ difficulty: ui.difficulty.value }));
 ui.playstyle.addEventListener("change", () => updateMetaPatch({ playstyle: ui.playstyle.value }));
 if (ui.chatScope) ui.chatScope.addEventListener("change", () => updateMetaPatch({ chatScope: ui.chatScope.value }));
+if (ui.voiceScope) ui.voiceScope.addEventListener("change", () => updateMetaPatch({ voiceScope: ui.voiceScope.value }));
 if (ui.chatForm) ui.chatForm.addEventListener("submit", safeUi(async e => {
   e.preventDefault();
   const text = ui.chatInput?.value || "";
@@ -1296,6 +1619,14 @@ window.addEventListener("keydown", e => {
   }
   if (e.code === "KeyT") {
     toggleChatOpen();
+    return;
+  }
+  if (e.code === "KeyV") {
+    toggleVoice();
+    return;
+  }
+  if (e.code === "KeyM") {
+    toggleVoiceMuted();
     return;
   }
   if (e.code === "Enter" && currentMeta?.status === "running") {

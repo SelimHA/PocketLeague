@@ -242,6 +242,7 @@ export const DEFAULT_META = {
   difficulty: "pro",
   playstyle: "balanced",
   chatScope: "all",
+  voiceScope: "team",
   paused: false,
   status: "waiting",
   matchLength: 300
@@ -350,6 +351,7 @@ export function serialiseMeta(meta = {}) {
   if (!["balanced", "defensive", "aggressive", "chaotic"].includes(out.playstyle)) out.playstyle = "balanced";
   if (!STADIUM_THEMES[out.theme]) out.theme = "v10";
   if (!["all", "team"].includes(out.chatScope)) out.chatScope = "all";
+  if (!["all", "team", "off"].includes(out.voiceScope)) out.voiceScope = "team";
   out.paused = !!out.paused;
   return out;
 }
