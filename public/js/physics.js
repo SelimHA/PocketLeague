@@ -241,10 +241,15 @@ const GOAL_H = 9;
 const GOAL_D = 8;
 
 const BALL_RADIUS = 1.85;
-const BALL_MAX_SPEED = 58;
-const BALL_GRAVITY = 36;
-const BALL_RESTITUTION = 0.72;
+// V26: a heavier-feeling ball, closer to the pre-multiplayer HTML-only game.
+// Max speed, bounce and car-hit lift are trimmed slightly so touches feel less floaty.
+const BALL_MAX_SPEED = 56;
+const BALL_GRAVITY = 38;
+const BALL_RESTITUTION = 0.70;
+const BALL_HEAVY_IMPULSE_SCALE = 0.90;
+const BALL_HEAVY_LIFT_SCALE = 0.84;
 const WALL_RESTITUTION = 0.78;
+const KICKOFF_COUNTDOWN_SECONDS = 5;
 
 const CAR_HALF_X = 1.35;
 const CAR_HALF_Y = 0.58;
@@ -374,11 +379,12 @@ export function makeInitialState(meta, players = {}) {
     theme: cleanMeta.theme,
     teamSize: cleanMeta.teamSize,
     arena,
-    ball: { x: 0, y: BALL_RADIUS, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, rz: 0 },
+    ball: { x: 0, y: BALL_RADIUS, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, rz: 0, lastTouchTick: 0, lastTouchCar: null, lastTouchImpulse: 0 },
     boostPads: makeBoostPads(arena),
     cars,
     goalFlash: null,
-    kickoffTimer: 1.35,
+    sound: { roundSerial: 1, roundTick: 0, goalTick: 0, goalTeam: null, ballHitTick: 0, ballHitImpulse: 0, wallHitTick: 0, wallHitSpeed: 0, bounceTick: 0, bounceSpeed: 0, boostPadTick: 0, boostPadBig: false, boostPadCar: null, carBumpTick: 0, carBumpImpulse: 0 },
+    kickoffTimer: KICKOFF_COUNTDOWN_SECONDS,
     ended: false
   };
 }
@@ -436,6 +442,8 @@ function makeCar(id, team, role, human, name, x, z, yaw, slotIndex, model = "def
     jumpLatch: false,
     doubleJumpUsed: false,
     justJumped: false,
+    jumpEventTick: 0,
+    doubleJumpEventTick: 0,
     cueCooldown: 0,
     bumpCooldown: 0,
     lastTouch: null,
@@ -746,6 +754,7 @@ function updateCar(car, input, state, cfg, dt) {
       car.vy = (state.mode === "ice" ? 17.4 : 18.5) * cfg.jump * vehicle.jump;
       car.jumpCooldown = 0.20;
       car.justJumped = true;
+      car.jumpEventTick = state.tick;
     }
   } else {
     if (jump && !car.jumpLatch && car.jumpCooldown <= 0 && !car.doubleJumpUsed) {
@@ -756,6 +765,8 @@ function updateCar(car, input, state, cfg, dt) {
       car.vz += fwd.z * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
       car.pitch = -0.22;
       car.jumpCooldown = 0.28;
+      car.jumpEventTick = state.tick;
+      car.doubleJumpEventTick = state.tick;
     }
     car.yaw += steer * 1.55 * cfg.steer * dt;
     if (Math.abs(throttle) > 0.001) {
@@ -832,6 +843,10 @@ function updateBoostPads(state, dt) {
         car.boost = pad.amount >= 100 ? BOOST_MAX : Math.min(BOOST_MAX, before + pad.amount);
         if (car.boost > before) {
           car.boostPickup = 0.16;
+          if (!state.sound) state.sound = {};
+          state.sound.boostPadTick = state.tick;
+          state.sound.boostPadBig = !!pad.big;
+          state.sound.boostPadCar = car.id;
           pad.active = false;
           pad.timer = pad.respawn;
         }
@@ -865,6 +880,9 @@ function resolveCarCar(state) {
         a.vx += nx * impulse / massA; a.vz += nz * impulse / massA;
         b.vx -= nx * impulse / massB; b.vz -= nz * impulse / massB;
         a.bumpCooldown = b.bumpCooldown = 0.1;
+        if (!state.sound) state.sound = {};
+        state.sound.carBumpTick = state.tick;
+        state.sound.carBumpImpulse = impulse;
       }
     }
   }
@@ -878,6 +896,9 @@ function updateBall(state, cfg, dt) {
   const wallRestitution = Math.min(0.94, WALL_RESTITUTION * cfg.wallRestitution);
 
   b.vy -= BALL_GRAVITY * cfg.ballGravity * dt;
+  // The HTML-only version damped vertical arcs a little more than the
+  // multiplayer rebuild. Restoring that damping makes the ball feel heavier.
+  b.vy *= Math.pow(0.985, dt * 120);
   const air = Math.pow(0.999, dt * 120);
   b.vx *= air; b.vy *= air; b.vz *= air;
   const speed = Math.hypot(b.vx, b.vy, b.vz);
@@ -892,8 +913,15 @@ function updateBall(state, cfg, dt) {
 
   if (b.y < BALL_RADIUS) {
     b.y = BALL_RADIUS;
-    if (b.vy < -1.2) b.vy *= -ballRestitution;
-    else b.vy = 0;
+    const impactY = Math.abs(b.vy);
+    if (b.vy < -1.2) {
+      b.vy *= -ballRestitution;
+      if (impactY > 3.2) {
+        if (!state.sound) state.sound = {};
+        state.sound.bounceTick = state.tick;
+        state.sound.bounceSpeed = impactY;
+      }
+    } else b.vy = 0;
     const groundFriction = 1 - (1 - 0.988) * cfg.ballFriction;
     const d = Math.pow(groundFriction, dt * 120);
     b.vx *= d; b.vz *= d;
@@ -902,14 +930,26 @@ function updateBall(state, cfg, dt) {
   const ceilingH = arena.ceilingH || (state.mode === "flying" ? CEILING_H_FLYING : CEILING_H_STANDARD);
   if (b.y > ceilingH - BALL_RADIUS) {
     b.y = ceilingH - BALL_RADIUS;
+    const hitSpeed = Math.abs(b.vy);
     if (b.vy > 0) b.vy *= -0.62;
+    if (hitSpeed > 4) {
+      if (!state.sound) state.sound = {};
+      state.sound.wallHitTick = state.tick;
+      state.sound.wallHitSpeed = hitSpeed;
+    }
   }
 
   const sideLim = arena.w / 2 - BALL_RADIUS;
   if (Math.abs(b.x) > sideLim) {
+    const hitSpeed = Math.abs(b.vx);
     b.x = Math.sign(b.x) * sideLim;
     b.vx *= -wallRestitution;
     b.vz *= 0.985;
+    if (hitSpeed > 3.5) {
+      if (!state.sound) state.sound = {};
+      state.sound.wallHitTick = state.tick;
+      state.sound.wallHitSpeed = hitSpeed;
+    }
   }
 
   const mouthX = Math.abs(b.x) < arena.goalW / 2 - BALL_RADIUS * 0.45;
@@ -917,21 +957,39 @@ function updateBall(state, cfg, dt) {
   const goalOpen = mouthX && mouthY;
   const zLim = goalOpen ? arena.l / 2 + arena.goalD - BALL_RADIUS : arena.l / 2 - BALL_RADIUS;
   if (Math.abs(b.z) > zLim) {
+    const hitSpeed = Math.abs(b.vz);
     b.z = Math.sign(b.z) * zLim;
     b.vz *= -wallRestitution;
     b.vx *= 0.985;
+    if (hitSpeed > 3.5) {
+      if (!state.sound) state.sound = {};
+      state.sound.wallHitTick = state.tick;
+      state.sound.wallHitSpeed = hitSpeed;
+    }
   }
 
   // Goal side and roof collisions inside the goal volume.
   if (Math.abs(b.z) > arena.l / 2 - BALL_RADIUS && Math.abs(b.z) < arena.l / 2 + arena.goalD) {
     const netXLim = arena.goalW / 2 - BALL_RADIUS;
     if (Math.abs(b.x) > netXLim) {
+      const hitSpeed = Math.abs(b.vx);
       b.x = Math.sign(b.x) * netXLim;
       b.vx *= -0.72;
+      if (hitSpeed > 3.5) {
+        if (!state.sound) state.sound = {};
+        state.sound.wallHitTick = state.tick;
+        state.sound.wallHitSpeed = hitSpeed;
+      }
     }
     if (b.y > arena.goalH - BALL_RADIUS) {
+      const hitSpeed = Math.abs(b.vy);
       b.y = arena.goalH - BALL_RADIUS;
       if (b.vy > 0) b.vy *= -0.62;
+      if (hitSpeed > 3.5) {
+        if (!state.sound) state.sound = {};
+        state.sound.wallHitTick = state.tick;
+        state.sound.wallHitSpeed = hitSpeed;
+      }
     }
   }
 
@@ -996,10 +1054,10 @@ function resolveCueHit(car, b, state, cfg) {
   const closing = -(relX * nx + relY * ny + relZ * nz);
   const cueSweetSpot = clamp(t, 0.35, 1.0);
   const lineUpBonus = clamp(frontness, -0.2, 1) * 5.8;
-  const impulse = (Math.max(0, closing * 1.25) + 2.6 + speed * 0.24 + lineUpBonus) * cueSweetSpot;
-  b.vx += nx * impulse + fwd.x * clamp(frontness, 0, 1) * (2.0 + speed * 0.035);
-  b.vy += ny * impulse + clamp((1 - Math.abs(ny)) * 0.55, 0.15, 1.0);
-  b.vz += nz * impulse + fwd.z * clamp(frontness, 0, 1) * (2.0 + speed * 0.035);
+  const impulse = (Math.max(0, closing * 1.25) + 2.6 + speed * 0.24 + lineUpBonus) * cueSweetSpot * BALL_HEAVY_IMPULSE_SCALE;
+  b.vx += nx * impulse + fwd.x * clamp(frontness, 0, 1) * (1.78 + speed * 0.030);
+  b.vy += ny * impulse * BALL_HEAVY_LIFT_SCALE + clamp((1 - Math.abs(ny)) * 0.42, 0.12, 0.78);
+  b.vz += nz * impulse + fwd.z * clamp(frontness, 0, 1) * (1.78 + speed * 0.030);
   const maxBallSpeed = BALL_MAX_SPEED * cfg.ballMax;
   const bs = Math.hypot(b.vx, b.vy, b.vz);
   if (bs > maxBallSpeed) { const s = maxBallSpeed / bs; b.vx *= s; b.vy *= s; b.vz *= s; }
@@ -1007,6 +1065,12 @@ function resolveCueHit(car, b, state, cfg) {
   car.vz -= nz * Math.min(4.5, impulse * 0.045);
   car.cueCooldown = 0.22;
   car.lastTouch = state.tick;
+  b.lastTouchTick = state.tick;
+  b.lastTouchCar = car.id;
+  b.lastTouchImpulse = impulse;
+  if (!state.sound) state.sound = {};
+  state.sound.ballHitTick = state.tick;
+  state.sound.ballHitImpulse = impulse;
 }
 
 function resolveCarBallOBB(car, b, state, cfg) {
@@ -1055,12 +1119,12 @@ function resolveCarBallOBB(car, b, state, cfg) {
   const speed = horizontalSpeed(car);
   const frontBonus = clamp(fwd.x * nx + fwd.z * nz, -0.2, 1) * 5.5;
   const jumpBonus = car.justJumped ? 7.0 : 0;
-  const impulse = (Math.max(0, closing * 1.18) + 4.4 + speed * 0.34 + frontBonus + jumpBonus) * vehicle.hit;
+  const impulse = (Math.max(0, closing * 1.18) + 4.4 + speed * 0.34 + frontBonus + jumpBonus) * vehicle.hit * BALL_HEAVY_IMPULSE_SCALE;
   b.vx += nx * impulse;
-  b.vy += ny * impulse;
+  b.vy += ny * impulse * BALL_HEAVY_LIFT_SCALE;
   b.vz += nz * impulse;
-  if (ny < 0.25) b.vy += clamp(speed * 0.12 + (car.justJumped ? 5.2 : 2.2), 1.5, 7.5);
-  if (car.boosting) { b.vx += fwd.x * 5.4; b.vz += fwd.z * 5.4; }
+  if (ny < 0.25) b.vy += clamp((speed * 0.095 + (car.justJumped ? 4.2 : 1.8)) * BALL_HEAVY_LIFT_SCALE, 1.2, 6.2);
+  if (car.boosting) { b.vx += fwd.x * 4.6; b.vz += fwd.z * 4.6; }
   const maxBallSpeed = BALL_MAX_SPEED * cfg.ballMax;
   const bs = Math.hypot(b.vx, b.vy, b.vz);
   if (bs > maxBallSpeed) { const s = maxBallSpeed / bs; b.vx *= s; b.vy *= s; b.vz *= s; }
@@ -1069,6 +1133,12 @@ function resolveCarBallOBB(car, b, state, cfg) {
   car.vy -= ny * recoil;
   car.vz -= nz * recoil;
   car.lastTouch = state.tick;
+  b.lastTouchTick = state.tick;
+  b.lastTouchCar = car.id;
+  b.lastTouchImpulse = impulse;
+  if (!state.sound) state.sound = {};
+  state.sound.ballHitTick = state.tick;
+  state.sound.ballHitImpulse = impulse;
 }
 
 function resolveGoals(state, players) {
@@ -1081,13 +1151,20 @@ function resolveGoals(state, players) {
   const team = scoredBlue ? "blue" : "orange";
   state.score[team] += 1;
   state.goalFlash = { team, tick: state.tick };
+  if (!state.sound) state.sound = {};
+  state.sound.goalTick = state.tick;
+  state.sound.goalTeam = team;
   resetKickoff(state, players, false);
 }
 
 function resetKickoff(state, players, initial = false) {
   state.ball.x = 0; state.ball.y = BALL_RADIUS; state.ball.z = 0;
   state.ball.vx = 0; state.ball.vy = 0; state.ball.vz = 0; state.ball.rx = 0; state.ball.rz = 0;
-  state.kickoffTimer = 1.35;
+  state.ball.lastTouchTick = 0; state.ball.lastTouchCar = null; state.ball.lastTouchImpulse = 0;
+  if (!state.sound) state.sound = {};
+  state.sound.roundSerial = (state.sound.roundSerial || 0) + 1;
+  state.sound.roundTick = state.tick;
+  state.kickoffTimer = KICKOFF_COUNTDOWN_SECONDS;
   const byTeam = { blue: 0, orange: 0 };
   for (const car of Object.values(state.cars)) {
     const idx = byTeam[car.team]++;
@@ -1098,7 +1175,7 @@ function resetKickoff(state, players, initial = false) {
     car.grounded = true; car.onGround = true;
     const baseBoost = car.human ? (initial ? 33 : Math.max(car.boost || 0, 33)) : (initial ? 60 : Math.max(car.boost || 0, 45));
     car.boost = Math.min(BOOST_MAX, baseBoost);
-    car.boosting = false; car.drifting = false; car.boostPickup = 0; car.jumpCooldown = 0; car.jumpLatch = false; car.doubleJumpUsed = false; car.justJumped = false;
+    car.boosting = false; car.drifting = false; car.boostPickup = 0; car.jumpCooldown = 0; car.jumpLatch = false; car.doubleJumpUsed = false; car.justJumped = false; car.jumpEventTick = 0; car.doubleJumpEventTick = 0;
   }
   for (const pad of state.boostPads || []) {
     pad.active = true;
@@ -1116,7 +1193,8 @@ export function compactState(state) {
       vx: round(c.vx), vy: round(c.vy), vz: round(c.vz),
       yaw: round(c.yaw), yawVel: round(c.yawVel), pitch: round(c.pitch || 0), roll: round(c.roll || 0), grounded: !!c.grounded, doubleJumpUsed: !!c.doubleJumpUsed,
       boost: Math.round(c.boost), boosting: !!c.boosting, drifting: !!c.drifting,
-      boostPickup: round(c.boostPickup || 0), cueCooldown: round(c.cueCooldown || 0), bumpCooldown: round(c.bumpCooldown || 0), slotIndex: c.slotIndex
+      boostPickup: round(c.boostPickup || 0), cueCooldown: round(c.cueCooldown || 0), bumpCooldown: round(c.bumpCooldown || 0),
+      lastTouch: c.lastTouch || 0, justJumped: !!c.justJumped, jumpEventTick: c.jumpEventTick || 0, doubleJumpEventTick: c.doubleJumpEventTick || 0, slotIndex: c.slotIndex
     };
   }
   return {
@@ -1131,7 +1209,10 @@ export function compactState(state) {
     ball: {
       x: round(state.ball.x), y: round(state.ball.y), z: round(state.ball.z),
       vx: round(state.ball.vx), vy: round(state.ball.vy), vz: round(state.ball.vz),
-      rx: round(state.ball.rx), rz: round(state.ball.rz)
+      rx: round(state.ball.rx), rz: round(state.ball.rz),
+      lastTouchTick: state.ball.lastTouchTick || 0,
+      lastTouchCar: state.ball.lastTouchCar || null,
+      lastTouchImpulse: round(state.ball.lastTouchImpulse || 0)
     },
     boostPads: (state.boostPads || []).map(p => ({
       id: p.id, x: round(p.x), z: round(p.z), y: round(p.y || 0), radius: round(p.radius || (p.big ? 3.15 : 2.35)),
@@ -1139,6 +1220,7 @@ export function compactState(state) {
     })),
     cars,
     goalFlash: state.goalFlash,
+    sound: { ...(state.sound || {}) },
     kickoffTimer: round(state.kickoffTimer),
     ended: state.ended
   };

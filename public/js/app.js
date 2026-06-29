@@ -28,7 +28,7 @@ const ui = {
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
-  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), leaveGame: $("#leave-game"),
+  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"),
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
@@ -36,6 +36,165 @@ const ui = {
   mobileBoostButton: document.querySelector('[data-action="boost"]'),
   vehiclePreview: $("#vehicle-preview"), vehiclePreviewName: $("#vehicle-preview-name"), vehiclePreviewDesc: $("#vehicle-preview-desc")
 };
+
+
+// ---------------------------------------------------------------------------
+// Procedural sound effects, adapted from the HTML-only V10 build. Browsers only
+// unlock WebAudio after a tap/key press, so resume() is called from UI events.
+// ---------------------------------------------------------------------------
+const SFX = (() => {
+  let ctx = null;
+  let master = null;
+  let engineOsc = null;
+  let engineGain = null;
+  let boostNoise = null;
+  let boostGain = null;
+  let skidNoise = null;
+  let skidGain = null;
+  let startedLoops = false;
+  let muted = false;
+  let seed = 7331;
+
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+
+  function init() {
+    if (ctx) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    ctx = new AudioContext();
+    master = ctx.createGain();
+    master.gain.value = 0.72;
+    master.connect(ctx.destination);
+
+    engineOsc = ctx.createOscillator();
+    engineOsc.type = "sawtooth";
+    const engineFilter = ctx.createBiquadFilter();
+    engineFilter.type = "lowpass";
+    engineFilter.frequency.value = 360;
+    engineGain = ctx.createGain();
+    engineGain.gain.value = 0;
+    engineOsc.connect(engineFilter);
+    engineFilter.connect(engineGain);
+    engineGain.connect(master);
+
+    boostNoise = ctx.createBufferSource();
+    boostNoise.buffer = noiseBuffer(1.4);
+    boostNoise.loop = true;
+    const boostFilter = ctx.createBiquadFilter();
+    boostFilter.type = "bandpass";
+    boostFilter.frequency.value = 1450;
+    boostFilter.Q.value = 0.88;
+    boostGain = ctx.createGain();
+    boostGain.gain.value = 0;
+    boostNoise.connect(boostFilter);
+    boostFilter.connect(boostGain);
+    boostGain.connect(master);
+
+    skidNoise = ctx.createBufferSource();
+    skidNoise.buffer = noiseBuffer(1.2);
+    skidNoise.loop = true;
+    const skidFilter = ctx.createBiquadFilter();
+    skidFilter.type = "highpass";
+    skidFilter.frequency.value = 1750;
+    skidGain = ctx.createGain();
+    skidGain.gain.value = 0;
+    skidNoise.connect(skidFilter);
+    skidFilter.connect(skidGain);
+    skidGain.connect(master);
+  }
+
+  function noiseBuffer(seconds) {
+    const rate = ctx.sampleRate;
+    const buffer = ctx.createBuffer(1, Math.max(1, Math.floor(rate * seconds)), rate);
+    const data = buffer.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < data.length; i++) {
+      const white = rand() * 2 - 1;
+      last = last * 0.82 + white * 0.18;
+      data[i] = last;
+    }
+    return buffer;
+  }
+
+  function resume() {
+    init();
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume();
+    if (!startedLoops) {
+      engineOsc.start();
+      boostNoise.start();
+      skidNoise.start();
+      startedLoops = true;
+    }
+  }
+
+  function ready() { return ctx && master && !muted; }
+
+  function tone(freq, duration, volume = 0.08, type = "sine", when = 0, bend = 1) {
+    if (!ready()) return;
+    const t = ctx.currentTime + when;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    if (bend !== 1) osc.frequency.exponentialRampToValueAtTime(Math.max(24, freq * bend), t + duration);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(t);
+    osc.stop(t + duration + 0.04);
+  }
+
+  function noiseBurst(duration, volume = 0.08, filterType = "bandpass", freq = 1000, q = 0.8, when = 0) {
+    if (!ready()) return;
+    const t = ctx.currentTime + when;
+    const source = ctx.createBufferSource();
+    source.buffer = noiseBuffer(duration + 0.04);
+    const filter = ctx.createBiquadFilter();
+    filter.type = filterType;
+    filter.frequency.setValueAtTime(freq, t);
+    filter.Q.value = q;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(volume, t + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    source.start(t);
+    source.stop(t + duration + 0.05);
+  }
+
+  function ui(freq = 680) { resume(); tone(freq, 0.06, 0.042, "triangle", 0, 1.16); }
+  function countdown(n = 3) { resume(); tone(n <= 1 ? 880 : 520, 0.10, 0.072, "square", 0, 1.08); }
+  function kickoff() { resume(); tone(330, 0.08, 0.07, "square", 0, 1.25); tone(660, 0.16, 0.065, "triangle", 0.09, 1.18); noiseBurst(0.24, 0.045, "bandpass", 980, 0.6, 0.06); }
+  function jump(double = false) { resume(); tone(double ? 255 : 190, 0.11, double ? 0.07 : 0.055, "triangle", 0, double ? 1.75 : 1.50); noiseBurst(0.10, double ? 0.06 : 0.04, "highpass", double ? 1300 : 900, 0.55); }
+  function ballHit(impulse = 20) { resume(); const g = clamp(impulse / 36, 0.20, 1.05); tone(145 + impulse * 4.2, 0.11, 0.075 * g, "triangle", 0, 0.62); noiseBurst(0.10, 0.085 * g, "bandpass", 720 + impulse * 16, 0.9); }
+  function wallHit(speed = 8) { resume(); const g = clamp(speed / 28, 0.12, 0.82); tone(110, 0.11, 0.05 * g, "sine", 0, 0.58); noiseBurst(0.10, 0.075 * g, "bandpass", 580, 0.75); }
+  function bounce(speed = 8) { resume(); const g = clamp(speed / 24, 0.10, 0.72); tone(125 + speed * 5, 0.07, 0.04 * g, "triangle", 0, 0.72); }
+  function boostPad(big = false) { resume(); tone(big ? 260 : 360, 0.08, big ? 0.064 : 0.052, "triangle", 0, 1.65); tone(big ? 520 : 720, 0.11, big ? 0.050 : 0.038, "triangle", 0.04, 1.20); noiseBurst(big ? 0.22 : 0.12, big ? 0.080 : 0.045, "highpass", big ? 1250 : 1700, 0.60); }
+  function carBump(impact = 8) { resume(); const g = clamp(impact / 26, 0.14, 0.88); tone(82, 0.14, 0.06 * g, "square", 0, 0.60); noiseBurst(0.11, 0.065 * g, "lowpass", 360, 0.75); }
+  function goal(team = "blue") { resume(); const base = team === "blue" ? 330 : 294; tone(base, 0.20, 0.095, "sawtooth", 0, 1.5); tone(base * 1.5, 0.24, 0.08, "sawtooth", 0.13, 1.3); tone(base * 2, 0.40, 0.085, "triangle", 0.28, 1.08); noiseBurst(0.85, 0.13, "bandpass", 1050, 0.42, 0.06); }
+
+  function update(state, playerId) {
+    if (!ctx || !startedLoops || !state?.cars || !playerId) return;
+    const car = state.cars[playerId];
+    if (!car) return;
+    const t = ctx.currentTime;
+    const speed = Math.hypot(car.vx || 0, car.vz || 0);
+    const targetEngine = muted || !document.body.classList.contains("game-running") ? 0 : (0.022 + clamp(speed / 55, 0, 1) * 0.050 + (Math.abs(mobileInput.throttle) > 0.05 ? 0.014 : 0));
+    const targetFreq = 78 + speed * 6.0 + (car.boosting ? 76 : 0);
+    engineOsc.frequency.setTargetAtTime(targetFreq, t, 0.045);
+    engineGain.gain.setTargetAtTime(targetEngine, t, 0.08);
+    boostGain.gain.setTargetAtTime(muted ? 0 : (car.boosting ? 0.135 : 0), t, car.boosting ? 0.018 : 0.06);
+    const skid = car.grounded && car.drifting && speed > 8 ? clamp(speed / 34, 0, 1) : 0;
+    skidGain.gain.setTargetAtTime(muted ? 0 : skid * 0.070, t, 0.045);
+  }
+
+  return { resume, ui, countdown, kickoff, jump, ballHit, wallHit, bounce, boostPad, carBump, goal, update };
+})();
 
 const canvas = $("#game");
 let initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getDatabase, ref, get, set, update, onValue, remove, onDisconnect, serverTimestamp;
@@ -341,7 +500,7 @@ function startSoloMatch() {
   };
   currentMeta = serialiseMeta({ ...currentMeta, status: "running", startedAt: Date.now(), updatedAt: Date.now() });
   const initial = makeInitialState(currentMeta, currentPlayers);
-  initial.kickoffTimer = 0.45;
+  initial.kickoffTimer = 5;
   latestInputs = { [localId]: localInput() };
   latestState = compactState(initial);
   currentLobby = { meta: currentMeta, players: currentPlayers, inputs: latestInputs, state: latestState };
@@ -633,6 +792,7 @@ async function sendInput() {
 
 function safeUi(handler, label) {
   return event => {
+    SFX.resume();
     try {
       const result = handler(event);
       if (result && typeof result.catch === "function") {
@@ -683,18 +843,21 @@ ui.playstyle.addEventListener("change", () => updateMetaPatch({ playstyle: ui.pl
 });
 
 window.addEventListener("keydown", e => {
+  SFX.resume();
   keys[e.code] = true;
   if (e.code === bindings.cam && !camKeyLatch) {
     camKeyLatch = true;
     localBallCam = !localBallCam;
     localStorage.setItem("rlcss_ball_cam", localBallCam ? "1" : "0");
     if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
+    SFX.ui(localBallCam ? 860 : 520);
   }
 });
 window.addEventListener("keyup", e => {
   keys[e.code] = false;
   if (e.code === bindings.cam) camKeyLatch = false;
 });
+["pointerdown", "touchstart", "click"].forEach(type => window.addEventListener(type, () => SFX.resume(), { passive: true }));
 
 // Mobile/touch controls
 function isPhonePortrait() {
@@ -766,6 +929,7 @@ function setupMobileControls() {
     localBallCam = !localBallCam;
     localStorage.setItem("rlcss_ball_cam", localBallCam ? "1" : "0");
     if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
+    SFX.ui(localBallCam ? 860 : 520);
   }
 
   document.querySelectorAll("[data-mobile-tap]").forEach(btn => {
@@ -1007,8 +1171,8 @@ function buildArena(state) {
   const wallMat = new THREE.MeshStandardMaterial({ color: wallColor, transparent: true, opacity: theme.wallOpacity ?? 0.48, roughness: 0.4 });
   const blueLight = theme.lightBlue ?? 0x12b9ff;
   const orangeLight = theme.lightOrange ?? 0xff8a1f;
-  const trimBlue = new THREE.MeshStandardMaterial({ color: blueLight, emissive: blueLight, emissiveIntensity: 0.45 });
-  const trimOrange = new THREE.MeshStandardMaterial({ color: orangeLight, emissive: orangeLight, emissiveIntensity: 0.45 });
+  const trimBlue = new THREE.MeshStandardMaterial({ color: blueLight, emissive: blueLight, emissiveIntensity: 0.48, transparent: true, opacity: 0.66, depthWrite: false });
+  const trimOrange = new THREE.MeshStandardMaterial({ color: orangeLight, emissive: orangeLight, emissiveIntensity: 0.48, transparent: true, opacity: 0.66, depthWrite: false });
   const neutralTrim = new THREE.MeshStandardMaterial({ color: theme.trim ?? 0xffffff, emissive: blueLight, emissiveIntensity: 0.16 });
 
   function box(w, h, d, x, y, z, mat = wallMat) {
@@ -1607,6 +1771,64 @@ function renderVehiclePreview(now) {
   previewRenderer.render(previewScene, previewCamera);
 }
 
+
+const lastSound = {
+  ballHitTick: 0,
+  wallHitTick: 0,
+  bounceTick: 0,
+  boostPadTick: 0,
+  carBumpTick: 0,
+  goalTick: 0,
+  roundSerial: 0,
+  countdownSecond: 0,
+  previousKickoffTimer: 0,
+  jumpTicks: new Map(),
+  doubleJumpTicks: new Map()
+};
+
+function handleSoundEvents(state) {
+  if (!state) return;
+  const snd = state.sound || {};
+  const kickoff = Math.max(0, Number(state.kickoffTimer || 0));
+  const roundSerial = Number(snd.roundSerial || 0);
+  if (roundSerial !== lastSound.roundSerial) {
+    lastSound.roundSerial = roundSerial;
+    lastSound.countdownSecond = 0;
+    lastSound.previousKickoffTimer = kickoff;
+  }
+  if (kickoff > 0) {
+    const second = Math.max(1, Math.ceil(kickoff));
+    if (second !== lastSound.countdownSecond && second <= 5) {
+      lastSound.countdownSecond = second;
+      SFX.countdown(second);
+    }
+  } else if (lastSound.previousKickoffTimer > 0) {
+    lastSound.countdownSecond = 0;
+    SFX.kickoff();
+  }
+  lastSound.previousKickoffTimer = kickoff;
+
+  if ((snd.goalTick || 0) > lastSound.goalTick) { lastSound.goalTick = snd.goalTick; SFX.goal(snd.goalTeam || "blue"); }
+  if ((snd.ballHitTick || 0) > lastSound.ballHitTick) { lastSound.ballHitTick = snd.ballHitTick; SFX.ballHit(snd.ballHitImpulse || state.ball?.lastTouchImpulse || 18); }
+  if ((snd.wallHitTick || 0) > lastSound.wallHitTick) { lastSound.wallHitTick = snd.wallHitTick; SFX.wallHit(snd.wallHitSpeed || 8); }
+  if ((snd.bounceTick || 0) > lastSound.bounceTick) { lastSound.bounceTick = snd.bounceTick; SFX.bounce(snd.bounceSpeed || 8); }
+  if ((snd.boostPadTick || 0) > lastSound.boostPadTick) { lastSound.boostPadTick = snd.boostPadTick; SFX.boostPad(!!snd.boostPadBig); }
+  if ((snd.carBumpTick || 0) > lastSound.carBumpTick) { lastSound.carBumpTick = snd.carBumpTick; SFX.carBump(snd.carBumpImpulse || 8); }
+
+  for (const car of Object.values(state.cars || {})) {
+    const jt = Number(car.jumpEventTick || 0);
+    const djt = Number(car.doubleJumpEventTick || 0);
+    if (djt && djt > (lastSound.doubleJumpTicks.get(car.id) || 0)) {
+      lastSound.doubleJumpTicks.set(car.id, djt);
+      lastSound.jumpTicks.set(car.id, Math.max(jt, djt));
+      SFX.jump(true);
+    } else if (jt && jt > (lastSound.jumpTicks.get(car.id) || 0)) {
+      lastSound.jumpTicks.set(car.id, jt);
+      SFX.jump(false);
+    }
+  }
+}
+
 function updateVisuals(state) {
   if (!state) return;
   buildArena(state);
@@ -1641,6 +1863,7 @@ function updateVisuals(state) {
       }
     }
   }
+  handleSoundEvents(state);
   updateHud(state);
   updateCamera(state);
 }
@@ -1665,6 +1888,15 @@ function updateHud(state) {
     ui.mobileBoostButton.innerHTML = `<span class="boost-btn-title">BOOST</span><span class="boost-btn-value">${boostPct}</span>`;
     ui.mobileBoostButton.classList.toggle("boost-empty", boostPct <= 0);
   }
+  if (ui.countdown) {
+    const k = Math.max(0, Number(state.kickoffTimer || 0));
+    const running = document.body.classList.contains("game-running");
+    ui.countdown.classList.toggle("hidden", !running || k <= 0);
+    if (running && k > 0) {
+      ui.countdown.textContent = String(Math.max(1, Math.ceil(k)));
+      ui.countdown.dataset.second = String(Math.max(1, Math.ceil(k)));
+    }
+  }
 }
 
 function updateCamera(state) {
@@ -1681,10 +1913,28 @@ function updateCamera(state) {
   const offset = new THREE.Vector3(0, localBallCam ? 8 : 6.8, localBallCam ? -20 : -18);
   offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   const desired = new THREE.Vector3(localCar.x, localCar.y + 1.6, localCar.z).add(offset);
+
+  // At kickoff the car starts close enough to its own goal that the old camera
+  // sat behind the goal frame. Keep that cinematic chase angle, but pull the
+  // camera just inside the pitch and pan it around the frame so posts do not
+  // block the first few seconds on phone.
+  const ownSide = Math.sign(localCar.z || (localCar.team === "blue" ? -1 : 1));
+  const nearOwnGoal = Math.abs(localCar.z) > state.arena.l * 0.28;
+  const cameraBehindGoal = Math.sign(desired.z || ownSide) === ownSide && Math.abs(desired.z) > state.arena.l / 2 - 3.0;
+  if (nearOwnGoal && cameraBehindGoal) {
+    const kickoffBias = Math.max(0, Math.min(1, Number(state.kickoffTimer || 0) / 5));
+    desired.z = ownSide * (state.arena.l / 2 - (5.5 + kickoffBias * 2.5));
+    const sidePan = (localCar.x !== 0 ? Math.sign(localCar.x) : (localCar.team === "blue" ? -1 : 1)) * (4.5 + kickoffBias * 4.0);
+    desired.x += sidePan;
+    desired.y += 1.6 + kickoffBias * 1.3;
+  }
+
   camera.position.lerp(desired, 0.16);
   let look;
   if (localBallCam) {
-    const toBall = new THREE.Vector3(state.ball.x - localCar.x, 0, state.ball.z - localCar.z).normalize();
+    const toBall = new THREE.Vector3(state.ball.x - localCar.x, 0, state.ball.z - localCar.z);
+    if (toBall.lengthSq() < 0.001) toBall.set(Math.sin(localCar.yaw), 0, Math.cos(localCar.yaw));
+    toBall.normalize();
     look = new THREE.Vector3(localCar.x + toBall.x * 14, localCar.y + 2.4, localCar.z + toBall.z * 14);
   } else {
     const fwd = new THREE.Vector3(Math.sin(localCar.yaw), 0, Math.cos(localCar.yaw));
@@ -1697,6 +1947,7 @@ function renderLoop() {
   requestAnimationFrame(renderLoop);
   if (latestState) updateVisuals(latestState);
   resizeRenderer();
+  SFX.update(latestState, activePlayerId());
   renderer.render(scene, camera);
   renderVehiclePreview(performance.now());
 }
