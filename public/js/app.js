@@ -18,6 +18,7 @@ import {
 
 const $ = sel => document.querySelector(sel);
 const LOCAL_UID = "LOCAL_PLAYER";
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
@@ -85,11 +86,11 @@ async function bootFirebase() {
   }
   try {
     ui.connection.textContent = "Connecting to online services… single player is ready now.";
-    const [appMod, authMod, dbMod] = await Promise.all([
+    const [appMod, authMod, dbMod] = await withTimeout(Promise.all([
       import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js"),
       import("https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js")
-    ]);
+    ]), 12000, "Loading Firebase SDK");
     ({ initializeApp } = appMod);
     ({ getAuth, signInAnonymously, onAuthStateChanged } = authMod);
     ({ getDatabase, ref, get, set, update, onValue, remove, onDisconnect, serverTimestamp } = dbMod);
@@ -184,12 +185,14 @@ async function createLobby() {
     localStorage.setItem("rlcss_online_name", playerName);
 
     let code = randomCode();
+    ui.lobbyCode.textContent = code;
     setStatus(`Creating lobby ${code}…`);
     for (let i = 0; i < 6; i++) {
       try {
         const snap = await withTimeout(get(lobbyRef(code)), 6500, "Checking lobby code");
         if (!snap.exists()) break;
         code = randomCode();
+        ui.lobbyCode.textContent = code;
         setStatus(`Creating lobby ${code}…`);
       } catch (err) {
         console.warn("Could not pre-check lobby code; attempting direct create.", err);
@@ -209,10 +212,8 @@ async function createLobby() {
 
     // Write granularly instead of one large root write. This works with stricter
     // Realtime Database rules and gives clearer failure messages on phones.
-    await withTimeout(set(lobbyRef(code, "meta"), meta), 12000, "Writing lobby settings");
-    await withTimeout(set(lobbyRef(code, `players/${uid}`), player), 12000, "Adding host player");
-    await withTimeout(set(lobbyRef(code, "inputs"), {}), 6000, "Initialising inputs").catch(() => {});
-    await withTimeout(set(lobbyRef(code, "state"), null), 6000, "Initialising state").catch(() => {});
+    await withTimeout(set(lobbyRef(code, "meta"), meta), 10000, "Writing lobby settings");
+    await withTimeout(set(lobbyRef(code, `players/${uid}`), player), 10000, "Adding host player");
 
     await enterLobby(code);
     setStatus(`Lobby ${code} created. Share code ${code}.`);
@@ -293,7 +294,8 @@ function startSinglePlayer() {
   ui.lobbyCode.textContent = "SOLO";
   renderLobby();
   updateGameVisibility();
-  setStatus("Configure solo match, then press Start Match.");
+  if (ui.lobbyStatus) ui.lobbyStatus.textContent = "Solo setup: configure teams, modes and AI, then start.";
+  setStatus("Solo setup opened. Configure the match, then press Start Match.");
 }
 
 function startSoloMatch() {
@@ -314,7 +316,9 @@ function startSoloMatch() {
   currentLobby = { meta: currentMeta, players: currentPlayers, inputs: latestInputs, state: latestState };
   hostSim = new PhysicsHost(currentMeta, currentPlayers);
   hostSim.state = initial;
+  ui.setup.classList.add("hidden");
   ui.lobby.classList.add("hidden");
+  document.body.classList.add("game-running");
   startHostLoop();
   updateGameVisibility();
 }
@@ -586,14 +590,31 @@ async function sendInput() {
   await set(lobbyRef(lobbyCode, `inputs/${uid}`), { ...inp, t: Date.now() }).catch(() => {});
 }
 
+function safeUi(handler, label) {
+  return event => {
+    try {
+      const result = handler(event);
+      if (result && typeof result.catch === "function") {
+        result.catch(err => {
+          console.error(label, err);
+          setStatus(`${label} failed: ${err.message || err}`);
+        });
+      }
+    } catch (err) {
+      console.error(label, err);
+      setStatus(`${label} failed: ${err.message || err}`);
+    }
+  };
+}
+
 // UI events
-ui.single.addEventListener("click", startSinglePlayer);
-ui.create.addEventListener("click", createLobby);
-ui.join.addEventListener("click", joinLobby);
+ui.single.addEventListener("click", safeUi(startSinglePlayer, "Single player setup"));
+ui.create.addEventListener("click", safeUi(createLobby, "Create lobby"));
+ui.join.addEventListener("click", safeUi(joinLobby, "Join lobby"));
 ui.joinCode.addEventListener("input", () => ui.joinCode.value = ui.joinCode.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
 ui.copy.addEventListener("click", () => { if (!isSinglePlayer) navigator.clipboard?.writeText(lobbyCode || ""); });
-ui.leaveLobby.addEventListener("click", () => leaveToMenu("Left lobby."));
-ui.leaveGame.addEventListener("click", () => leaveToMenu("Left match."));
+ui.leaveLobby.addEventListener("click", safeUi(() => leaveToMenu("Left lobby."), "Leave lobby"));
+ui.leaveGame.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
 ui.ready.addEventListener("click", () => {
   if (isSinglePlayer) startSoloMatch();
   else updateLocalPlayer({ ready: !(currentPlayers[activePlayerId()]?.ready) });
