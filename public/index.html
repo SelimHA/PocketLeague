@@ -169,22 +169,24 @@
       </div>
 
       <div class="settings-pane" data-settings-pane="controller" role="tabpanel" hidden>
-        <div class="settings-section">
+        <div id="controller-settings-section" class="settings-section controller-settings-section">
           <h3>Controller</h3>
-          <label class="toggle-label"><input id="controller-enabled" type="checkbox" /> Enable desktop controller support</label>
-          <label class="range-label">
-            Stick deadzone
-            <input id="controller-deadzone" type="range" min="0.05" max="0.35" step="0.01" />
-            <span id="controller-deadzone-value" class="setting-value">0.18</span>
-          </label>
-          <label class="range-label">
-            Right-stick camera pan sensitivity
-            <input id="controller-pan-sensitivity" type="range" min="0.5" max="1.5" step="0.05" />
-            <span id="controller-pan-sensitivity-value" class="setting-value">1.00x</span>
-          </label>
           <p id="controller-status" class="hint">Connect a controller, then use the left stick to drive and the right stick to pan the camera. Use Detect to move a button/axis instead of picking it manually.</p>
-          <div id="controller-bind-list" class="controller-bind-list"></div>
-          <button id="reset-controller" type="button" class="secondary small-action">Reset controller</button>
+          <div id="controller-options" class="controller-options">
+            <label class="toggle-label"><input id="controller-enabled" type="checkbox" /> Enable desktop controller support</label>
+            <label class="range-label">
+              Stick deadzone
+              <input id="controller-deadzone" type="range" min="0.05" max="0.35" step="0.01" />
+              <span id="controller-deadzone-value" class="setting-value">0.18</span>
+            </label>
+            <label class="range-label">
+              Right-stick camera pan sensitivity
+              <input id="controller-pan-sensitivity" type="range" min="0.5" max="1.5" step="0.05" />
+              <span id="controller-pan-sensitivity-value" class="setting-value">1.00x</span>
+            </label>
+            <div id="controller-bind-list" class="controller-bind-list"></div>
+            <button id="reset-controller" type="button" class="secondary small-action">Reset controller</button>
+          </div>
         </div>
       </div>
     </section>
@@ -259,38 +261,23 @@
               <option value="600">10 minutes</option>
             </select>
           </label>
-          <details id="advanced-ai-options" class="advanced-options">
-            <summary>Advanced AI &amp; strategy</summary>
-            <p class="hint">Keep the simple presets, or open this to tune each AI teammate/opponent. Defaults are still good for quick matches.</p>
-            <label>
-              Team strategy preset
-              <select id="team-strategy-select">
-                <option value="balanced" selected>Balanced rotation</option>
-                <option value="defensive">Defensive shape</option>
-                <option value="aggressive">Aggressive pressure</option>
-                <option value="rotational">Rocket-style rotation</option>
-                <option value="chaotic">Chaotic chase</option>
-              </select>
-            </label>
-            <label>
-              AI difficulty
-              <select id="difficulty-select">
-                <option value="rookie">Rookie</option>
-                <option value="pro" selected>Pro</option>
-                <option value="allstar">All-Star</option>
-              </select>
-            </label>
-            <label>
-              Base AI behaviour
-              <select id="playstyle-select">
-                <option value="balanced" selected>Balanced</option>
-                <option value="defensive">Defensive</option>
-                <option value="aggressive">Aggressive</option>
-                <option value="chaotic">Chaotic</option>
-              </select>
-            </label>
-            <div id="advanced-ai-list" class="advanced-ai-list" aria-live="polite"></div>
-          </details>
+          <label>
+            AI difficulty
+            <select id="difficulty-select">
+              <option value="rookie">Rookie</option>
+              <option value="pro" selected>Pro</option>
+              <option value="allstar">All-Star</option>
+            </select>
+          </label>
+          <label>
+            AI playstyle
+            <select id="playstyle-select">
+              <option value="balanced" selected>Balanced</option>
+              <option value="defensive">Defensive</option>
+              <option value="aggressive">Aggressive</option>
+              <option value="chaotic">Chaotic</option>
+            </select>
+          </label>
           <label>
             Game chat visibility
             <select id="chat-scope-select">
@@ -350,15 +337,15 @@
         </div>
       </div>
 
-      <div class="grid two-col">
-        <div class="subpanel">
-          <h3>Blue squad</h3>
+      <div class="grid two-col squad-config-grid">
+        <details class="subpanel squad-panel" open>
+          <summary>Blue squad</summary>
           <div id="blue-team-list" class="team-list"></div>
-        </div>
-        <div class="subpanel">
-          <h3>Orange squad</h3>
+        </details>
+        <details class="subpanel squad-panel" open>
+          <summary>Orange squad</summary>
           <div id="orange-team-list" class="team-list"></div>
-        </div>
+        </details>
       </div>
     </section>
   </main>

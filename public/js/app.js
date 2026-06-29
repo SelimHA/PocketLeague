@@ -29,7 +29,7 @@ const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountAuthFields: $("#account-auth-fields"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
@@ -503,12 +503,22 @@ function applyGameSettingsToSelectors({ forceLobbyDefaults = false } = {}) {
   }
 }
 
+function connectedController() {
+  return navigator.getGamepads ? Array.from(navigator.getGamepads()).find(Boolean) || null : null;
+}
+
 function axisOptions(selected) {
-  return Array.from({ length: 8 }, (_, i) => `<option value="${i}" ${Number(selected) === i ? "selected" : ""}>Axis ${i} / Button ${i}</option>`).join("");
+  const pad = connectedController();
+  const count = pad?.axes?.length || 0;
+  if (!count) return `<option value="" disabled>No axes detected</option>`;
+  return Array.from({ length: count }, (_, i) => `<option value="${i}" ${Number(selected) === i ? "selected" : ""}>Axis ${i}</option>`).join("");
 }
 
 function buttonOptions(selected) {
-  return Array.from({ length: 18 }, (_, i) => `<option value="${i}" ${Number(selected) === i ? "selected" : ""}>Button ${i}</option>`).join("");
+  const pad = connectedController();
+  const count = pad?.buttons?.length || 0;
+  if (!count) return `<option value="" disabled>No buttons detected</option>`;
+  return Array.from({ length: count }, (_, i) => `<option value="${i}" ${Number(selected) === i ? "selected" : ""}>Button ${i}</option>`).join("");
 }
 
 function renderSettingsUi() {
@@ -527,21 +537,32 @@ function renderSettingsUi() {
   if (ui.controllerDeadzoneValue) ui.controllerDeadzoneValue.textContent = Number(controllerSettings.deadzone ?? DEFAULT_CONTROLLER.deadzone).toFixed(2);
   if (ui.controllerPanSensitivity) ui.controllerPanSensitivity.value = String(controllerSettings.panSensitivity ?? DEFAULT_CONTROLLER.panSensitivity);
   if (ui.controllerPanSensitivityValue) ui.controllerPanSensitivityValue.textContent = `${Number(controllerSettings.panSensitivity ?? DEFAULT_CONTROLLER.panSensitivity).toFixed(2)}x`;
-  if (ui.controllerBindList) {
-    ui.controllerBindList.innerHTML = CONTROLLER_BIND_ROWS.map(([key, label, type]) => {
-      const listening = pendingControllerBind?.key === key;
-      return `
-      <label class="controller-bind-row ${listening ? "listening" : ""}">
-        <span>${escapeHtml(label)}</span>
-        <div class="controller-bind-controls">
-          <select data-controller-bind="${key}">${type === "axis" ? axisOptions(controllerSettings[key]) : buttonOptions(controllerSettings[key])}</select>
-          <button type="button" class="detect-controller-btn ${listening ? "listening" : ""}" data-controller-detect="${key}" data-controller-type="${type}">${listening ? "Move input…" : "Detect"}</button>
-        </div>
-      </label>`;
-    }).join("");
-  }
   const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
-  if (ui.controllerStatus) ui.controllerStatus.textContent = pads.length ? `Controller detected: ${pads[0].id}` : "No controller detected yet. Plug one in, press a button, then use the left stick to drive and right stick to pan.";
+  const pad = pads[0] || null;
+  if (ui.controllerSettingsSection) ui.controllerSettingsSection.classList.toggle("no-controller", !pad);
+  if (ui.controllerOptions) ui.controllerOptions.hidden = !pad;
+  if (ui.controllerBindList) {
+    if (!pad) {
+      ui.controllerBindList.innerHTML = "";
+    } else {
+      ui.controllerBindList.innerHTML = CONTROLLER_BIND_ROWS.map(([key, label, type]) => {
+        const listening = pendingControllerBind?.key === key;
+        return `
+        <label class="controller-bind-row ${listening ? "listening" : ""}">
+          <span>${escapeHtml(label)}</span>
+          <div class="controller-bind-controls">
+            <select data-controller-bind="${key}">${type === "axis" ? axisOptions(controllerSettings[key]) : buttonOptions(controllerSettings[key])}</select>
+            <button type="button" class="detect-controller-btn ${listening ? "listening" : ""}" data-controller-detect="${key}" data-controller-type="${type}">${listening ? "Move input…" : "Detect"}</button>
+          </div>
+        </label>`;
+      }).join("");
+    }
+  }
+  if (ui.controllerStatus) {
+    ui.controllerStatus.textContent = pad
+      ? `Controller detected: ${pad.id || "Gamepad"}. Only this controller's available axes/buttons are shown below.`
+      : "No controller connected. Connect a controller on PC and press any controller button, then reopen or revisit this tab to configure it.";
+  }
   updateControlsHintText();
 }
 
@@ -980,7 +1001,7 @@ function currentSoloMetaPatch() {
     matchLength: Number(ui.matchLength?.value || gameSettings.matchLength || DEFAULT_META.matchLength),
     difficulty: ui.difficulty?.value || DEFAULT_META.difficulty,
     playstyle: ui.playstyle?.value || DEFAULT_META.playstyle,
-    aiStrategy: ui.aiStrategy?.value || DEFAULT_META.aiStrategy || DEFAULT_META.playstyle,
+    aiStrategy: ui.playstyle?.value || DEFAULT_META.aiStrategy || DEFAULT_META.playstyle,
     chatScope: ui.chatScope?.value || DEFAULT_META.chatScope,
     voiceScope: ui.voiceScope?.value || DEFAULT_META.voiceScope
   };
@@ -1200,7 +1221,6 @@ function renderLobby() {
   if (ui.matchLength) ui.matchLength.value = String(currentMeta.matchLength || DEFAULT_META.matchLength);
   ui.difficulty.value = currentMeta.difficulty;
   ui.playstyle.value = currentMeta.playstyle;
-  if (ui.aiStrategy) ui.aiStrategy.value = currentMeta.aiStrategy || currentMeta.playstyle || "balanced";
   if (ui.chatScope) ui.chatScope.value = currentMeta.chatScope || DEFAULT_META.chatScope;
   if (ui.voiceScope) ui.voiceScope.value = currentMeta.voiceScope || DEFAULT_META.voiceScope;
   ui.team.value = local.team || "blue";
@@ -1210,7 +1230,6 @@ function renderLobby() {
   ui.ready.classList.toggle("not-ready", !isSinglePlayer && !!local.ready);
   ui.ready.textContent = isSinglePlayer ? "Start Match" : (local.ready ? "Unready" : "Ready");
   ui.mode.disabled = ui.teamSize.disabled = ui.difficulty.disabled = ui.playstyle.disabled = !isHost || currentMeta.status !== "waiting";
-  if (ui.aiStrategy) ui.aiStrategy.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.pitchSize) ui.pitchSize.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.matchLength) ui.matchLength.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.chatScope) ui.chatScope.disabled = !isHost || currentMeta.status !== "waiting";
@@ -1240,10 +1259,12 @@ function renderLobby() {
   }
   renderTeamList("blue", ui.blueList);
   renderTeamList("orange", ui.orangeList);
-  renderAdvancedAiOptions();
   renderChat();
   if (voiceActive) reconcileVoicePeers();
   updateVoiceUi();
+  if (!document.body.classList.contains("game-running") && document.body.classList.contains("using-controller")) {
+    setTimeout(focusFirstMenuElement, 0);
+  }
 }
 
 
@@ -1627,7 +1648,7 @@ function isVisibleElement(el) {
 
 function menuFocusableElements() {
   const root = document.querySelector("#ui-root");
-  const selectors = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])";
+  const selectors = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), details > summary, [tabindex]:not([tabindex='-1'])";
   const items = Array.from(root?.querySelectorAll(selectors) || []).filter(isVisibleElement);
   const pauseItems = Array.from(document.querySelectorAll("#pause-overlay button:not(:disabled)")).filter(isVisibleElement);
   return [...items, ...pauseItems];
@@ -1662,6 +1683,7 @@ function clickFocusedMenuElement() {
   const el = document.activeElement;
   if (!isVisibleElement(el)) return focusMenuElement(1);
   if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return;
+  if (el.tagName === "SELECT") return stepFocusedSelect(1);
   el.click();
 }
 
@@ -1709,6 +1731,10 @@ function pollControllerMenuNavigation() {
   const now = performance.now();
   if ((dUp || dDown || dLeft || dRight) && now - controllerNavLastMove > 170) {
     controllerNavLastMove = now;
+    if (!isVisibleElement(document.activeElement)) {
+      focusFirstMenuElement();
+      return;
+    }
     if (dLeft && (stepFocusedSelect(-1) || settingsTabDelta(-1))) return;
     if (dRight && (stepFocusedSelect(1) || settingsTabDelta(1))) return;
     focusMenuElement(dDown || dRight ? 1 : -1);
@@ -2300,7 +2326,7 @@ if (ui.controllerPanSensitivity) ui.controllerPanSensitivity.addEventListener("i
 });
 if (ui.controllerBindList) ui.controllerBindList.addEventListener("change", e => {
   const sel = e.target.closest("[data-controller-bind]");
-  if (!sel) return;
+  if (!sel || sel.value === "") return;
   controllerSettings[sel.dataset.controllerBind] = Number(sel.value);
   saveControllerSettings();
 });

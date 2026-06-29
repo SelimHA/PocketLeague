@@ -1475,3 +1475,55 @@ body.using-controller .small-action:focus {
   .advanced-ai-list { padding: 4px 10px 12px; }
   .advanced-ai-row { grid-template-columns: 1fr; gap: 7px; }
 }
+
+/* V35: streamlined setup, collapsible squads and controller-menu polish */
+.squad-config-grid { align-items: start; }
+.squad-panel {
+  padding: 0;
+  overflow: hidden;
+}
+.squad-panel > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 15px 16px;
+  color: #eaffff;
+  font-weight: 1000;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: linear-gradient(90deg, rgba(18,185,255,.10), rgba(255,255,255,.03));
+}
+.squad-panel > summary::-webkit-details-marker { display: none; }
+.squad-panel > summary::after {
+  content: '▾';
+  float: right;
+  color: #52ffcf;
+  transition: transform .16s ease;
+}
+.squad-panel:not([open]) > summary::after { transform: rotate(-90deg); }
+.squad-panel .team-list { padding: 14px; }
+.controller-settings-section.no-controller {
+  border-color: rgba(255,196,0,.20);
+  background: linear-gradient(180deg, rgba(255,196,0,.08), rgba(255,255,255,.035));
+}
+.controller-options[hidden] { display: none !important; }
+.controller-settings-section.no-controller #controller-status {
+  color: rgba(255,245,210,.90);
+  font-weight: 850;
+}
+body.using-controller summary:focus {
+  outline: 4px solid rgba(82,255,207,.95) !important;
+  outline-offset: -2px !important;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.72), 0 0 28px rgba(82,255,207,.32) !important;
+}
+body.using-controller button:focus-visible,
+body.using-controller select:focus-visible,
+body.using-controller input:focus-visible,
+body.using-controller textarea:focus-visible,
+body.using-controller summary:focus-visible {
+  outline: 4px solid rgba(82,255,207,.98) !important;
+}
+@media (pointer: coarse) and (orientation: portrait) {
+  .squad-panel > summary { padding: 12px 13px; font-size: 12px; }
+  .squad-panel .team-list { padding: 10px; }
+}
