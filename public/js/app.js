@@ -22,13 +22,15 @@ const $ = sel => document.querySelector(sel);
 const LOCAL_UID = "LOCAL_PLAYER";
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const ui = {
-  setup: $("#setup-card"), lobby: $("#lobby-card"), firebaseWarning: $("#firebase-warning"),
+  setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
+  accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
+  openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), chatScope: $("#chat-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
-  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), pauseOverlay: $("#pause-overlay"),
+  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), pauseOverlay: $("#pause-overlay"),
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
@@ -198,7 +200,7 @@ const SFX = (() => {
 })();
 
 const canvas = $("#game");
-let initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp;
+let initializeApp, getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp, query, orderByChild, limitToLast, runTransaction;
 let firebaseBootPromise = null;
 let firebaseBootDone = false;
 let firebaseBootError = null;
@@ -206,6 +208,11 @@ let firebaseReady = false;
 let auth = null;
 let db = null;
 let uid = null;
+let authUser = null;
+let accountProfile = null;
+let leaderboardUnsub = null;
+let leaderboardLoaded = false;
+let lastLeaderboardMatchKey = "";
 let playerName = localStorage.getItem("rlcss_online_name") || localStorage.getItem("pl_online_name") || "Player";
 let lobbyCode = null;
 let currentLobby = null;
@@ -225,6 +232,8 @@ let inputTimer = 0;
 let currentChat = {};
 let chatChannel = localStorage.getItem("rlcss_chat_channel") || "game";
 let chatMuted = localStorage.getItem("rlcss_chat_muted") === "1";
+let chatOpen = localStorage.getItem("rlcss_chat_open") === "1";
+let chatOpenPreferenceSet = localStorage.getItem("rlcss_chat_open") !== null;
 let chatRenderKey = "";
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
@@ -285,27 +294,49 @@ async function bootFirebase() {
       import("https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js")
     ]), 12000, "Loading Firebase SDK");
     ({ initializeApp } = appMod);
-    ({ getAuth, signInAnonymously, onAuthStateChanged } = authMod);
-    ({ getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp } = dbMod);
+    ({ getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } = authMod);
+    ({ getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp, query, orderByChild, limitToLast, runTransaction } = dbMod);
     const app = initializeApp(FIREBASE_CONFIG);
     auth = getAuth(app);
     db = getDatabase(app);
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("Firebase sign-in timed out. Check Anonymous Auth and Authorized Domains.")), 12000);
+      let settled = false;
+      let triedAnonymous = false;
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          reject(new Error("Firebase sign-in timed out. Check Anonymous Auth, Email/Password Auth and Authorized Domains."));
+        }
+      }, 12000);
       onAuthStateChanged(auth, user => {
+        authUser = user || null;
         if (user) {
           clearTimeout(timer);
           uid = user.uid;
           firebaseReady = true;
+          refreshAccountProfile().finally(() => updateAccountUi());
+          startLeaderboardListener();
           ui.connection.textContent = "Connected. Create a lobby or join with a code.";
           ui.create.disabled = false;
           ui.join.disabled = false;
-          resolve();
+          if (!settled) {
+            settled = true;
+            resolve();
+          }
+        } else {
+          accountProfile = null;
+          updateAccountUi();
+          if (!triedAnonymous) {
+            triedAnonymous = true;
+            signInAnonymously(auth).catch(err => {
+              clearTimeout(timer);
+              if (!settled) {
+                settled = true;
+                reject(err);
+              }
+            });
+          }
         }
-      });
-      signInAnonymously(auth).catch(err => {
-        clearTimeout(timer);
-        reject(err);
       });
     });
     firebaseBootDone = true;
@@ -339,6 +370,232 @@ async function ensureFirebaseReady() {
 
 function sanitizeName(name) {
   return (name || "Player").replace(/[^a-z0-9 _-]/gi, "").trim().slice(0, 18) || "Player";
+}
+
+function normalizeUsername(name) {
+  return String(name || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 18);
+}
+
+function usernameToEmail(username) {
+  return `${normalizeUsername(username)}@rlcss.local`;
+}
+
+function isAccountUser() {
+  return !!authUser && !authUser.isAnonymous && !!accountProfile?.username;
+}
+
+function accountName() {
+  return accountProfile?.displayName || accountProfile?.username || sanitizeName(ui.name?.value || playerName);
+}
+
+function updateAccountUi() {
+  const signedIn = isAccountUser();
+  const anon = !!authUser?.isAnonymous;
+  if (ui.accountStatus) {
+    ui.accountStatus.textContent = signedIn
+      ? `Signed in: ${accountName()}`
+      : (anon ? "Playing as guest" : "Offline / guest only");
+  }
+  if (ui.accountMessage && !signedIn && !ui.accountMessage.dataset.busy) {
+    ui.accountMessage.textContent = authUser
+      ? "Guest play works. Create or sign in to save leaderboard stats."
+      : "Connect Firebase to create accounts and save leaderboard stats.";
+  }
+  if (ui.signOutAccount) ui.signOutAccount.classList.toggle("hidden", !signedIn);
+  if (signedIn) {
+    playerName = sanitizeName(accountName());
+    localStorage.setItem("rlcss_online_name", playerName);
+    if (ui.name && (!ui.name.value || ui.name.value === "Player" || ui.name.value !== playerName)) ui.name.value = playerName;
+  }
+}
+
+function profileRef(id = uid) {
+  return ref(db, `profiles/${id}`);
+}
+
+function leaderboardRef(id = uid) {
+  return ref(db, `leaderboard/${id}`);
+}
+
+async function refreshAccountProfile() {
+  if (!db || !uid || !authUser || authUser.isAnonymous) {
+    accountProfile = null;
+    updateAccountUi();
+    return null;
+  }
+  try {
+    const snap = await get(profileRef(uid));
+    accountProfile = snap.exists() ? snap.val() : null;
+  } catch (err) {
+    console.warn("Profile load failed", err);
+    accountProfile = null;
+  }
+  updateAccountUi();
+  return accountProfile;
+}
+
+async function saveProfile(username) {
+  const clean = normalizeUsername(username);
+  const displayName = sanitizeName(username);
+  if (!clean || clean.length < 3) throw new Error("Username must be 3–18 letters, numbers, _ or -.");
+  const payload = {
+    username: clean,
+    displayName,
+    updatedAt: serverTimestamp(),
+    createdAt: accountProfile?.createdAt || serverTimestamp()
+  };
+  await set(profileRef(uid), payload);
+  await set(ref(db, `usernames/${clean}`), uid).catch(err => console.warn("Username map write failed", err));
+  accountProfile = { ...payload, createdAt: Date.now(), updatedAt: Date.now() };
+  playerName = displayName;
+  localStorage.setItem("rlcss_online_name", playerName);
+  if (ui.name) ui.name.value = playerName;
+  updateAccountUi();
+}
+
+function setAccountMessage(text, busy = false) {
+  if (!ui.accountMessage) return;
+  ui.accountMessage.dataset.busy = busy ? "1" : "";
+  ui.accountMessage.textContent = text;
+}
+
+async function createAccount() {
+  if (!(await ensureFirebaseReady())) return;
+  const username = normalizeUsername(ui.accountUsername?.value || ui.name?.value);
+  const password = String(ui.accountPassword?.value || "");
+  if (!username || username.length < 3) return setAccountMessage("Choose a username with 3–18 letters, numbers, _ or -.");
+  if (password.length < 6) return setAccountMessage("Password must be at least 6 characters.");
+  setAccountMessage("Creating account…", true);
+  const nameSnap = await get(ref(db, `usernames/${username}`)).catch(() => null);
+  if (nameSnap?.exists()) return setAccountMessage("That username is already taken.");
+  const cred = await createUserWithEmailAndPassword(auth, usernameToEmail(username), password);
+  authUser = cred.user;
+  uid = cred.user.uid;
+  await saveProfile(username);
+  await initialiseOwnLeaderboard(username);
+  setAccountMessage(`Signed in as ${username}. Leaderboard stats will now save.`);
+  startLeaderboardListener();
+}
+
+async function signInAccount() {
+  if (!(await ensureFirebaseReady())) return;
+  const username = normalizeUsername(ui.accountUsername?.value || ui.name?.value);
+  const password = String(ui.accountPassword?.value || "");
+  if (!username || username.length < 3) return setAccountMessage("Enter your username.");
+  if (!password) return setAccountMessage("Enter your password.");
+  setAccountMessage("Signing in…", true);
+  const cred = await signInWithEmailAndPassword(auth, usernameToEmail(username), password);
+  authUser = cred.user;
+  uid = cred.user.uid;
+  await refreshAccountProfile();
+  if (!accountProfile?.username) await saveProfile(username);
+  await initialiseOwnLeaderboard(username);
+  setAccountMessage(`Signed in as ${accountName()}.`);
+  startLeaderboardListener();
+}
+
+async function signOutAccount() {
+  if (!auth || !signOut) return;
+  setAccountMessage("Signing out…", true);
+  await signOut(auth);
+  accountProfile = null;
+  uid = null;
+  authUser = null;
+  updateAccountUi();
+  await signInAnonymously(auth);
+  setAccountMessage("Signed out. Back to guest mode.");
+}
+
+async function initialiseOwnLeaderboard(username = accountName()) {
+  if (!db || !uid || !isAccountUser()) return;
+  const snap = await get(leaderboardRef(uid)).catch(() => null);
+  if (snap?.exists()) return;
+  await set(leaderboardRef(uid), {
+    uid,
+    username: normalizeUsername(username),
+    displayName: sanitizeName(username),
+    points: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    games: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    updatedAt: serverTimestamp()
+  }).catch(err => console.warn("Leaderboard init failed", err));
+}
+
+function startLeaderboardListener() {
+  if (!db || !query || !orderByChild || !limitToLast || leaderboardUnsub) return;
+  const q = query(ref(db, "leaderboard"), orderByChild("points"), limitToLast(25));
+  leaderboardUnsub = onValue(q, snap => {
+    leaderboardLoaded = true;
+    const rows = [];
+    snap.forEach(child => rows.push({ uid: child.key, ...(child.val() || {}) }));
+    rows.sort((a, b) => (Number(b.points || 0) - Number(a.points || 0)) || (Number(b.wins || 0) - Number(a.wins || 0)) || String(a.displayName || a.username).localeCompare(String(b.displayName || b.username)));
+    renderLeaderboard(rows);
+  }, err => {
+    console.warn("Leaderboard listener failed", err);
+    if (ui.leaderboardList) ui.leaderboardList.textContent = `Leaderboard unavailable: ${err.message}`;
+  });
+}
+
+function renderLeaderboard(rows = []) {
+  if (!ui.leaderboardList) return;
+  if (!rows.length) {
+    ui.leaderboardList.innerHTML = '<div class="empty-board">No ranked matches yet.</div>';
+    return;
+  }
+  ui.leaderboardList.innerHTML = rows.slice(0, 20).map((row, i) => {
+    const mine = row.uid === uid ? " mine" : "";
+    return `<div class="leaderboard-row${mine}"><span class="rank">#${i + 1}</span><span class="lb-name">${escapeHtml(row.displayName || row.username || "Player")}</span><span class="lb-points">${Number(row.points || 0)} pts</span><span class="lb-record">${Number(row.wins || 0)}W ${Number(row.draws || 0)}D ${Number(row.losses || 0)}L</span></div>`;
+  }).join("");
+}
+
+async function recordLeaderboardResult(state) {
+  if (!state?.ended || !isAccountUser() || !db || !uid) return;
+  const matchKey = `${lobbyCode || "solo"}:${currentMeta?.startedAt || "run"}:${state.score?.blue || 0}-${state.score?.orange || 0}`;
+  if (matchKey === lastLeaderboardMatchKey) return;
+  const local = currentPlayers?.[activePlayerId()] || {};
+  const team = local.team === "orange" ? "orange" : "blue";
+  const blue = Number(state.score?.blue || 0);
+  const orange = Number(state.score?.orange || 0);
+  const gf = team === "blue" ? blue : orange;
+  const ga = team === "blue" ? orange : blue;
+  const win = gf > ga;
+  const draw = gf === ga;
+  const loss = gf < ga;
+  lastLeaderboardMatchKey = matchKey;
+  const lbRef = leaderboardRef(uid);
+  if (runTransaction) {
+    await runTransaction(lbRef, current => {
+      const base = current || { uid, username: accountProfile.username, displayName: accountName(), points: 0, wins: 0, draws: 0, losses: 0, games: 0, goalsFor: 0, goalsAgainst: 0 };
+      return {
+        ...base,
+        uid,
+        username: accountProfile.username,
+        displayName: accountName(),
+        points: Number(base.points || 0) + (win ? 3 : draw ? 1 : 0),
+        wins: Number(base.wins || 0) + (win ? 1 : 0),
+        draws: Number(base.draws || 0) + (draw ? 1 : 0),
+        losses: Number(base.losses || 0) + (loss ? 1 : 0),
+        games: Number(base.games || 0) + 1,
+        goalsFor: Number(base.goalsFor || 0) + gf,
+        goalsAgainst: Number(base.goalsAgainst || 0) + ga,
+        lastResult: `${gf}-${ga}`,
+        updatedAt: Date.now()
+      };
+    });
+  } else {
+    const snap = await get(lbRef);
+    const base = snap.exists() ? snap.val() : {};
+    await set(lbRef, {
+      ...base, uid, username: accountProfile.username, displayName: accountName(),
+      points: Number(base.points || 0) + (win ? 3 : draw ? 1 : 0),
+      wins: Number(base.wins || 0) + (win ? 1 : 0), draws: Number(base.draws || 0) + (draw ? 1 : 0), losses: Number(base.losses || 0) + (loss ? 1 : 0),
+      games: Number(base.games || 0) + 1, goalsFor: Number(base.goalsFor || 0) + gf, goalsAgainst: Number(base.goalsAgainst || 0) + ga, lastResult: `${gf}-${ga}`, updatedAt: serverTimestamp()
+    });
+  }
 }
 
 function lobbyRef(code, path = "") {
@@ -376,7 +633,7 @@ async function createLobby() {
   ui.create.disabled = true;
   try {
     if (!(await ensureFirebaseReady())) return;
-    playerName = sanitizeName(ui.name.value);
+    playerName = sanitizeName(isAccountUser() ? accountName() : ui.name.value);
     localStorage.setItem("rlcss_online_name", playerName);
 
     let code = randomCode();
@@ -425,7 +682,7 @@ async function joinLobby() {
   ui.join.disabled = true;
   try {
     if (!(await ensureFirebaseReady())) return;
-    playerName = sanitizeName(ui.name.value);
+    playerName = sanitizeName(isAccountUser() ? accountName() : ui.name.value);
     localStorage.setItem("rlcss_online_name", playerName);
     const code = ui.joinCode.value.trim().toUpperCase();
     if (!code) return setStatus("Enter a lobby code first.");
@@ -455,7 +712,7 @@ function startSinglePlayer() {
   cleanupLobbyListeners();
   isSinglePlayer = true;
   singlePlayerId = LOCAL_UID;
-  playerName = sanitizeName(ui.name.value);
+  playerName = sanitizeName(isAccountUser() ? accountName() : ui.name.value);
   localStorage.setItem("rlcss_online_name", playerName);
   lobbyCode = "SOLO";
   currentMeta = serialiseMeta({
@@ -500,7 +757,7 @@ function startSoloMatch() {
   const localId = activePlayerId();
   currentPlayers[localId] = {
     ...(currentPlayers[localId] || {}),
-    name: sanitizeName(ui.name.value),
+    name: sanitizeName(isAccountUser() ? accountName() : ui.name.value),
     team: ui.team.value || currentPlayers[localId]?.team || "blue",
     role: ui.role.value || currentPlayers[localId]?.role || "midfield",
     model: ui.vehicle?.value || currentPlayers[localId]?.model || "default",
@@ -694,6 +951,10 @@ async function maybeAutoStart() {
 function updateGameVisibility() {
   const running = currentMeta && currentMeta.status === "running";
   document.body.classList.toggle("game-running", !!running);
+  if (running) {
+    if (ui.accountCard) ui.accountCard.classList.add("hidden");
+    if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
+  }
   ui.hud.classList.toggle("hidden", !running);
   ui.leaveGame.classList.toggle("hidden", !running);
   const isHostPlayer = running && (isSinglePlayer || currentMeta?.hostId === activePlayerId());
@@ -702,7 +963,13 @@ function updateGameVisibility() {
     ui.pauseGame.textContent = currentMeta?.paused ? "Resume" : "Pause";
   }
   if (ui.pauseOverlay) ui.pauseOverlay.classList.toggle("hidden", !running || !currentMeta?.paused);
-  if (ui.chatPanel) ui.chatPanel.classList.toggle("hidden", !running);
+  if (running && !chatOpenPreferenceSet && !isPhonePortrait()) chatOpen = true;
+  if (ui.toggleChat) {
+    ui.toggleChat.classList.toggle("hidden", !running);
+    ui.toggleChat.textContent = chatOpen ? "Hide Chat" : "Chat";
+    ui.toggleChat.setAttribute("aria-expanded", chatOpen ? "true" : "false");
+  }
+  if (ui.chatPanel) ui.chatPanel.classList.toggle("hidden", !running || !chatOpen);
   ui.boostLabel.classList.toggle("hidden", !running);
   ui.boostBox.classList.toggle("hidden", !running);
   ui.controlsHint.classList.toggle("hidden", !running || isPhonePortrait());
@@ -784,12 +1051,15 @@ async function leaveToMenu(message = "") {
   ui.lobby.classList.remove("solo");
   document.body.classList.remove("game-running");
   ui.setup.classList.remove("hidden");
+  if (ui.accountCard) ui.accountCard.classList.add("hidden");
+  if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
   ui.lobby.classList.add("hidden");
   ui.hud.classList.add("hidden");
   ui.leaveGame.classList.add("hidden");
   if (ui.pauseGame) ui.pauseGame.classList.add("hidden");
   if (ui.pauseOverlay) ui.pauseOverlay.classList.add("hidden");
   if (ui.chatPanel) ui.chatPanel.classList.add("hidden");
+  if (ui.toggleChat) ui.toggleChat.classList.add("hidden");
   ui.boostLabel.classList.add("hidden");
   ui.boostBox.classList.add("hidden");
   ui.controlsHint.classList.add("hidden");
@@ -818,6 +1088,21 @@ async function sendInput() {
   await set(lobbyRef(lobbyCode, `inputs/${uid}`), { ...inp, t: Date.now() }).catch(() => {});
 }
 
+
+function setChatOpen(open, persist = true) {
+  chatOpen = !!open;
+  if (persist) {
+    chatOpenPreferenceSet = true;
+    localStorage.setItem("rlcss_chat_open", chatOpen ? "1" : "0");
+  }
+  updateGameVisibility();
+  renderChat();
+  if (chatOpen && ui.chatInput && !isPhonePortrait()) ui.chatInput.focus();
+}
+
+function toggleChatOpen() {
+  setChatOpen(!chatOpen);
+}
 
 function canLocalHostControl() {
   return !!currentMeta && (isSinglePlayer || currentMeta.hostId === activePlayerId());
@@ -911,14 +1196,32 @@ function safeUi(handler, label) {
       if (result && typeof result.catch === "function") {
         result.catch(err => {
           console.error(label, err);
-          setStatus(`${label} failed: ${err.message || err}`);
+          const msg = err?.code === "auth/email-already-in-use" ? "That username already exists." : (err.message || err);
+          if (label.toLowerCase().includes("account")) setAccountMessage(String(msg));
+          else setStatus(`${label} failed: ${msg}`);
         });
       }
     } catch (err) {
       console.error(label, err);
-      setStatus(`${label} failed: ${err.message || err}`);
+      const msg = err?.code === "auth/email-already-in-use" ? "That username already exists." : (err.message || err);
+      if (label.toLowerCase().includes("account")) setAccountMessage(String(msg));
+      else setStatus(`${label} failed: ${msg}`);
     }
   };
+}
+
+function showMenuPanel(which = "setup") {
+  const showAccount = which === "account";
+  const showLeaderboard = which === "leaderboard";
+  if (ui.setup) ui.setup.classList.toggle("hidden", showAccount || showLeaderboard || !!lobbyCode);
+  if (ui.accountCard) ui.accountCard.classList.toggle("hidden", !showAccount);
+  if (ui.leaderboardCard) ui.leaderboardCard.classList.toggle("hidden", !showLeaderboard);
+  if (showLeaderboard) {
+    if (!leaderboardLoaded && ui.leaderboardList) ui.leaderboardList.textContent = firebaseReady ? "Loading leaderboard…" : "Connect Firebase to load the leaderboard.";
+    startLeaderboardListener();
+  }
+  if (showAccount && ui.accountUsername && !ui.accountUsername.value) ui.accountUsername.value = normalizeUsername(ui.name?.value || accountProfile?.username || "");
+  if (showAccount) updateAccountUi();
 }
 
 // UI events
@@ -926,10 +1229,19 @@ ui.single.addEventListener("click", safeUi(startSinglePlayer, "Single player set
 ui.create.addEventListener("click", safeUi(createLobby, "Create lobby"));
 ui.join.addEventListener("click", safeUi(joinLobby, "Join lobby"));
 ui.joinCode.addEventListener("input", () => ui.joinCode.value = ui.joinCode.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+if (ui.openAccount) ui.openAccount.addEventListener("click", () => showMenuPanel("account"));
+if (ui.closeAccount) ui.closeAccount.addEventListener("click", () => showMenuPanel("setup"));
+if (ui.openLeaderboard) ui.openLeaderboard.addEventListener("click", () => showMenuPanel("leaderboard"));
+if (ui.closeLeaderboard) ui.closeLeaderboard.addEventListener("click", () => showMenuPanel("setup"));
+if (ui.createAccount) ui.createAccount.addEventListener("click", safeUi(createAccount, "Create account"));
+if (ui.signInAccount) ui.signInAccount.addEventListener("click", safeUi(signInAccount, "Sign in account"));
+if (ui.signOutAccount) ui.signOutAccount.addEventListener("click", safeUi(signOutAccount, "Sign out account"));
+if (ui.accountUsername) ui.accountUsername.addEventListener("input", () => { ui.accountUsername.value = normalizeUsername(ui.accountUsername.value); });
 ui.copy.addEventListener("click", () => { if (!isSinglePlayer) navigator.clipboard?.writeText(lobbyCode || ""); });
 ui.leaveLobby.addEventListener("click", safeUi(() => leaveToMenu("Left lobby."), "Leave lobby"));
 ui.leaveGame.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
 if (ui.pauseGame) ui.pauseGame.addEventListener("click", safeUi(togglePause, "Toggle pause"));
+if (ui.toggleChat) ui.toggleChat.addEventListener("click", safeUi(toggleChatOpen, "Toggle chat"));
 ui.ready.addEventListener("click", () => {
   if (isSinglePlayer) startSoloMatch();
   else updateLocalPlayer({ ready: !(currentPlayers[activePlayerId()]?.ready) });
@@ -980,6 +1292,15 @@ window.addEventListener("keydown", e => {
   SFX.resume();
   if (e.code === "KeyP") {
     togglePause();
+    return;
+  }
+  if (e.code === "KeyT") {
+    toggleChatOpen();
+    return;
+  }
+  if (e.code === "Enter" && currentMeta?.status === "running") {
+    if (!chatOpen) setChatOpen(true);
+    ui.chatInput?.focus();
     return;
   }
   keys[e.code] = true;
@@ -2053,6 +2374,7 @@ function updateVisuals(state) {
   }
   handleSoundEvents(state);
   updateHud(state);
+  recordLeaderboardResult(state).catch(err => console.warn("Leaderboard result save failed", err));
   updateCamera(state);
 }
 
