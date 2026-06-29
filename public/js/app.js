@@ -20,9 +20,10 @@ import {
 } from "./physics.js";
 
 const $ = sel => document.querySelector(sel);
+const LOCAL_UID = "LOCAL_PLAYER";
 const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), firebaseWarning: $("#firebase-warning"),
-  name: $("#player-name"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
+  name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), ready: $("#ready-btn"),
@@ -43,6 +44,8 @@ let currentMeta = null;
 let currentPlayers = {};
 let latestState = null;
 let latestInputs = {};
+let isSinglePlayer = false;
+let singlePlayerId = null;
 let hostSim = null;
 let hostRaf = 0;
 let unsubLobby = null;
@@ -59,6 +62,10 @@ let touchDevice = matchMedia("(pointer: coarse)").matches;
 
 ui.name.value = playerName;
 
+function activePlayerId() {
+  return isSinglePlayer ? singlePlayerId : uid;
+}
+
 function hasPlaceholderConfig(config) {
   return !config || Object.values(config).some(v => typeof v === "string" && (v.includes("PASTE") || v.includes("YOUR_PROJECT")));
 }
@@ -66,7 +73,7 @@ function hasPlaceholderConfig(config) {
 async function bootFirebase() {
   if (hasPlaceholderConfig(FIREBASE_CONFIG)) {
     ui.firebaseWarning.classList.remove("hidden");
-    ui.connection.textContent = "Firebase config required before online multiplayer can connect.";
+    ui.connection.textContent = "Single player is available. Add Firebase config to enable online multiplayer.";
     ui.create.disabled = true;
     ui.join.disabled = true;
     return;
@@ -109,7 +116,8 @@ function randomCode() {
 }
 
 async function createLobby() {
-  if (!firebaseReady) return;
+  isSinglePlayer = false;
+  if (!firebaseReady || !uid) return;
   playerName = sanitizeName(ui.name.value);
   localStorage.setItem("pl_online_name", playerName);
   let code = randomCode();
@@ -125,7 +133,8 @@ async function createLobby() {
 }
 
 async function joinLobby() {
-  if (!firebaseReady) return;
+  isSinglePlayer = false;
+  if (!firebaseReady || !uid) return;
   playerName = sanitizeName(ui.name.value);
   localStorage.setItem("pl_online_name", playerName);
   const code = ui.joinCode.value.trim().toUpperCase();
@@ -144,15 +153,40 @@ async function joinLobby() {
   await enterLobby(code);
 }
 
+function startSinglePlayer() {
+  cleanupLobbyListeners();
+  isSinglePlayer = true;
+  singlePlayerId = uid || LOCAL_UID;
+  playerName = sanitizeName(ui.name.value);
+  localStorage.setItem("pl_online_name", playerName);
+  lobbyCode = "SOLO";
+  currentMeta = serialiseMeta({ ...DEFAULT_META, hostId: singlePlayerId, status: "waiting" });
+  currentPlayers = {
+    [singlePlayerId]: { name: playerName, team: "blue", role: "midfield", ready: false, joinedAt: Date.now(), isHost: true, local: true }
+  };
+  currentLobby = { meta: currentMeta, players: currentPlayers, inputs: {}, state: null };
+  latestState = null;
+  latestInputs = {};
+  ui.setup.classList.add("hidden");
+  ui.lobby.classList.remove("hidden");
+  ui.lobby.classList.add("solo");
+  ui.lobbyCode.textContent = "SOLO";
+  ui.lobbyStatus.textContent = "Configure your solo match, then ready up to start.";
+  renderLobby();
+  updateGameVisibility();
+}
+
 function setStatus(text) {
   ui.connection.textContent = text;
 }
 
 async function enterLobby(code) {
   cleanupLobbyListeners();
+  isSinglePlayer = false;
   lobbyCode = code;
   ui.setup.classList.add("hidden");
   ui.lobby.classList.remove("hidden");
+  ui.lobby.classList.remove("solo");
   ui.lobbyCode.textContent = code;
   onDisconnect(lobbyRef(code, `players/${uid}`)).remove();
   onDisconnect(lobbyRef(code, `inputs/${uid}`)).remove();
@@ -192,8 +226,9 @@ function countTeams(players) {
 
 function renderLobby() {
   if (!currentLobby || !currentMeta) return;
-  const isHost = currentMeta.hostId === uid;
-  const local = currentPlayers[uid] || {};
+  const localId = activePlayerId();
+  const isHost = isSinglePlayer || currentMeta.hostId === localId;
+  const local = currentPlayers[localId] || {};
   ui.mode.value = currentMeta.mode;
   ui.teamSize.value = String(currentMeta.teamSize);
   ui.difficulty.value = currentMeta.difficulty;
@@ -203,9 +238,13 @@ function renderLobby() {
   ui.ready.classList.toggle("not-ready", !!local.ready);
   ui.ready.textContent = local.ready ? "Unready" : "Ready";
   ui.mode.disabled = ui.teamSize.disabled = ui.difficulty.disabled = ui.playstyle.disabled = !isHost || currentMeta.status !== "waiting";
+  ui.copy.disabled = isSinglePlayer;
+  ui.copy.textContent = isSinglePlayer ? "Solo" : "Copy Code";
   const maxHumans = maxHumansFor(currentMeta.mode, currentMeta.teamSize);
   const humanCount = Object.keys(currentPlayers).length;
-  ui.maxHumans.textContent = `Max humans in this mode: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
+  ui.maxHumans.textContent = isSinglePlayer
+    ? `Solo mode · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`
+    : `Max humans in this mode: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
   const allReady = humanCount > 0 && Object.values(currentPlayers).every(p => p.ready);
   if (currentMeta.status === "waiting") {
     ui.lobbyStatus.textContent = allReady && humanCount <= maxHumans ? "Everyone is ready — starting…" : "Waiting for players to ready up.";
@@ -226,10 +265,10 @@ function renderTeamList(team, root) {
     const entry = teamHumans[i];
     if (entry) {
       const [id, p] = entry;
-      html += `<div class="slot ${team}"><span class="dot"></span><div><div class="name">${escapeHtml(p.name || "Player")}${id === uid ? " (you)" : ""}</div><div class="meta">${roleLabel(p.role)}${id === meta.hostId ? " · Host" : ""}</div></div><span class="ready-pill">${p.ready ? "READY" : "NOT READY"}</span></div>`;
+      html += `<div class="slot ${team}"><span class="dot"></span><div><div class="name">${escapeHtml(p.name || "Player")}${id === activePlayerId() ? " (you)" : ""}</div><div class="meta">${roleLabel(p.role)}${id === meta.hostId ? " · Host" : ""}</div></div><span class="ready-pill">${p.ready ? "READY" : "NOT READY"}</span></div>`;
     } else {
       const role = meta.aiRoles?.[team]?.[i] || defaultRoleForSlot(i, meta.teamSize);
-      const isHost = meta.hostId === uid && meta.status === "waiting";
+      const isHost = (isSinglePlayer || meta.hostId === activePlayerId()) && meta.status === "waiting";
       const roleUi = isHost
         ? `<select class="ai-role-select" data-team="${team}" data-slot="${i}">${ROLES.map(r => `<option value="${r}" ${r === role ? "selected" : ""}>${roleLabel(r)}</option>`).join("")}</select>`
         : roleLabel(role);
@@ -248,12 +287,30 @@ function escapeHtml(s) {
 }
 
 async function updateMetaPatch(patch) {
-  if (!lobbyCode || !currentMeta || currentMeta.hostId !== uid) return;
+  const localId = activePlayerId();
+  if (!lobbyCode || !currentMeta || (currentMeta.hostId !== localId && !isSinglePlayer)) return;
+  if (isSinglePlayer) {
+    currentMeta = serialiseMeta({ ...currentMeta, ...patch, updatedAt: Date.now() });
+    currentLobby = { ...(currentLobby || {}), meta: currentMeta, players: currentPlayers };
+    if (currentPlayers[localId]) currentPlayers[localId].ready = false;
+    renderLobby();
+    updateGameVisibility();
+    return;
+  }
   await update(lobbyRef(lobbyCode, "meta"), { ...patch, updatedAt: serverTimestamp() });
 }
 
 async function updateLocalPlayer(patch) {
-  if (!lobbyCode || !uid) return;
+  const localId = activePlayerId();
+  if (!lobbyCode || !localId) return;
+  if (isSinglePlayer) {
+    currentPlayers[localId] = { ...(currentPlayers[localId] || {}), ...patch };
+    currentLobby = { ...(currentLobby || {}), meta: currentMeta, players: currentPlayers };
+    renderLobby();
+    maybeAutoStart();
+    updateGameVisibility();
+    return;
+  }
   await update(lobbyRef(lobbyCode, `players/${uid}`), patch);
 }
 
@@ -267,8 +324,19 @@ function readyStateAllowsStart() {
 }
 
 async function maybeAutoStart() {
-  if (!currentMeta || currentMeta.hostId !== uid || !readyStateAllowsStart()) return;
+  const localId = activePlayerId();
+  if (!currentMeta || (currentMeta.hostId !== localId && !isSinglePlayer) || !readyStateAllowsStart()) return;
   const initial = makeInitialState(currentMeta, currentPlayers);
+  if (isSinglePlayer) {
+    currentMeta = serialiseMeta({ ...currentMeta, status: "running", startedAt: Date.now(), updatedAt: Date.now() });
+    currentLobby = { ...(currentLobby || {}), meta: currentMeta, players: currentPlayers, state: compactState(initial) };
+    latestState = currentLobby.state;
+    hostSim = new PhysicsHost(currentMeta, currentPlayers);
+    startHostLoop();
+    renderLobby();
+    updateGameVisibility();
+    return;
+  }
   await update(lobbyRef(lobbyCode), {
     meta: { ...currentLobby.meta, status: "running", startedAt: serverTimestamp(), updatedAt: serverTimestamp() },
     state: compactState(initial)
@@ -283,7 +351,7 @@ function updateGameVisibility() {
   ui.leaveGame.classList.toggle("hidden", !running);
   ui.lobby.classList.toggle("hidden", running);
   ui.mobile.classList.toggle("hidden", !running || !isPhonePortrait());
-  if (running && currentMeta?.hostId === uid && !hostSim) {
+  if (running && (isSinglePlayer || currentMeta?.hostId === activePlayerId()) && !hostSim) {
     hostSim = new PhysicsHost(currentMeta, currentPlayers);
     if (currentLobby?.state) hostSim.state = currentLobby.state;
     startHostLoop();
@@ -297,20 +365,30 @@ function startHostLoop() {
   const fixed = 1 / 60;
   const loop = now => {
     hostRaf = requestAnimationFrame(loop);
-    if (!hostSim || !currentMeta || currentMeta.status !== "running" || currentMeta.hostId !== uid) return;
+    if (!hostSim || !currentMeta || currentMeta.status !== "running" || (!isSinglePlayer && currentMeta.hostId !== activePlayerId())) return;
     const dt = Math.min(0.08, (now - last) / 1000);
     last = now;
     acc += dt;
     let shouldWrite = false;
     while (acc >= fixed) {
       hostSim.syncMeta(currentMeta, currentPlayers);
+      const localId = activePlayerId();
+      if (isSinglePlayer && localId) latestInputs = { [localId]: localInput() };
       hostSim.setInputs(latestInputs);
       shouldWrite = hostSim.step(fixed, currentPlayers) || shouldWrite;
       acc -= fixed;
     }
     latestState = compactState(hostSim.state);
-    if (shouldWrite) set(lobbyRef(lobbyCode, "state"), latestState);
-    if (hostSim.state.ended) update(lobbyRef(lobbyCode, "meta"), { status: "ended", endedAt: serverTimestamp() });
+    if (shouldWrite && !isSinglePlayer) set(lobbyRef(lobbyCode, "state"), latestState);
+    if (hostSim.state.ended) {
+      if (isSinglePlayer) {
+        currentMeta = serialiseMeta({ ...currentMeta, status: "ended", endedAt: Date.now() });
+        currentLobby = { ...(currentLobby || {}), meta: currentMeta, players: currentPlayers, state: latestState };
+        updateGameVisibility();
+      } else {
+        update(lobbyRef(lobbyCode, "meta"), { status: "ended", endedAt: serverTimestamp() });
+      }
+    }
   };
   hostRaf = requestAnimationFrame(loop);
 }
@@ -322,12 +400,15 @@ function stopHostLoop() {
 }
 
 async function leaveToMenu(message = "") {
-  if (lobbyCode && uid && db) {
+  if (!isSinglePlayer && lobbyCode && uid && db) {
     await remove(lobbyRef(lobbyCode, `players/${uid}`)).catch(() => {});
     await remove(lobbyRef(lobbyCode, `inputs/${uid}`)).catch(() => {});
   }
   cleanupLobbyListeners();
-  lobbyCode = null; currentLobby = null; currentMeta = null; currentPlayers = {}; latestState = null;
+  isSinglePlayer = false;
+  singlePlayerId = null;
+  lobbyCode = null; currentLobby = null; currentMeta = null; currentPlayers = {}; latestState = null; latestInputs = {};
+  ui.lobby.classList.remove("solo");
   ui.setup.classList.remove("hidden");
   ui.lobby.classList.add("hidden");
   ui.hud.classList.add("hidden");
@@ -351,19 +432,21 @@ function localInput() {
 }
 
 async function sendInput() {
+  if (isSinglePlayer) return;
   if (!lobbyCode || !uid || !db || !currentMeta || currentMeta.status !== "running") return;
   const inp = localInput();
   await set(lobbyRef(lobbyCode, `inputs/${uid}`), { ...inp, t: Date.now() }).catch(() => {});
 }
 
 // UI events
+ui.single.addEventListener("click", startSinglePlayer);
 ui.create.addEventListener("click", createLobby);
 ui.join.addEventListener("click", joinLobby);
 ui.joinCode.addEventListener("input", () => ui.joinCode.value = ui.joinCode.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
-ui.copy.addEventListener("click", () => navigator.clipboard?.writeText(lobbyCode || ""));
+ui.copy.addEventListener("click", () => { if (!isSinglePlayer) navigator.clipboard?.writeText(lobbyCode || ""); });
 ui.leaveLobby.addEventListener("click", () => leaveToMenu("Left lobby."));
 ui.leaveGame.addEventListener("click", () => leaveToMenu("Left match."));
-ui.ready.addEventListener("click", () => updateLocalPlayer({ ready: !(currentPlayers[uid]?.ready) }));
+ui.ready.addEventListener("click", () => updateLocalPlayer({ ready: !(currentPlayers[activePlayerId()]?.ready) }));
 ui.team.addEventListener("change", () => updateLocalPlayer({ team: ui.team.value, ready: false }));
 ui.role.addEventListener("change", () => updateLocalPlayer({ role: ui.role.value, ready: false }));
 ui.mode.addEventListener("change", () => updateMetaPatch({ mode: ui.mode.value }));
@@ -374,7 +457,7 @@ ui.playstyle.addEventListener("change", () => updateMetaPatch({ playstyle: ui.pl
 [ui.blueList, ui.orangeList].forEach(root => {
   root.addEventListener("change", e => {
     const sel = e.target.closest(".ai-role-select");
-    if (!sel || !currentMeta || currentMeta.hostId !== uid) return;
+    if (!sel || !currentMeta || (!isSinglePlayer && currentMeta.hostId !== activePlayerId())) return;
     const team = sel.dataset.team;
     const slot = Number(sel.dataset.slot);
     const roles = JSON.parse(JSON.stringify(currentMeta.aiRoles || { blue: {}, orange: {} }));
@@ -638,7 +721,7 @@ function updateHud(state) {
 }
 
 function updateCamera(state) {
-  const localCar = state.cars?.[uid];
+  const localCar = state.cars?.[activePlayerId()];
   if (!localCar) {
     camera.position.lerp(new THREE.Vector3(0, Math.max(70, state.arena.l * 0.56), state.arena.l * 0.72), 0.04);
     camera.lookAt(0, 0, 0);
