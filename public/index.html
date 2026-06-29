@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Pocket League Online</title>
+  <title>Pocket League</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -19,10 +19,19 @@
 
   <button id="leave-game" class="floating-btn hidden" type="button">Leave</button>
 
+  <div id="boost-label" class="boost-label hidden">BOOST</div>
+  <div id="boost-container" class="boost-container hidden"><div id="boost-fill" class="boost-fill"></div></div>
+
+  <div id="controls-hint" class="controls-hint hidden">
+    <div id="cam-indicator">BALL CAM: <span id="cam-state">OFF</span></div>
+    <strong>WASD</strong>: DRIVE &amp; STEER &nbsp;|&nbsp; <strong class="boost-text">SHIFT</strong>: BOOST<br />
+    <strong>SPACE</strong>: JUMP &nbsp;|&nbsp; <strong>CTRL</strong>: DRIFT &nbsp;|&nbsp; <strong>B</strong>: BALL CAM &nbsp;|&nbsp; <strong>R</strong>: RESET
+  </div>
+
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel">
-      <h1>Pocket League Online</h1>
-      <p class="muted">Play solo with AI or host a Firebase lobby. Online hosts create a code; friends join with the code; game starts once everyone is ready.</p>
+      <h1>Pocket League</h1>
+      <p class="muted">Start an instant solo match with AI, or host an online Firebase lobby. Online hosts create a code; friends join with the code; game starts once everyone is ready.</p>
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
       </div>
