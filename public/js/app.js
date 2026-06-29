@@ -29,6 +29,8 @@ const ui = {
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
   hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), leaveGame: $("#leave-game"),
+  boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
+  controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob")
 };
 
@@ -160,19 +162,26 @@ function startSinglePlayer() {
   playerName = sanitizeName(ui.name.value);
   localStorage.setItem("pl_online_name", playerName);
   lobbyCode = "SOLO";
-  currentMeta = serialiseMeta({ ...DEFAULT_META, hostId: singlePlayerId, status: "waiting" });
+
+  // Single player should launch immediately. The previous rebuild put solo
+  // players into the ready-up lobby, which made the game look paused.
+  currentMeta = serialiseMeta({ ...DEFAULT_META, hostId: singlePlayerId, status: "running", startedAt: Date.now(), updatedAt: Date.now() });
   currentPlayers = {
-    [singlePlayerId]: { name: playerName, team: "blue", role: "midfield", ready: false, joinedAt: Date.now(), isHost: true, local: true }
+    [singlePlayerId]: { name: playerName, team: "blue", role: "midfield", ready: true, joinedAt: Date.now(), isHost: true, local: true }
   };
-  currentLobby = { meta: currentMeta, players: currentPlayers, inputs: {}, state: null };
-  latestState = null;
-  latestInputs = {};
+  const initial = makeInitialState(currentMeta, currentPlayers);
+  initial.kickoffTimer = 0.45;
+  currentLobby = { meta: currentMeta, players: currentPlayers, inputs: {}, state: compactState(initial) };
+  latestState = currentLobby.state;
+  latestInputs = { [singlePlayerId]: localInput() };
+  hostSim = new PhysicsHost(currentMeta, currentPlayers);
+  hostSim.state = initial;
+
   ui.setup.classList.add("hidden");
-  ui.lobby.classList.remove("hidden");
+  ui.lobby.classList.add("hidden");
   ui.lobby.classList.add("solo");
   ui.lobbyCode.textContent = "SOLO";
-  ui.lobbyStatus.textContent = "Configure your solo match, then ready up to start.";
-  renderLobby();
+  startHostLoop();
   updateGameVisibility();
 }
 
@@ -349,8 +358,12 @@ function updateGameVisibility() {
   const running = currentMeta && currentMeta.status === "running";
   ui.hud.classList.toggle("hidden", !running);
   ui.leaveGame.classList.toggle("hidden", !running);
+  ui.boostLabel.classList.toggle("hidden", !running);
+  ui.boostBox.classList.toggle("hidden", !running);
+  ui.controlsHint.classList.toggle("hidden", !running || isPhonePortrait());
   ui.lobby.classList.toggle("hidden", running);
   ui.mobile.classList.toggle("hidden", !running || !isPhonePortrait());
+  if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
   if (running && (isSinglePlayer || currentMeta?.hostId === activePlayerId()) && !hostSim) {
     hostSim = new PhysicsHost(currentMeta, currentPlayers);
     if (currentLobby?.state) hostSim.state = currentLobby.state;
@@ -413,6 +426,9 @@ async function leaveToMenu(message = "") {
   ui.lobby.classList.add("hidden");
   ui.hud.classList.add("hidden");
   ui.leaveGame.classList.add("hidden");
+  ui.boostLabel.classList.add("hidden");
+  ui.boostBox.classList.add("hidden");
+  ui.controlsHint.classList.add("hidden");
   ui.mobile.classList.add("hidden");
   if (message) ui.connection.textContent = message;
 }
@@ -473,6 +489,7 @@ window.addEventListener("keydown", e => {
     camKeyLatch = true;
     localBallCam = !localBallCam;
     localStorage.setItem("pl_ball_cam", localBallCam ? "1" : "0");
+    if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
   }
 });
 window.addEventListener("keyup", e => {
@@ -519,6 +536,7 @@ function setupMobileControls() {
       if (action === "cam") {
         localBallCam = !localBallCam;
         localStorage.setItem("pl_ball_cam", localBallCam ? "1" : "0");
+        if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
       } else if (action in mobileInput) {
         mobileInput[action] = true;
       }
@@ -718,6 +736,10 @@ function updateHud(state) {
   ui.scoreOrange.textContent = `${state.score?.orange ?? 0} ORANGE`;
   const t = Math.max(0, Math.ceil(state.timeLeft || 0));
   ui.clock.textContent = `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+  const localCar = state.cars?.[activePlayerId()];
+  if (localCar && ui.boostFill) {
+    ui.boostFill.style.width = `${Math.max(0, Math.min(100, Math.round(localCar.boost || 0)))}%`;
+  }
 }
 
 function updateCamera(state) {

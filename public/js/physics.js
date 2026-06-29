@@ -150,8 +150,15 @@ function aiName(team, role, i) {
 
 function kickoffSpawn(team, i, teamSize, arena) {
   const sign = team === "blue" ? -1 : 1;
-  const lanes = [-0.46, -0.22, 0, 0.22, 0.46];
-  const x = lanes[i] * arena.w;
+  const laneSets = {
+    1: [0],
+    2: [-0.22, 0.22],
+    3: [-0.34, 0, 0.34],
+    4: [-0.42, -0.14, 0.14, 0.42],
+    5: [-0.46, -0.22, 0, 0.22, 0.46]
+  };
+  const lanes = laneSets[clamp(Number(teamSize) || 1, 1, 5)] || laneSets[1];
+  const x = (lanes[i] ?? 0) * arena.w;
   const zBase = sign * (arena.l * 0.34 + (i % 2) * 4);
   const yaw = team === "blue" ? 0 : Math.PI;
   return { x, z: zBase, yaw };
@@ -290,6 +297,12 @@ export class PhysicsHost {
       state.timeLeft = Math.max(0, state.timeLeft - dt);
       if (state.timeLeft <= 0) state.ended = true;
     }
+
+    const resetRequested = Object.keys(players || {}).some(id => normaliseInput(this.inputs[id]).reset);
+    if (resetRequested && !this.resetLatch) {
+      resetKickoff(state, players);
+    }
+    this.resetLatch = resetRequested;
 
     const humanIds = new Set(Object.keys(players));
     for (const car of Object.values(state.cars)) {
