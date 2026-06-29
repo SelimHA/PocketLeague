@@ -510,7 +510,7 @@ function startHostLoop() {
   if (hostRaf) return;
   let last = performance.now();
   let acc = 0;
-  const fixed = 1 / 60;
+  const fixed = 1 / 120;
   const loop = now => {
     hostRaf = requestAnimationFrame(loop);
     if (!hostSim || !currentMeta || currentMeta.status !== "running" || (!isSinglePlayer && currentMeta.hostId !== activePlayerId())) return;
@@ -1019,8 +1019,8 @@ function updateVisuals(state) {
   updateBoostPadVisuals(state);
   for (const car of Object.values(state.cars || {})) {
     const mesh = carMeshes.get(car.id) || createCarMesh(car, state);
-    mesh.position.set(car.x, car.y - VISUAL_CONSTANTS.CAR_RADIUS + 0.08, car.z);
-    mesh.rotation.y = car.yaw;
+    mesh.position.set(car.x, car.y, car.z);
+    mesh.rotation.set(car.pitch || 0, car.yaw, car.roll || 0, "YXZ");
     const scale = car.cueCooldown > 0 ? 1 + car.cueCooldown * 0.45 : 1;
     mesh.scale.set(1, 1, scale);
     if (mesh.userData.flame) {
