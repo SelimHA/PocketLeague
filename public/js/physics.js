@@ -54,97 +54,137 @@ export const MODE_CONFIGS = {
 export const STADIUM_THEMES = {
   v10: {
     label: "V10 Classic Stadium",
+    style: "classic",
     background: 0x070912,
-    fog: 0x070912,
-    fogDensity: 0.0065,
+    fog: 0x080b16,
+    fogDensity: 0.0058,
     ambient: 0xffffff,
-    ambientIntensity: 0.50,
+    ambientIntensity: 0.54,
     sun: 0xffffff,
-    sunIntensity: 1.05,
+    sunIntensity: 1.08,
     sunPosition: [-30, 70, 25],
-    field: [30, 84, 54],
+    field: [34, 102, 58],
     iceField: [185, 230, 255],
     snookerField: [16, 92, 50],
     flyingField: [34, 40, 72],
-    stripeAlpha: 0.045,
-    lineAlpha: 0.56,
-    wall: 0x1d2438,
+    stripeAlpha: 0.052,
+    lineAlpha: 0.62,
+    wall: 0x1b2744,
     wallOpacity: 0.48,
     trim: 0xffffff,
     stands: 0x111827,
-    crowd: [0x1f2937, 0x0f172a, 0x243b53],
+    crowd: [0x1f2937, 0x0f172a, 0x243b53, 0x334155],
+    concourse: 0x182033,
+    road: 0x070a12,
+    glass: 0x143257,
+    warmGlass: 0x2a1d14,
+    accentA: 0x12b9ff,
+    accentB: 0xff8a1f,
+    accentC: 0xf8fafc,
+    fieldGlowA: 0x16c7ff,
+    fieldGlowB: 0xff9a2b,
     lightBlue: 0x12b9ff,
     lightOrange: 0xff8a1f
   },
   neon: {
     label: "Neon Bowl",
-    background: 0x050815,
-    fog: 0x050815,
-    fogDensity: 0.0072,
-    ambient: 0xdff6ff,
-    ambientIntensity: 0.44,
-    sun: 0x9fdcff,
-    sunIntensity: 0.82,
-    sunPosition: [40, 75, 35],
-    field: [22, 70, 56],
-    iceField: [170, 222, 255],
-    snookerField: [12, 72, 43],
-    flyingField: [28, 32, 78],
-    stripeAlpha: 0.062,
-    lineAlpha: 0.62,
-    wall: 0x17213a,
-    wallOpacity: 0.52,
-    trim: 0xa7f3ff,
-    stands: 0x0c1326,
-    crowd: [0x1d4ed8, 0x0f766e, 0x7c2d12],
-    lightBlue: 0x00e5ff,
-    lightOrange: 0xff7a18
+    style: "neon",
+    background: 0x07001f,
+    fog: 0x160044,
+    fogDensity: 0.0088,
+    ambient: 0xd7faff,
+    ambientIntensity: 0.58,
+    sun: 0x7df9ff,
+    sunIntensity: 1.12,
+    sunPosition: [38, 78, 32],
+    field: [8, 92, 105],
+    iceField: [132, 236, 255],
+    snookerField: [6, 76, 72],
+    flyingField: [38, 20, 104],
+    stripeAlpha: 0.085,
+    lineAlpha: 0.82,
+    wall: 0x250064,
+    wallOpacity: 0.70,
+    trim: 0xf0abfc,
+    stands: 0x120032,
+    crowd: [0x0891b2, 0x7e22ce, 0xbe123c, 0x0f766e],
+    concourse: 0x1b064a,
+    road: 0x07001a,
+    glass: 0x081947,
+    warmGlass: 0x33002f,
+    accentA: 0x00f5ff,
+    accentB: 0xff2bd6,
+    accentC: 0xb7ff00,
+    fieldGlowA: 0x00f5ff,
+    fieldGlowB: 0xff2bd6,
+    lightBlue: 0x00f5ff,
+    lightOrange: 0xff2bd6
   },
   sunset: {
     label: "Sunset Arena",
-    background: 0x170916,
-    fog: 0x170916,
-    fogDensity: 0.0062,
-    ambient: 0xffdfc2,
-    ambientIntensity: 0.52,
-    sun: 0xffc18a,
-    sunIntensity: 1.10,
-    sunPosition: [-52, 55, -18],
-    field: [43, 91, 50],
-    iceField: [205, 226, 255],
-    snookerField: [19, 84, 43],
-    flyingField: [50, 38, 72],
-    stripeAlpha: 0.05,
-    lineAlpha: 0.54,
-    wall: 0x30203a,
-    wallOpacity: 0.50,
-    trim: 0xffd18a,
-    stands: 0x211425,
-    crowd: [0x7c2d12, 0x9a3412, 0x4338ca],
-    lightBlue: 0x38bdf8,
-    lightOrange: 0xff9f1a
+    style: "sunset",
+    background: 0x3a081e,
+    fog: 0x6b1b1b,
+    fogDensity: 0.0055,
+    ambient: 0xffdfb7,
+    ambientIntensity: 0.72,
+    sun: 0xff9d44,
+    sunIntensity: 1.42,
+    sunPosition: [-58, 52, -22],
+    field: [76, 132, 42],
+    iceField: [255, 223, 192],
+    snookerField: [52, 92, 37],
+    flyingField: [87, 42, 86],
+    stripeAlpha: 0.064,
+    lineAlpha: 0.66,
+    wall: 0x7a2546,
+    wallOpacity: 0.60,
+    trim: 0xffd166,
+    stands: 0x4a1634,
+    crowd: [0xf97316, 0xdb2777, 0x7c2d12, 0x4338ca],
+    concourse: 0x5c1f39,
+    road: 0x2b0d18,
+    glass: 0x44204b,
+    warmGlass: 0x5b2411,
+    accentA: 0xffc857,
+    accentB: 0xff4d6d,
+    accentC: 0x7dd3fc,
+    fieldGlowA: 0xffc857,
+    fieldGlowB: 0xff4d6d,
+    lightBlue: 0x45d9ff,
+    lightOrange: 0xffb020
   },
   storm: {
     label: "Storm Dome",
-    background: 0x060a10,
-    fog: 0x09121c,
-    fogDensity: 0.0080,
-    ambient: 0xd7eaff,
-    ambientIntensity: 0.38,
-    sun: 0xb8dcff,
-    sunIntensity: 0.74,
-    sunPosition: [18, 82, -42],
-    field: [23, 72, 67],
-    iceField: [160, 218, 255],
-    snookerField: [10, 80, 54],
-    flyingField: [24, 33, 57],
-    stripeAlpha: 0.07,
-    lineAlpha: 0.66,
-    wall: 0x0d1b2a,
-    wallOpacity: 0.58,
-    trim: 0xdbeafe,
-    stands: 0x07111d,
-    crowd: [0x1e293b, 0x334155, 0x0f172a],
+    style: "storm",
+    background: 0x010b16,
+    fog: 0x0a2440,
+    fogDensity: 0.0105,
+    ambient: 0xc9e8ff,
+    ambientIntensity: 0.50,
+    sun: 0x9ed3ff,
+    sunIntensity: 1.02,
+    sunPosition: [18, 86, -45],
+    field: [12, 105, 96],
+    iceField: [142, 225, 255],
+    snookerField: [8, 87, 66],
+    flyingField: [21, 35, 72],
+    stripeAlpha: 0.090,
+    lineAlpha: 0.84,
+    wall: 0x0d3a56,
+    wallOpacity: 0.72,
+    trim: 0xe0f2fe,
+    stands: 0x06172a,
+    crowd: [0x0f172a, 0x1e3a8a, 0x334155, 0x0e7490],
+    concourse: 0x0a2238,
+    road: 0x04101b,
+    glass: 0x09243a,
+    warmGlass: 0x152b3c,
+    accentA: 0x7dd3fc,
+    accentB: 0xa78bfa,
+    accentC: 0xfacc15,
+    fieldGlowA: 0x7dd3fc,
+    fieldGlowB: 0xa78bfa,
     lightBlue: 0x7dd3fc,
     lightOrange: 0xf97316
   }
@@ -213,11 +253,11 @@ const CAR_RADIUS = 2.35;
 const CAR_GROUND_Y = CAR_HALF_Y + 0.08;
 const GRAVITY = 44;
 const BOOST_MAX = 100;
-// V23: boost now drains a bit faster so boost-pad control matters more,
-// but the acceleration impulse stays close to V22 so balance is preserved.
-const BOOST_DRAIN_GROUND = 42;
-const BOOST_DRAIN_AIR = 34;
-const BOOST_DRAIN_FLYING = 36;
+// V25: still finite and a little faster than the old slow drain, but backed
+// off slightly from V23/V24 so each tank lasts just a touch longer.
+const BOOST_DRAIN_GROUND = 35;
+const BOOST_DRAIN_AIR = 29;
+const BOOST_DRAIN_FLYING = 31;
 const DOUBLE_JUMP_VELOCITY = 16.8;
 const DOUBLE_JUMP_FORWARD_KICK = 5.8;
 const MATCH_TICKS_PER_WRITE = 4;
@@ -658,16 +698,18 @@ function updateCar(car, input, state, cfg, dt) {
       car.vz += fwd.z * 62 * cfg.drive * vehicle.boost * dt;
     }
 
-    const driftActive = handbrake && speed > 7.0;
+    // V25: powerslide engages at lower speed and has no post-release lockout,
+    // so you can chain short drifts without waiting for a cooldown.
+    const driftActive = handbrake && speed > 3.8;
     car.drifting = driftActive;
     const normalGrip = 18.0 * cfg.grip * vehicle.grip;
-    const driftGrip = 2.25 * cfg.driftGrip * vehicle.driftGrip;
+    const driftGrip = 1.62 * cfg.driftGrip * vehicle.driftGrip;
     const grip = driftActive ? driftGrip : normalGrip;
     car.vx += right.x * (-sideSpeed * grip * dt);
     car.vz += right.z * (-sideSpeed * grip * dt);
 
     if (driftActive && Math.abs(steer) > 0.05) {
-      const slideAssist = -steer * Math.sign(forwardSpeed || 1) * clamp(speed / 34, 0, 1) * 8.0;
+      const slideAssist = -steer * Math.sign(forwardSpeed || 1) * clamp(speed / 32, 0, 1) * 10.6;
       car.vx += right.x * slideAssist * dt;
       car.vz += right.z * slideAssist * dt;
     }
@@ -683,9 +725,9 @@ function updateCar(car, input, state, cfg, dt) {
 
     const sign = forwardSpeed >= -1 ? 1 : -1;
     const speedFactor = clamp(speed / 24, 0.45, 1);
-    const baseTurn = (driftActive ? 5.35 * cfg.driftTurn * vehicle.driftTurn : 2.9) * cfg.steer * vehicle.steer * speedFactor;
+    const baseTurn = (driftActive ? 6.05 * cfg.driftTurn * vehicle.driftTurn : 2.9) * cfg.steer * vehicle.steer * speedFactor;
     const targetYawVel = steer * sign * baseTurn;
-    const yawSharpness = driftActive ? (state.mode === "ice" ? 2.3 : 3.3) : 9.0;
+    const yawSharpness = driftActive ? (state.mode === "ice" ? 3.0 : 4.9) : 9.0;
     car.yawVel = smooth(car.yawVel, targetYawVel, yawSharpness, dt);
     car.yaw += car.yawVel * dt;
     if (!driftActive) car.yawVel *= Math.pow(0.78, dt * 120);

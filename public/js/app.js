@@ -32,6 +32,7 @@ const ui = {
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
+  mobileActionPad: $("#mobile-action-pad"),
   mobileBoostButton: document.querySelector('[data-action="boost"]'),
   vehiclePreview: $("#vehicle-preview"), vehiclePreviewName: $("#vehicle-preview-name"), vehiclePreviewDesc: $("#vehicle-preview-desc")
 };
@@ -742,48 +743,105 @@ function setupMobileControls() {
   zone.addEventListener("pointerup", e => { if (e.pointerId === activeId) resetStick(); });
   zone.addEventListener("pointercancel", e => { if (e.pointerId === activeId) resetStick(); });
 
-  function triggerMobileDrift(btn) {
-    if (mobileDriftTimer || mobileDriftCooldownTimer) return;
-    mobileInput.drift = true;
-    btn.disabled = true;
-    btn.classList.add("drift-latched");
-    mobileDriftTimer = window.setTimeout(() => {
-      mobileInput.drift = false;
-      mobileDriftTimer = 0;
-      btn.classList.remove("drift-latched");
-      btn.classList.add("drift-cooling");
-      mobileDriftCooldownTimer = window.setTimeout(() => {
-        btn.disabled = false;
-        btn.classList.remove("drift-cooling");
-        mobileDriftCooldownTimer = 0;
-      }, 260);
-    }, 850);
+  const actionPad = ui.mobileActionPad;
+  const actionZones = actionPad ? Array.from(actionPad.querySelectorAll("[data-action]")) : Array.from(document.querySelectorAll(".touch-btn[data-action]"));
+  let actionPointerId = null;
+  let activeAction = null;
+
+  function zoneForPoint(clientX, clientY) {
+    for (const el of actionZones) {
+      const r = el.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) return el;
+    }
+    return null;
   }
 
-  document.querySelectorAll(".touch-btn").forEach(btn => {
-    const action = btn.dataset.action;
-    btn.addEventListener("pointerdown", e => {
+  function pulseMobileAction(action, ms = 82) {
+    if (!(action in mobileInput)) return;
+    mobileInput[action] = true;
+    window.setTimeout(() => { mobileInput[action] = false; }, ms);
+  }
+
+  function toggleBallCamFromTouch() {
+    localBallCam = !localBallCam;
+    localStorage.setItem("rlcss_ball_cam", localBallCam ? "1" : "0");
+    if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
+  }
+
+  document.querySelectorAll("[data-mobile-tap]").forEach(btn => {
+    if (btn.dataset.boundMobileTap === "1") return;
+    btn.dataset.boundMobileTap = "1";
+    const action = btn.dataset.mobileTap;
+    const trigger = e => {
       e.preventDefault();
-      btn.setPointerCapture(e.pointerId);
       btn.classList.add("active");
-      if (action === "cam") {
-        localBallCam = !localBallCam;
-        localStorage.setItem("rlcss_ball_cam", localBallCam ? "1" : "0");
-        if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
-      } else if (action === "drift") {
-        triggerMobileDrift(btn);
-      } else if (action in mobileInput) {
-        mobileInput[action] = true;
-      }
-    });
-    const up = () => {
-      btn.classList.remove("active");
-      if (action in mobileInput && !["jump", "reset", "drift"].includes(action)) mobileInput[action] = false;
-      if (action === "jump" || action === "reset") setTimeout(() => { mobileInput[action] = false; }, 80);
+      if (action === "cam") toggleBallCamFromTouch();
+      else if (action === "reset") pulseMobileAction("reset", 95);
     };
-    btn.addEventListener("pointerup", up);
-    btn.addEventListener("pointercancel", up);
+    const release = () => btn.classList.remove("active");
+    btn.addEventListener("pointerdown", trigger);
+    btn.addEventListener("pointerup", release);
+    btn.addEventListener("pointercancel", release);
+    btn.addEventListener("pointerleave", release);
   });
+
+  function clearHeldAction() {
+    mobileInput.boost = false;
+    mobileInput.drift = false;
+    activeAction = null;
+    actionZones.forEach(el => el.classList.remove("active"));
+  }
+
+  function setActionFromPoint(clientX, clientY, force = false) {
+    const zoneEl = zoneForPoint(clientX, clientY);
+    const next = zoneEl?.dataset.action || null;
+    if (!force && next === activeAction) return;
+
+    mobileInput.boost = false;
+    mobileInput.drift = false;
+    actionZones.forEach(el => el.classList.toggle("active", el === zoneEl));
+    activeAction = next;
+
+    if (next === "boost") mobileInput.boost = true;
+    else if (next === "drift") mobileInput.drift = true;
+    else if (next === "jump") pulseMobileAction("jump");
+    else if (next === "reset") pulseMobileAction("reset", 95);
+    else if (next === "cam") toggleBallCamFromTouch();
+  }
+
+  if (actionPad && actionZones.length) {
+    actionPad.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      actionPointerId = e.pointerId;
+      actionPad.setPointerCapture(actionPointerId);
+      setActionFromPoint(e.clientX, e.clientY, true);
+    });
+    actionPad.addEventListener("pointermove", e => {
+      if (e.pointerId === actionPointerId) setActionFromPoint(e.clientX, e.clientY);
+    });
+    const endAction = e => {
+      if (e.pointerId !== actionPointerId) return;
+      clearHeldAction();
+      actionPointerId = null;
+    };
+    actionPad.addEventListener("pointerup", endAction);
+    actionPad.addEventListener("pointercancel", endAction);
+  } else {
+    // Fallback for older markup: still allow sliding over the existing separate buttons.
+    actionZones.forEach(btn => {
+      const action = btn.dataset.action;
+      btn.addEventListener("pointerdown", e => {
+        e.preventDefault();
+        actionPointerId = e.pointerId;
+        btn.setPointerCapture(actionPointerId);
+        setActionFromPoint(e.clientX, e.clientY, true);
+      });
+      btn.addEventListener("pointermove", e => { if (e.pointerId === actionPointerId) setActionFromPoint(e.clientX, e.clientY); });
+      const up = e => { if (e.pointerId === actionPointerId) { clearHeldAction(); actionPointerId = null; } };
+      btn.addEventListener("pointerup", up);
+      btn.addEventListener("pointercancel", up);
+    });
+  }
 }
 
 // Three.js renderer
@@ -868,6 +926,25 @@ function makeFieldTexture(mode, arena, theme) {
   const base = modeFieldColor(mode, theme);
   ctx.fillStyle = `rgb(${base[0]},${base[1]},${base[2]})`;
   ctx.fillRect(0, 0, texSize, texSize);
+
+  const cssHex = value => `#${(Number(value ?? 0xffffff) >>> 0).toString(16).padStart(6, "0").slice(-6)}`;
+  const glowA = cssHex(theme.fieldGlowA ?? theme.accentA ?? 0x16c7ff);
+  const glowB = cssHex(theme.fieldGlowB ?? theme.accentB ?? 0xff9a2b);
+  const identityAlpha = theme.style === "classic" ? 0.045 : 0.115;
+  ctx.globalAlpha = identityAlpha;
+  ctx.fillStyle = glowA;
+  ctx.fillRect(0, 0, texSize, texSize * 0.075);
+  ctx.fillRect(0, texSize * 0.46, texSize, texSize * 0.035);
+  ctx.fillStyle = glowB;
+  ctx.fillRect(0, texSize * 0.925, texSize, texSize * 0.075);
+  ctx.save();
+  ctx.translate(texSize * 0.5, texSize * 0.5);
+  ctx.rotate(-Math.PI * 0.08);
+  ctx.fillStyle = theme.style === "neon" ? glowB : glowA;
+  ctx.fillRect(-texSize * 0.55, -texSize * 0.025, texSize * 1.1, texSize * 0.05);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
   for (let i = 0; i < 18; i++) {
     const alpha = i % 2 ? (theme.stripeAlpha ?? 0.045) : Math.max(0.018, (theme.stripeAlpha ?? 0.045) * 0.45);
     ctx.fillStyle = `rgba(255,255,255,${alpha})`;
@@ -1142,6 +1219,91 @@ function buildArena(state) {
       propBox(2.4, 0.62, 4.0, x, 0.48, z, i % 2 ? parkedMatA : parkedMatB, side * Math.PI * 0.5);
       propBox(1.55, 0.52, 1.25, x, 1.02, z - side * 0.12, darkMat, side * Math.PI * 0.5);
     }
+
+    // V25: make each stadium theme read as a genuinely different arena,
+    // not just the same props with a tint. These are decorative only.
+    function addThemeIdentityProps() {
+      const style = theme.style || "classic";
+      const accentA = theme.accentA ?? blueLight;
+      const accentB = theme.accentB ?? orangeLight;
+      const accentC = theme.accentC ?? trim;
+      const brightA = new THREE.MeshStandardMaterial({ color: accentA, emissive: accentA, emissiveIntensity: mobilePerf ? 0.42 : 0.78, roughness: 0.28, metalness: 0.12 });
+      const brightB = new THREE.MeshStandardMaterial({ color: accentB, emissive: accentB, emissiveIntensity: mobilePerf ? 0.42 : 0.78, roughness: 0.28, metalness: 0.12 });
+      const brightC = new THREE.MeshStandardMaterial({ color: accentC, emissive: accentC, emissiveIntensity: mobilePerf ? 0.28 : 0.58, roughness: 0.34, metalness: 0.08 });
+      const flatA = new THREE.MeshBasicMaterial({ color: accentA, transparent: true, opacity: 0.84, side: THREE.DoubleSide });
+      const flatB = new THREE.MeshBasicMaterial({ color: accentB, transparent: true, opacity: 0.84, side: THREE.DoubleSide });
+      const count = mobilePerf ? 3 : 6;
+
+      if (style === "neon") {
+        const ringGeom = new THREE.TorusGeometry(3.0, 0.16, mobilePerf ? 8 : 12, mobilePerf ? 20 : 36);
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < count; i++) {
+            const x = -arena.w / 2 + (i + 0.5) * (arena.w / count);
+            const ring = new THREE.Mesh(ringGeom, i % 2 ? brightA : brightB);
+            ring.position.set(x, 9.2 + (i % 2) * 1.2, side * (arena.l / 2 + 14.3));
+            ring.rotation.x = Math.PI * 0.5;
+            ring.scale.set(1.0, 0.72, 1.0);
+            ring.castShadow = false;
+            world.add(ring);
+            propBox(0.22, 0.22, 7.0, x, 4.2, side * (arena.l / 2 + 4.8), i % 2 ? brightB : brightA);
+          }
+        }
+        if (!mobilePerf) {
+          for (const x of [-arena.w / 2 - 7, arena.w / 2 + 7]) {
+            propBox(0.32, 0.32, arena.l * 0.82, x, 2.4, 0, brightA);
+            propBox(0.32, 0.32, arena.l * 0.82, x + Math.sign(x) * 1.5, 3.2, 0, brightB);
+          }
+        }
+      } else if (style === "sunset") {
+        const palmMat = new THREE.MeshStandardMaterial({ color: 0x6b3517, roughness: 0.78 });
+        const leafMat = new THREE.MeshBasicMaterial({ color: 0xffc857, transparent: true, opacity: 0.78, side: THREE.DoubleSide });
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < count; i++) {
+            const x = -arena.w / 2 + (i + 0.5) * (arena.w / count);
+            cyl(0.24, 6.4, x, 3.2, side * (arena.l / 2 + 31.5), palmMat, 7);
+            for (let k = 0; k < 4; k++) {
+              const leaf = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 0.62), leafMat.clone());
+              leaf.material.color.setHex(k % 2 ? accentB : accentC);
+              leaf.position.set(x, 6.7, side * (arena.l / 2 + 31.5));
+              leaf.rotation.y = k * Math.PI * 0.5;
+              leaf.rotation.z = 0.28;
+              world.add(leaf);
+            }
+            propBox(5.2, 0.5, 0.46, x, 11.4, side * (arena.l / 2 + 18.5), i % 2 ? brightB : brightC);
+          }
+        }
+        propBox(arena.w * 0.72, 0.46, 0.7, 0, 18.6, -arena.l / 2 - 19.8, brightB);
+        propBox(arena.w * 0.72, 0.46, 0.7, 0, 18.6, arena.l / 2 + 19.8, brightC);
+      } else if (style === "storm") {
+        const cloudMat = new THREE.MeshStandardMaterial({ color: 0x102c45, emissive: 0x0ea5e9, emissiveIntensity: mobilePerf ? 0.10 : 0.18, transparent: true, opacity: 0.84, roughness: 0.62 });
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < count; i++) {
+            const x = -arena.w / 2 + (i + 0.5) * (arena.w / count);
+            propBox(7.2, 0.7, 2.4, x, 20.5 + (i % 2) * 1.1, side * (arena.l / 2 + 16.8), cloudMat);
+            propBox(0.38, 5.8, 0.38, x, 15.5, side * (arena.l / 2 + 15.8), i % 2 ? brightA : brightC);
+            const pts = [
+              new THREE.Vector3(x - 0.8, 19.7, side * (arena.l / 2 + 15.2)),
+              new THREE.Vector3(x + 0.35, 17.7, side * (arena.l / 2 + 15.2)),
+              new THREE.Vector3(x - 0.15, 17.7, side * (arena.l / 2 + 15.2)),
+              new THREE.Vector3(x + 0.85, 15.2, side * (arena.l / 2 + 15.2))
+            ];
+            const bolt = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: i % 2 ? accentC : accentA, transparent: true, opacity: 0.82 }));
+            world.add(bolt);
+          }
+        }
+      } else {
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < count; i++) {
+            const x = -arena.w / 2 + (i + 0.5) * (arena.w / count);
+            const pennant = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.5), (i % 2 ? flatA : flatB).clone());
+            pennant.position.set(x, 14.8, side * (arena.l / 2 + 12.7));
+            pennant.rotation.y = side < 0 ? 0 : Math.PI;
+            world.add(pennant);
+          }
+        }
+      }
+    }
+    addThemeIdentityProps();
 
     if (!mobilePerf) {
       const boardMat = new THREE.MeshStandardMaterial({ color: 0x050814, emissive: 0x0ea5e9, emissiveIntensity: 0.26, roughness: 0.32 });
