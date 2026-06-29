@@ -25,15 +25,16 @@ const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
-  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"),
+  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), chatScope: $("#chat-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
-  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"),
+  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), pauseOverlay: $("#pause-overlay"),
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
   mobileActionPad: $("#mobile-action-pad"),
   mobileBoostButton: document.querySelector('[data-action="boost"]'),
+  chatPanel: $("#chat-panel"), chatMessages: $("#chat-messages"), chatForm: $("#chat-form"), chatInput: $("#chat-input"), chatMute: $("#chat-mute"), chatGameTab: $("#chat-game-tab"), chatTeamTab: $("#chat-team-tab"),
   vehiclePreview: $("#vehicle-preview"), vehiclePreviewName: $("#vehicle-preview-name"), vehiclePreviewDesc: $("#vehicle-preview-desc")
 };
 
@@ -197,7 +198,7 @@ const SFX = (() => {
 })();
 
 const canvas = $("#game");
-let initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getDatabase, ref, get, set, update, onValue, remove, onDisconnect, serverTimestamp;
+let initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp;
 let firebaseBootPromise = null;
 let firebaseBootDone = false;
 let firebaseBootError = null;
@@ -219,7 +220,12 @@ let hostRaf = 0;
 let unsubLobby = null;
 let unsubInputs = null;
 let unsubState = null;
+let unsubChat = null;
 let inputTimer = 0;
+let currentChat = {};
+let chatChannel = localStorage.getItem("rlcss_chat_channel") || "game";
+let chatMuted = localStorage.getItem("rlcss_chat_muted") === "1";
+let chatRenderKey = "";
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
 const bindings = defaultBindings();
@@ -280,7 +286,7 @@ async function bootFirebase() {
     ]), 12000, "Loading Firebase SDK");
     ({ initializeApp } = appMod);
     ({ getAuth, signInAnonymously, onAuthStateChanged } = authMod);
-    ({ getDatabase, ref, get, set, update, onValue, remove, onDisconnect, serverTimestamp } = dbMod);
+    ({ getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp } = dbMod);
     const app = initializeApp(FIREBASE_CONFIG);
     auth = getAuth(app);
     db = getDatabase(app);
@@ -360,7 +366,8 @@ function currentSoloMetaPatch() {
     theme: ui.theme?.value || DEFAULT_META.theme,
     teamSize: Number(ui.teamSize?.value || DEFAULT_META.teamSize),
     difficulty: ui.difficulty?.value || DEFAULT_META.difficulty,
-    playstyle: ui.playstyle?.value || DEFAULT_META.playstyle
+    playstyle: ui.playstyle?.value || DEFAULT_META.playstyle,
+    chatScope: ui.chatScope?.value || DEFAULT_META.chatScope
   };
 }
 
@@ -471,7 +478,8 @@ function startSinglePlayer() {
       local: true
     }
   };
-  currentLobby = { meta: currentMeta, players: currentPlayers, inputs: {}, state: null };
+  currentChat = {};
+  currentLobby = { meta: currentMeta, players: currentPlayers, inputs: {}, state: null, chat: currentChat };
   latestState = null;
   latestInputs = { [singlePlayerId]: localInput() };
   hostSim = null;
@@ -541,6 +549,7 @@ async function enterLobby(code) {
   });
   unsubInputs = onValue(lobbyRef(code, "inputs"), snap => { latestInputs = snap.val() || {}; });
   unsubState = onValue(lobbyRef(code, "state"), snap => { if (snap.exists()) latestState = snap.val(); });
+  unsubChat = onValue(lobbyRef(code, "chat"), snap => { currentChat = snap.val() || {}; renderChat(); });
   clearInterval(inputTimer);
   inputTimer = setInterval(sendInput, 33);
 }
@@ -549,7 +558,8 @@ function cleanupLobbyListeners() {
   if (typeof unsubLobby === "function") unsubLobby();
   if (typeof unsubInputs === "function") unsubInputs();
   if (typeof unsubState === "function") unsubState();
-  unsubLobby = unsubInputs = unsubState = null;
+  if (typeof unsubChat === "function") unsubChat();
+  unsubLobby = unsubInputs = unsubState = unsubChat = null;
   if (inputTimer) clearInterval(inputTimer);
   inputTimer = 0;
   stopHostLoop();
@@ -571,6 +581,7 @@ function renderLobby() {
   ui.teamSize.value = String(currentMeta.teamSize);
   ui.difficulty.value = currentMeta.difficulty;
   ui.playstyle.value = currentMeta.playstyle;
+  if (ui.chatScope) ui.chatScope.value = currentMeta.chatScope || DEFAULT_META.chatScope;
   ui.team.value = local.team || "blue";
   ui.role.value = local.role || "midfield";
   if (ui.vehicle) ui.vehicle.value = (VEHICLE_CONFIGS[local.model] ? local.model : "default");
@@ -578,27 +589,30 @@ function renderLobby() {
   ui.ready.classList.toggle("not-ready", !isSinglePlayer && !!local.ready);
   ui.ready.textContent = isSinglePlayer ? "Start Match" : (local.ready ? "Unready" : "Ready");
   ui.mode.disabled = ui.teamSize.disabled = ui.difficulty.disabled = ui.playstyle.disabled = !isHost || currentMeta.status !== "waiting";
+  if (ui.chatScope) ui.chatScope.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.theme) ui.theme.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.vehicle) ui.vehicle.disabled = currentMeta.status !== "waiting";
   ui.copy.disabled = isSinglePlayer;
   ui.copy.textContent = isSinglePlayer ? "Solo" : "Copy Code";
   const maxHumans = maxHumansFor(currentMeta.mode, currentMeta.teamSize);
   const humanCount = Object.keys(currentPlayers).length;
+  const chatCopy = (currentMeta.chatScope || "all") === "team" ? "Game chat: same-team" : "Game chat: everyone";
   ui.maxHumans.textContent = isSinglePlayer
-    ? `Solo mode · ${themeLabel(currentMeta.theme)} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`
-    : `Lobby theme: ${themeLabel(currentMeta.theme)} · Max humans: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
+    ? `Solo mode · ${themeLabel(currentMeta.theme)} · ${chatCopy} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`
+    : `Lobby theme: ${themeLabel(currentMeta.theme)} · ${chatCopy} · Max humans: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
   const allReady = humanCount > 0 && Object.values(currentPlayers).every(p => p.ready);
   if (currentMeta.status === "waiting") {
     ui.lobbyStatus.textContent = isSinglePlayer
       ? "Solo setup: configure teams, modes and AI, then start."
       : (allReady && humanCount <= maxHumans ? "Everyone is ready — starting…" : "Waiting for players to ready up.");
   } else if (currentMeta.status === "running") {
-    ui.lobbyStatus.textContent = "Match in progress.";
+    ui.lobbyStatus.textContent = currentMeta.paused ? "Match paused by host." : "Match in progress.";
   } else {
     ui.lobbyStatus.textContent = currentMeta.status || "Lobby";
   }
   renderTeamList("blue", ui.blueList);
   renderTeamList("orange", ui.orangeList);
+  renderChat();
 }
 
 function renderTeamList(team, root) {
@@ -682,6 +696,13 @@ function updateGameVisibility() {
   document.body.classList.toggle("game-running", !!running);
   ui.hud.classList.toggle("hidden", !running);
   ui.leaveGame.classList.toggle("hidden", !running);
+  const isHostPlayer = running && (isSinglePlayer || currentMeta?.hostId === activePlayerId());
+  if (ui.pauseGame) {
+    ui.pauseGame.classList.toggle("hidden", !isHostPlayer);
+    ui.pauseGame.textContent = currentMeta?.paused ? "Resume" : "Pause";
+  }
+  if (ui.pauseOverlay) ui.pauseOverlay.classList.toggle("hidden", !running || !currentMeta?.paused);
+  if (ui.chatPanel) ui.chatPanel.classList.toggle("hidden", !running);
   ui.boostLabel.classList.toggle("hidden", !running);
   ui.boostBox.classList.toggle("hidden", !running);
   ui.controlsHint.classList.toggle("hidden", !running || isPhonePortrait());
@@ -712,6 +733,10 @@ function startHostLoop() {
     if (!hostSim || !currentMeta || currentMeta.status !== "running" || (!isSinglePlayer && currentMeta.hostId !== activePlayerId())) return;
     const dt = Math.min(0.08, (now - last) / 1000);
     last = now;
+    if (currentMeta.paused) {
+      latestState = hostSim?.state ? compactState(hostSim.state) : latestState;
+      return;
+    }
     acc += dt;
     let shouldWrite = false;
     let steps = 0;
@@ -755,13 +780,16 @@ async function leaveToMenu(message = "") {
   cleanupLobbyListeners();
   isSinglePlayer = false;
   singlePlayerId = null;
-  lobbyCode = null; currentLobby = null; currentMeta = null; currentPlayers = {}; latestState = null; latestInputs = {};
+  lobbyCode = null; currentLobby = null; currentMeta = null; currentPlayers = {}; currentChat = {}; latestState = null; latestInputs = {};
   ui.lobby.classList.remove("solo");
   document.body.classList.remove("game-running");
   ui.setup.classList.remove("hidden");
   ui.lobby.classList.add("hidden");
   ui.hud.classList.add("hidden");
   ui.leaveGame.classList.add("hidden");
+  if (ui.pauseGame) ui.pauseGame.classList.add("hidden");
+  if (ui.pauseOverlay) ui.pauseOverlay.classList.add("hidden");
+  if (ui.chatPanel) ui.chatPanel.classList.add("hidden");
   ui.boostLabel.classList.add("hidden");
   ui.boostBox.classList.add("hidden");
   ui.controlsHint.classList.add("hidden");
@@ -785,9 +813,94 @@ function localInput() {
 
 async function sendInput() {
   if (isSinglePlayer) return;
-  if (!lobbyCode || !uid || !db || !currentMeta || currentMeta.status !== "running") return;
+  if (!lobbyCode || !uid || !db || !currentMeta || currentMeta.status !== "running" || currentMeta.paused) return;
   const inp = localInput();
   await set(lobbyRef(lobbyCode, `inputs/${uid}`), { ...inp, t: Date.now() }).catch(() => {});
+}
+
+
+function canLocalHostControl() {
+  return !!currentMeta && (isSinglePlayer || currentMeta.hostId === activePlayerId());
+}
+
+async function togglePause() {
+  if (!currentMeta || currentMeta.status !== "running" || !canLocalHostControl()) return;
+  const nextPaused = !currentMeta.paused;
+  SFX.ui(nextPaused ? 360 : 720);
+  if (isSinglePlayer) {
+    currentMeta = serialiseMeta({ ...currentMeta, paused: nextPaused, pausedBy: nextPaused ? activePlayerId() : null, updatedAt: Date.now() });
+    currentLobby = { ...(currentLobby || {}), meta: currentMeta, players: currentPlayers, state: latestState, chat: currentChat };
+    updateGameVisibility();
+    renderChat();
+    return;
+  }
+  await update(lobbyRef(lobbyCode, "meta"), { paused: nextPaused, pausedBy: nextPaused ? activePlayerId() : null, updatedAt: serverTimestamp() });
+}
+
+function cleanChatText(text) {
+  return String(text || "").replace(/\s+/g, " ").trim().slice(0, 140);
+}
+
+function visibleChatMessages() {
+  const local = currentPlayers?.[activePlayerId()] || {};
+  const localTeam = local.team || "blue";
+  const scope = currentMeta?.chatScope || "all";
+  return Object.entries(currentChat || {})
+    .map(([id, msg]) => ({ id, ...(msg || {}) }))
+    .filter(msg => {
+      const channel = msg.channel === "team" ? "team" : "game";
+      const team = msg.team === "orange" ? "orange" : "blue";
+      if (channel === "team") return team === localTeam;
+      if (scope === "team") return team === localTeam;
+      return true;
+    })
+    .sort((a, b) => Number(a.clientTime || a.createdAt || 0) - Number(b.clientTime || b.createdAt || 0))
+    .slice(-50);
+}
+
+function renderChat() {
+  if (!ui.chatPanel || !ui.chatMessages) return;
+  ui.chatPanel.classList.toggle("chat-muted", chatMuted);
+  if (ui.chatMute) ui.chatMute.textContent = chatMuted ? "Unmute" : "Mute";
+  if (ui.chatGameTab) ui.chatGameTab.classList.toggle("active", chatChannel === "game");
+  if (ui.chatTeamTab) ui.chatTeamTab.classList.toggle("active", chatChannel === "team");
+  if (ui.chatInput) ui.chatInput.placeholder = chatChannel === "team" ? "Team message…" : ((currentMeta?.chatScope || "all") === "team" ? "Game message to your team…" : "Game message…");
+  const messages = visibleChatMessages();
+  const localTeam = currentPlayers?.[activePlayerId()]?.team || "blue";
+  const key = `${chatMuted}:${chatChannel}:${currentMeta?.chatScope || "all"}:${localTeam}:${messages.map(m => `${m.id}:${m.text}`).join("|")}`;
+  if (key === chatRenderKey) return;
+  chatRenderKey = key;
+  ui.chatMessages.innerHTML = messages.map(msg => {
+    const team = msg.team === "orange" ? "orange" : "blue";
+    const channel = msg.channel === "team" ? "TEAM" : "GAME";
+    const name = escapeHtml(msg.name || "Player");
+    const text = escapeHtml(msg.text || "");
+    return `<div class="chat-message ${team}"><div class="chat-meta"><span>${name}</span><span>${channel}</span></div><div class="chat-text">${text}</div></div>`;
+  }).join("");
+  ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight;
+}
+
+async function sendChatMessage(text) {
+  const clean = cleanChatText(text);
+  if (!clean || !currentMeta || !lobbyCode) return;
+  const localId = activePlayerId();
+  const local = currentPlayers?.[localId] || {};
+  const payload = {
+    from: localId,
+    name: sanitizeName(local.name || playerName || ui.name?.value),
+    team: local.team === "orange" ? "orange" : "blue",
+    channel: chatChannel === "team" ? "team" : "game",
+    text: clean,
+    clientTime: Date.now()
+  };
+  if (isSinglePlayer || !db || !uid) {
+    const id = `local_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    currentChat = { ...(currentChat || {}), [id]: payload };
+    renderChat();
+    return;
+  }
+  const msgRef = push(lobbyRef(lobbyCode, "chat"));
+  await set(msgRef, { ...payload, createdAt: serverTimestamp() });
 }
 
 function safeUi(handler, label) {
@@ -816,6 +929,7 @@ ui.joinCode.addEventListener("input", () => ui.joinCode.value = ui.joinCode.valu
 ui.copy.addEventListener("click", () => { if (!isSinglePlayer) navigator.clipboard?.writeText(lobbyCode || ""); });
 ui.leaveLobby.addEventListener("click", safeUi(() => leaveToMenu("Left lobby."), "Leave lobby"));
 ui.leaveGame.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
+if (ui.pauseGame) ui.pauseGame.addEventListener("click", safeUi(togglePause, "Toggle pause"));
 ui.ready.addEventListener("click", () => {
   if (isSinglePlayer) startSoloMatch();
   else updateLocalPlayer({ ready: !(currentPlayers[activePlayerId()]?.ready) });
@@ -828,6 +942,24 @@ if (ui.theme) ui.theme.addEventListener("change", () => updateMetaPatch({ theme:
 ui.teamSize.addEventListener("change", () => updateMetaPatch({ teamSize: Number(ui.teamSize.value) }));
 ui.difficulty.addEventListener("change", () => updateMetaPatch({ difficulty: ui.difficulty.value }));
 ui.playstyle.addEventListener("change", () => updateMetaPatch({ playstyle: ui.playstyle.value }));
+if (ui.chatScope) ui.chatScope.addEventListener("change", () => updateMetaPatch({ chatScope: ui.chatScope.value }));
+if (ui.chatForm) ui.chatForm.addEventListener("submit", safeUi(async e => {
+  e.preventDefault();
+  const text = ui.chatInput?.value || "";
+  if (ui.chatInput) ui.chatInput.value = "";
+  await sendChatMessage(text);
+}, "Send chat"));
+if (ui.chatMute) ui.chatMute.addEventListener("click", () => {
+  chatMuted = !chatMuted;
+  localStorage.setItem("rlcss_chat_muted", chatMuted ? "1" : "0");
+  renderChat();
+});
+document.querySelectorAll("[data-chat-channel]").forEach(btn => btn.addEventListener("click", () => {
+  chatChannel = btn.dataset.chatChannel === "team" ? "team" : "game";
+  localStorage.setItem("rlcss_chat_channel", chatChannel);
+  renderChat();
+  ui.chatInput?.focus();
+}));
 
 [ui.blueList, ui.orangeList].forEach(root => {
   root.addEventListener("change", e => {
@@ -843,7 +975,13 @@ ui.playstyle.addEventListener("change", () => updateMetaPatch({ playstyle: ui.pl
 });
 
 window.addEventListener("keydown", e => {
+  const tag = (e.target?.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return;
   SFX.resume();
+  if (e.code === "KeyP") {
+    togglePause();
+    return;
+  }
   keys[e.code] = true;
   if (e.code === bindings.cam && !camKeyLatch) {
     camKeyLatch = true;
@@ -854,6 +992,8 @@ window.addEventListener("keydown", e => {
   }
 });
 window.addEventListener("keyup", e => {
+  const tag = (e.target?.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return;
   keys[e.code] = false;
   if (e.code === bindings.cam) camKeyLatch = false;
 });
@@ -1023,7 +1163,7 @@ scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xffffff, 0.9);
 sun.position.set(40, 75, 35);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(1024, 1024);
 scene.add(sun);
 
 function desiredPixelRatio() {
@@ -1031,7 +1171,7 @@ function desiredPixelRatio() {
   // V24 phone crispness: V23's 1.15 cap looked blocky on modern phones.
   // Keep desktop fully crisp, and give phones a sharper buffer while still
   // avoiding the 2x/3x DPR cost that caused earlier mobile stutter.
-  return isPhonePortrait() ? Math.min(Math.max(dpr, 1.35), 1.65) : Math.min(dpr, 2);
+  return isPhonePortrait() ? Math.min(Math.max(dpr, 1.35), 1.65) : Math.min(dpr, 1.45);
 }
 
 function applyRenderPerformanceMode() {
@@ -1050,15 +1190,23 @@ const carMeshes = new Map();
 const boostPadMeshes = new Map();
 const nameSprites = new Map();
 
-function resizeRenderer() {
+let lastRenderSize = { w: 0, h: 0, dpr: 0, mobile: null };
+function resizeRenderer(force = false) {
   const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = desiredPixelRatio();
+  const mobile = isPhonePortrait();
+  const w = Math.max(1, Math.round(rect.width));
+  const h = Math.max(1, Math.round(rect.height));
+  if (!force && lastRenderSize.w === w && lastRenderSize.h === h && lastRenderSize.dpr === dpr && lastRenderSize.mobile === mobile) return;
+  lastRenderSize = { w, h, dpr, mobile };
   applyRenderPerformanceMode();
-  renderer.setSize(rect.width, rect.height, false);
-  camera.aspect = rect.width / Math.max(1, rect.height);
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / Math.max(1, h);
   camera.updateProjectionMatrix();
 }
 window.addEventListener("resize", resizeRenderer);
-resizeRenderer();
+resizeRenderer(true);
 
 function themeForState(state) {
   return STADIUM_THEMES[state?.theme] || STADIUM_THEMES.v10;
@@ -1131,7 +1279,7 @@ function makeFieldTexture(mode, arena, theme) {
   let seed = (arena.w * 31 + arena.l * 17 + (base[0] << 8) + base[1]) >>> 0;
   const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
   ctx.globalAlpha = mode === "ice" ? 0.12 : 0.18;
-  for (let i = 0; i < (isPhonePortrait() ? 1100 : 2200); i++) {
+  for (let i = 0; i < (isPhonePortrait() ? 1100 : 1200); i++) {
     const x = rand() * texSize, y = rand() * texSize;
     ctx.fillStyle = rand() > 0.5 ? "#ffffff" : "#000000";
     ctx.fillRect(x, y, 1, 1);
@@ -1189,7 +1337,9 @@ function buildArena(state) {
   function box(w, h, d, x, y, z, mat = wallMat) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(x, y, z);
-    m.castShadow = true; m.receiveShadow = true;
+    // V28 performance: arena boxes receive shadows, but do not cast.
+    // Cars/ball keep shadows; hundreds of static box shadow-casters were the main PC cost.
+    m.castShadow = false; m.receiveShadow = true;
     world.add(m);
     return m;
   }
@@ -1233,7 +1383,7 @@ function buildArena(state) {
   }
 
   function addExteriorProps() {
-    const propShadow = !mobilePerf;
+    const propShadow = false;
     const trim = theme.trim ?? 0xffffff;
     const blueLight = theme.lightBlue ?? 0x12b9ff;
     const orangeLight = theme.lightOrange ?? 0xff8a1f;
@@ -1259,7 +1409,7 @@ function buildArena(state) {
       return m;
     }
 
-    const adCount = mobilePerf ? 6 : 12;
+    const adCount = mobilePerf ? 6 : 8;
     for (const side of [-1, 1]) {
       for (let i = 0; i < adCount; i++) {
         const x = -arena.w / 2 + (i + 0.5) * (arena.w / adCount);
@@ -1267,7 +1417,7 @@ function buildArena(state) {
         propBox(Math.max(4.6, arena.w / adCount - 1.2), 1.35, 0.28, x, 1.0, side * (arena.l / 2 + 2.2), mat);
       }
     }
-    const endCount = mobilePerf ? 3 : 6;
+    const endCount = mobilePerf ? 3 : 4;
     for (const side of [-1, 1]) {
       for (let i = 0; i < endCount; i++) {
         const x = (i - (endCount - 1) / 2) * (arena.goalW / Math.max(1, endCount - 1));
@@ -1291,16 +1441,13 @@ function buildArena(state) {
         cyl(0.38, 19, x, 9.5, z, steelMat, mobilePerf ? 8 : 14);
         const bank = propBox(5.8, 1.1, 1.0, x, 19.4, z, adWhite, Math.atan2(-x, -z));
         bank.castShadow = false;
-        if (!mobilePerf) {
-          const lamp = new THREE.PointLight(trim, 0.75, Math.max(arena.w, arena.l) * 0.8);
-          lamp.position.set(x, 18.4, z);
-          world.add(lamp);
-        }
+        // V28 performance: decorative point lights are expensive on desktop GPUs;
+        // the emissive lamp meshes keep the same look at a fraction of the cost.
       }
     }
 
     // Roof trusses / flags along the long sides. Very low geometry, high stadium payoff.
-    const trussCount = mobilePerf ? 4 : 8;
+    const trussCount = mobilePerf ? 4 : 5;
     for (const side of [-1, 1]) {
       for (let i = 0; i < trussCount; i++) {
         const x = -arena.w / 2 + (i + 0.5) * (arena.w / trussCount);
@@ -1331,7 +1478,7 @@ function buildArena(state) {
     propBox(4.6, 0.12, arena.l + 42,  arena.w / 2 + 25.5, 0.08, 0, roadMat);
 
     // Side concourse blocks and glass suites behind the stands.
-    const suiteCount = mobilePerf ? 4 : 8;
+    const suiteCount = mobilePerf ? 4 : 5;
     for (const side of [-1, 1]) {
       propBox(arena.w + 32, 1.2, 7.0, 0, 0.7, side * (arena.l / 2 + 26.5), concourseMat);
       for (let i = 0; i < suiteCount; i++) {
@@ -1360,7 +1507,7 @@ function buildArena(state) {
     }
 
     // Sponsor totems / wayfinding signs visible on phones too.
-    const signCount = mobilePerf ? 4 : 10;
+    const signCount = mobilePerf ? 4 : 6;
     for (let i = 0; i < signCount; i++) {
       const side = i % 2 ? 1 : -1;
       const t = signCount === 1 ? 0.5 : i / (signCount - 1);
@@ -1371,7 +1518,7 @@ function buildArena(state) {
     }
 
     // Hanging banners across the end approaches; flat planes are cheap and add depth.
-    const bannerCount = mobilePerf ? 3 : 6;
+    const bannerCount = mobilePerf ? 3 : 4;
     for (const side of [-1, 1]) {
       for (let i = 0; i < bannerCount; i++) {
         const x = (i - (bannerCount - 1) / 2) * (arena.w / Math.max(1, bannerCount));
@@ -1384,7 +1531,7 @@ function buildArena(state) {
     }
 
     // Small parked display cars outside the side roads on desktop; very sparse on phone.
-    const parkedCount = mobilePerf ? 2 : 8;
+    const parkedCount = mobilePerf ? 2 : 4;
     const parkedMatA = new THREE.MeshStandardMaterial({ color: blueLight, roughness: 0.42, metalness: 0.16, emissive: blueLight, emissiveIntensity: 0.08 });
     const parkedMatB = new THREE.MeshStandardMaterial({ color: orangeLight, roughness: 0.42, metalness: 0.16, emissive: orangeLight, emissiveIntensity: 0.08 });
     for (let i = 0; i < parkedCount; i++) {
@@ -1407,7 +1554,7 @@ function buildArena(state) {
       const brightC = new THREE.MeshStandardMaterial({ color: accentC, emissive: accentC, emissiveIntensity: mobilePerf ? 0.28 : 0.58, roughness: 0.34, metalness: 0.08 });
       const flatA = new THREE.MeshBasicMaterial({ color: accentA, transparent: true, opacity: 0.84, side: THREE.DoubleSide });
       const flatB = new THREE.MeshBasicMaterial({ color: accentB, transparent: true, opacity: 0.84, side: THREE.DoubleSide });
-      const count = mobilePerf ? 3 : 6;
+      const count = mobilePerf ? 3 : 4;
 
       if (style === "neon") {
         const ringGeom = new THREE.TorusGeometry(3.0, 0.16, mobilePerf ? 8 : 12, mobilePerf ? 20 : 36);
@@ -1520,19 +1667,9 @@ function buildArena(state) {
         world.add(ribbon);
       }
     }
-    if (!mobilePerf) {
-      const light = new THREE.PointLight(side < 0 ? blueLight : orangeLight, 1.25, arena.w * 1.4);
-      light.position.set(0, 18, side * (arena.l / 2 + 8));
-      world.add(light);
-    }
+    // V28 performance: emissive end trims replace dynamic point lights.
   }
-  for (const x of [-arena.w / 2 - 13, arena.w / 2 + 13]) {
-    if (!mobilePerf) {
-      const light = new THREE.PointLight(theme.trim ?? 0xffffff, 0.82, arena.l * 0.9);
-      light.position.set(x, 24, 0);
-      world.add(light);
-    }
-  }
+  // V28 performance: no extra side point lights; ambient + sun + emissive props are cheaper.
 
   addExteriorProps();
 
@@ -1563,9 +1700,9 @@ function createBoostPadMesh(pad) {
   ring.position.y = 0.26;
   const orb = new THREE.Mesh(new THREE.SphereGeometry(0.62, 18, 12), new THREE.MeshBasicMaterial({ color: 0xffd55a }));
   orb.position.y = 1.02;
-  const halo = isPhonePortrait() ? new THREE.Object3D() : new THREE.PointLight(0xffa000, 0.55, 9);
+  // V28 performance: boost pads glow with emissive meshes instead of one dynamic light per pad.
+  const halo = new THREE.Object3D();
   halo.position.y = 1.2;
-  if (isPhonePortrait()) halo.intensity = 0;
   g.add(disk, ring, orb, halo);
   g.position.set(pad.x, 0, pad.z);
   g.userData = { orb, ring, disk, halo };
@@ -1664,6 +1801,26 @@ function createCarMesh(car, state) {
     g.add(bed);
   }
 
+  if (modelKey === "muscle") {
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0xffffff, emissiveIntensity: 0.12, roughness: 0.30 });
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.18, 0.055, bodyD * 0.92), stripeMat);
+    stripe.position.set(0, bodyH + 0.055, 0);
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.78, 0.12, 0.22), stripeMat);
+    spoiler.position.set(0, bodyH + 0.34, -bodyD * 0.48);
+    g.add(stripe, spoiler);
+  }
+
+  if (modelKey === "van") {
+    const rackMat = new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.38, metalness: 0.46 });
+    const rackA = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.74, 0.08, 0.12), rackMat);
+    const rackB = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.74, 0.08, 0.12), rackMat);
+    rackA.position.set(0, cabinY + cabinH * 0.58, -bodyD * 0.16);
+    rackB.position.set(0, cabinY + cabinH * 0.58, bodyD * 0.18);
+    const rearPanel = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.72, bodyH * 0.42, 0.08), new THREE.MeshStandardMaterial({ color: 0x0b1220, roughness: 0.45, metalness: 0.12 }));
+    rearPanel.position.set(0, bodyH * 0.78, -bodyD * 0.51);
+    g.add(rackA, rackB, rearPanel);
+  }
+
   const flameGeo = new THREE.ConeGeometry(0.58, 2.2, 14).rotateX(-Math.PI / 2);
   const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: 0xff8a00, transparent: true, opacity: 0.88 }));
   flame.position.set(0, Math.max(0.44, bodyH * 0.52), -bodyD / 2 - 0.58);
@@ -1747,6 +1904,26 @@ function createPreviewVehicleMesh(modelKey) {
     bed.position.set(0, bodyH + 0.18, -bodyD * 0.22);
     g.add(bed);
   }
+  if (modelKey === "muscle") {
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0xffffff, emissiveIntensity: 0.12, roughness: 0.30 });
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.18, 0.055, bodyD * 0.92), stripeMat);
+    stripe.position.set(0, bodyH + 0.055, 0);
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.78, 0.12, 0.22), stripeMat);
+    spoiler.position.set(0, bodyH + 0.34, -bodyD * 0.48);
+    g.add(stripe, spoiler);
+  }
+
+  if (modelKey === "van") {
+    const rackMat = new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.38, metalness: 0.46 });
+    const rackA = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.74, 0.08, 0.12), rackMat);
+    const rackB = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.74, 0.08, 0.12), rackMat);
+    rackA.position.set(0, cabinY + cabinH * 0.58, -bodyD * 0.16);
+    rackB.position.set(0, cabinY + cabinH * 0.58, bodyD * 0.18);
+    const rearPanel = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.72, bodyH * 0.42, 0.08), new THREE.MeshStandardMaterial({ color: 0x0b1220, roughness: 0.45, metalness: 0.12 }));
+    rearPanel.position.set(0, bodyH * 0.78, -bodyD * 0.51);
+    g.add(rackA, rackB, rearPanel);
+  }
+
   g.position.y = 0.05;
   g.rotation.y = Math.PI * 0.18;
   g.scale.setScalar(0.86);

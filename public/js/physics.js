@@ -218,6 +218,20 @@ export const VEHICLE_CONFIGS = {
     drive: 0.965, brake: 0.965, reverse: 0.98, steer: 0.94, grip: 1.025, driftGrip: 1.04, driftTurn: 0.95,
     maxSpeed: 0.985, boost: 0.985, aerial: 0.96, jump: 0.985, mass: 1.065, hit: 1.035,
     body: [2.55, 1.05, 4.05], cabin: [1.65, 1.0, 1.35], cabinOffset: [0, 1.35, -0.28], nose: true, wheelScale: 1.18
+  },
+  muscle: {
+    label: "Muscle GT",
+    description: "Stable straight-line power with a wider feel",
+    drive: 1.01, brake: 0.99, reverse: 0.98, steer: 0.965, grip: 1.015, driftGrip: 1.01, driftTurn: 0.985,
+    maxSpeed: 1.018, boost: 1.012, aerial: 0.985, jump: 0.995, mass: 1.035, hit: 1.018,
+    body: [2.48, 0.88, 4.28], cabin: [1.48, 0.66, 1.38], cabinOffset: [0, 1.08, -0.10], nose: true, wheelScale: 1.04
+  },
+  van: {
+    label: "Utility Van",
+    description: "Boxier body with grippy, predictable handling",
+    drive: 0.982, brake: 1.018, reverse: 0.99, steer: 0.985, grip: 1.035, driftGrip: 1.02, driftTurn: 0.975,
+    maxSpeed: 0.992, boost: 0.992, aerial: 0.965, jump: 0.985, mass: 1.055, hit: 1.026,
+    body: [2.38, 1.16, 3.92], cabin: [1.82, 0.94, 1.86], cabinOffset: [0, 1.42, 0.10], nose: false, wheelScale: 1.10
   }
 };
 
@@ -227,6 +241,8 @@ export const DEFAULT_META = {
   teamSize: 1,
   difficulty: "pro",
   playstyle: "balanced",
+  chatScope: "all",
+  paused: false,
   status: "waiting",
   matchLength: 300
 };
@@ -243,11 +259,11 @@ const GOAL_D = 8;
 const BALL_RADIUS = 1.85;
 // V26: a heavier-feeling ball, closer to the pre-multiplayer HTML-only game.
 // Max speed, bounce and car-hit lift are trimmed slightly so touches feel less floaty.
-const BALL_MAX_SPEED = 56;
-const BALL_GRAVITY = 38;
+const BALL_MAX_SPEED = 58;
+const BALL_GRAVITY = 39;
 const BALL_RESTITUTION = 0.70;
-const BALL_HEAVY_IMPULSE_SCALE = 0.90;
-const BALL_HEAVY_LIFT_SCALE = 0.84;
+const BALL_HEAVY_IMPULSE_SCALE = 0.95;
+const BALL_HEAVY_LIFT_SCALE = 0.78;
 const WALL_RESTITUTION = 0.78;
 const KICKOFF_COUNTDOWN_SECONDS = 5;
 
@@ -263,9 +279,12 @@ const BOOST_MAX = 100;
 const BOOST_DRAIN_GROUND = 35;
 const BOOST_DRAIN_AIR = 29;
 const BOOST_DRAIN_FLYING = 31;
-const DOUBLE_JUMP_VELOCITY = 16.8;
-const DOUBLE_JUMP_FORWARD_KICK = 5.8;
+const DOUBLE_JUMP_VELOCITY = 17.2;
+const DOUBLE_JUMP_FORWARD_KICK = 6.3;
 const MATCH_TICKS_PER_WRITE = 4;
+
+// V28: Rocket League-style feel pass. The numbers still preserve the V10 baseline,
+// but make standard handling more immediate, more predictable, and less floaty.
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleNorm = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -330,6 +349,8 @@ export function serialiseMeta(meta = {}) {
   if (!["rookie", "pro", "allstar"].includes(out.difficulty)) out.difficulty = "pro";
   if (!["balanced", "defensive", "aggressive", "chaotic"].includes(out.playstyle)) out.playstyle = "balanced";
   if (!STADIUM_THEMES[out.theme]) out.theme = "v10";
+  if (!["all", "team"].includes(out.chatScope)) out.chatScope = "all";
+  out.paused = !!out.paused;
   return out;
 }
 
@@ -346,10 +367,10 @@ export function sanitiseVehicleModel(model) {
 }
 
 function aiVehicleForSlot(team, i, role) {
-  if (role === "goalkeeper") return "truck";
-  if (role === "defence") return i % 2 ? "rally" : "default";
+  if (role === "goalkeeper") return i % 2 ? "van" : "truck";
+  if (role === "defence") return i % 2 ? "rally" : "van";
   if (role === "midfield") return i % 2 ? "sport" : "rally";
-  return team === "blue" ? (i % 2 ? "sport" : "default") : (i % 2 ? "rally" : "sport");
+  return team === "blue" ? (i % 3 === 0 ? "muscle" : i % 2 ? "sport" : "default") : (i % 3 === 0 ? "muscle" : i % 2 ? "rally" : "sport");
 }
 
 export function makeInitialState(meta, players = {}) {
@@ -684,11 +705,11 @@ function updateCar(car, input, state, cfg, dt) {
     // Standard mode keeps the exact V10 baseline constants; vehicle models only
     // apply tiny multipliers so the selected body has personality without changing
     // the core game balance.
-    const maxForward = (wantsBoost ? 50 : 35) * (state.mode === "ice" ? 1.05 : 1) * vehicle.maxSpeed;
-    const maxReverse = 16 * cfg.reverse * vehicle.maxSpeed;
-    const accel = 56 * cfg.drive * vehicle.drive;
-    const brake = 92 * cfg.brake * vehicle.brake;
-    const reverseAccel = 28 * cfg.reverse * vehicle.reverse;
+    const maxForward = (wantsBoost ? 55 : 39.5) * (state.mode === "ice" ? 1.05 : 1) * vehicle.maxSpeed;
+    const maxReverse = 16.5 * cfg.reverse * vehicle.maxSpeed;
+    const accel = 68 * cfg.drive * vehicle.drive;
+    const brake = 112 * cfg.brake * vehicle.brake;
+    const reverseAccel = 33 * cfg.reverse * vehicle.reverse;
 
     if (throttle > 0) {
       if (forwardSpeed < maxForward) driveAcc = accel * throttle;
@@ -702,16 +723,16 @@ function updateCar(car, input, state, cfg, dt) {
     if (wantsBoost) {
       car.boosting = true;
       car.boost = Math.max(0, car.boost - (state.mode === "flying" ? BOOST_DRAIN_FLYING : BOOST_DRAIN_GROUND) * dt);
-      car.vx += fwd.x * 62 * cfg.drive * vehicle.boost * dt;
-      car.vz += fwd.z * 62 * cfg.drive * vehicle.boost * dt;
+      car.vx += fwd.x * 72 * cfg.drive * vehicle.boost * dt;
+      car.vz += fwd.z * 72 * cfg.drive * vehicle.boost * dt;
     }
 
     // V25: powerslide engages at lower speed and has no post-release lockout,
     // so you can chain short drifts without waiting for a cooldown.
-    const driftActive = handbrake && speed > 3.8;
+    const driftActive = handbrake && speed > 3.4;
     car.drifting = driftActive;
-    const normalGrip = 18.0 * cfg.grip * vehicle.grip;
-    const driftGrip = 1.62 * cfg.driftGrip * vehicle.driftGrip;
+    const normalGrip = 24.0 * cfg.grip * vehicle.grip;
+    const driftGrip = 1.30 * cfg.driftGrip * vehicle.driftGrip;
     const grip = driftActive ? driftGrip : normalGrip;
     car.vx += right.x * (-sideSpeed * grip * dt);
     car.vz += right.z * (-sideSpeed * grip * dt);
@@ -733,15 +754,15 @@ function updateCar(car, input, state, cfg, dt) {
 
     const sign = forwardSpeed >= -1 ? 1 : -1;
     const speedFactor = clamp(speed / 24, 0.45, 1);
-    const baseTurn = (driftActive ? 6.05 * cfg.driftTurn * vehicle.driftTurn : 2.9) * cfg.steer * vehicle.steer * speedFactor;
+    const baseTurn = (driftActive ? 6.75 * cfg.driftTurn * vehicle.driftTurn : 3.28) * cfg.steer * vehicle.steer * speedFactor;
     const targetYawVel = steer * sign * baseTurn;
-    const yawSharpness = driftActive ? (state.mode === "ice" ? 3.0 : 4.9) : 9.0;
+    const yawSharpness = driftActive ? (state.mode === "ice" ? 3.1 : 5.85) : 11.6;
     car.yawVel = smooth(car.yawVel, targetYawVel, yawSharpness, dt);
     car.yaw += car.yawVel * dt;
     if (!driftActive) car.yawVel *= Math.pow(0.78, dt * 120);
 
     const newSpeed = Math.hypot(car.vx, car.vz);
-    const maxSpeed = (wantsBoost ? 53 : (forwardSpeed < -1 ? 18 * cfg.reverse : 37 * (state.mode === "ice" ? 1.04 : 1))) * vehicle.maxSpeed;
+    const maxSpeed = (wantsBoost ? 58 : (forwardSpeed < -1 ? 18.5 * cfg.reverse : 40.5 * (state.mode === "ice" ? 1.04 : 1))) * vehicle.maxSpeed;
     if (newSpeed > maxSpeed) {
       const s = maxSpeed / newSpeed;
       car.vx *= s; car.vz *= s;
@@ -751,7 +772,7 @@ function updateCar(car, input, state, cfg, dt) {
       car.grounded = false;
       car.onGround = false;
       car.doubleJumpUsed = false;
-      car.vy = (state.mode === "ice" ? 17.4 : 18.5) * cfg.jump * vehicle.jump;
+      car.vy = (state.mode === "ice" ? 17.6 : 18.9) * cfg.jump * vehicle.jump;
       car.jumpCooldown = 0.20;
       car.justJumped = true;
       car.jumpEventTick = state.tick;
@@ -768,16 +789,16 @@ function updateCar(car, input, state, cfg, dt) {
       car.jumpEventTick = state.tick;
       car.doubleJumpEventTick = state.tick;
     }
-    car.yaw += steer * 1.55 * cfg.steer * dt;
+    car.yaw += steer * 2.05 * cfg.steer * vehicle.aerial * dt;
     if (Math.abs(throttle) > 0.001) {
-      car.vx += fwd.x * throttle * 11 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
-      car.vz += fwd.z * throttle * 11 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
+      car.vx += fwd.x * throttle * 14.0 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
+      car.vz += fwd.z * throttle * 14.0 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
     }
     if (wantsBoost) {
       car.boosting = true;
       car.boost = Math.max(0, car.boost - (state.mode === "flying" ? BOOST_DRAIN_FLYING : BOOST_DRAIN_AIR) * dt);
-      car.vx += fwd.x * 48 * cfg.drive * vehicle.boost * dt;
-      car.vz += fwd.z * 48 * cfg.drive * vehicle.boost * dt;
+      car.vx += fwd.x * 57 * cfg.drive * vehicle.boost * dt;
+      car.vz += fwd.z * 57 * cfg.drive * vehicle.boost * dt;
     }
     car.vy -= GRAVITY * cfg.gravity * dt;
   }
@@ -1117,14 +1138,14 @@ function resolveCarBallOBB(car, b, state, cfg) {
   const relativeZ = b.vz - contactVz;
   const closing = -(relativeX * nx + relativeY * ny + relativeZ * nz);
   const speed = horizontalSpeed(car);
-  const frontBonus = clamp(fwd.x * nx + fwd.z * nz, -0.2, 1) * 5.5;
-  const jumpBonus = car.justJumped ? 7.0 : 0;
-  const impulse = (Math.max(0, closing * 1.18) + 4.4 + speed * 0.34 + frontBonus + jumpBonus) * vehicle.hit * BALL_HEAVY_IMPULSE_SCALE;
+  const frontBonus = clamp(fwd.x * nx + fwd.z * nz, -0.2, 1) * 6.2;
+  const jumpBonus = car.justJumped ? 7.4 : 0;
+  const impulse = (Math.max(0, closing * 1.18) + 4.0 + speed * 0.39 + frontBonus + jumpBonus) * vehicle.hit * BALL_HEAVY_IMPULSE_SCALE;
   b.vx += nx * impulse;
   b.vy += ny * impulse * BALL_HEAVY_LIFT_SCALE;
   b.vz += nz * impulse;
-  if (ny < 0.25) b.vy += clamp((speed * 0.095 + (car.justJumped ? 4.2 : 1.8)) * BALL_HEAVY_LIFT_SCALE, 1.2, 6.2);
-  if (car.boosting) { b.vx += fwd.x * 4.6; b.vz += fwd.z * 4.6; }
+  if (ny < 0.25) b.vy += clamp((speed * 0.082 + (car.justJumped ? 4.0 : 1.55)) * BALL_HEAVY_LIFT_SCALE, 1.0, 5.7);
+  if (car.boosting) { b.vx += fwd.x * 5.1; b.vz += fwd.z * 5.1; }
   const maxBallSpeed = BALL_MAX_SPEED * cfg.ballMax;
   const bs = Math.hypot(b.vx, b.vy, b.vz);
   if (bs > maxBallSpeed) { const s = maxBallSpeed / bs; b.vx *= s; b.vy *= s; b.vz *= s; }
