@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Pocket League</title>
+  <title>RLCSS</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -30,7 +30,7 @@
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel">
-      <h1>Pocket League</h1>
+      <h1>RLCSS</h1>
       <p class="muted">Start an instant solo match with AI, or host an online Firebase lobby. Online hosts create a code; friends join with the code; game starts once everyone is ready.</p>
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
@@ -138,17 +138,27 @@
   </main>
 
   <div id="mobile-controls" class="mobile-controls hidden" aria-hidden="true">
-    <div id="stick-zone" class="stick-zone">
-      <div class="stick-ring"><div id="stick-knob" class="stick-knob"></div></div>
-      <div class="stick-label">DRIVE</div>
+    <div class="mobile-control-grid">
+      <div class="mobile-control-zone mobile-stick-zone">
+        <div id="stick-zone" class="touch-stick" role="application" aria-label="Drive and steer">
+          <div class="stick-label stick-top">Drive</div>
+          <div class="stick-label stick-bottom">Reverse</div>
+          <div class="stick-label stick-left">Left</div>
+          <div class="stick-label stick-right">Right</div>
+          <div id="stick-knob" class="stick-knob">＋</div>
+        </div>
+      </div>
+      <div class="mobile-control-zone mobile-action-zone">
+        <div class="mobile-action-utility">
+          <button data-action="cam" class="touch-btn utility-touch" type="button">CAM</button>
+          <button data-action="reset" class="touch-btn utility-touch" type="button">RESET</button>
+        </div>
+        <button data-action="jump" class="touch-btn blue-touch jump-touch" type="button">JUMP</button>
+        <button data-action="drift" class="touch-btn drift-touch" type="button">DRIFT</button>
+        <button data-action="boost" class="touch-btn primary-touch boost-touch" type="button">BOOST</button>
+      </div>
     </div>
-    <div class="action-cluster">
-      <button data-action="boost" class="touch-btn boost">BOOST</button>
-      <button data-action="jump" class="touch-btn jump">JUMP</button>
-      <button data-action="drift" class="touch-btn drift">DRIFT</button>
-      <button data-action="cam" class="touch-btn small">CAM</button>
-      <button data-action="reset" class="touch-btn small">RESET</button>
-    </div>
+    <div class="mobile-help">Left thumb drives/steers · right thumb boosts, jumps and taps drift</div>
   </div>
 
   <script type="module" src="./js/app.js"></script>
