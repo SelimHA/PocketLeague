@@ -29,7 +29,7 @@ const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountAuthFields: $("#account-auth-fields"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), musicTrackSelect: $("#music-track-select"), previewMusic: $("#preview-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
@@ -270,14 +270,21 @@ const DEFAULT_GAME_SETTINGS = {
 const MUSIC_TRACKS = {
   nitro: { label: "Nitro Boost Dreams", src: "./songs/nitro-boost-dreams.mp3" },
   turbo: { label: "Turbo Boost Dreams", src: "./songs/turbo-boost-dreams.mp3" },
-  starlight: { label: "Boosting Through Starlight", src: "./songs/boosting-through-starlight.mp3" }
+  starlight: { label: "Boosting Through Starlight", src: "./songs/boosting-through-starlight.mp3" },
+  ignite: { label: "Boost Ignite", src: "./songs/boost-ignite.mp3" },
+  hearts: { label: "Nitro Hearts Racing", src: "./songs/nitro-hearts-racing.mp3" },
+  overdrive: { label: "Neon Overdrive", src: "./songs/neon-overdrive.wav" },
+  anthem2: { label: "Boost Mode Anthem 2", src: "./songs/boost-mode-anthem-2.mp3" },
+  anthem: { label: "Boost Mode Anthem", src: "./songs/boost-mode-anthem.wav" }
 };
-const MUSIC_ORDER = ["nitro", "turbo", "starlight"];
+const MUSIC_ORDER = ["nitro", "turbo", "starlight", "ignite", "hearts", "overdrive", "anthem2", "anthem"];
+const defaultTrackEnablement = () => Object.fromEntries(MUSIC_ORDER.map(key => [key, true]));
 const DEFAULT_AUDIO_SETTINGS = {
   gameVolume: 0.75,
   musicVolume: 0.45,
   musicEnabled: true,
-  musicTrack: "shuffle"
+  musicTrack: "shuffle",
+  enabledTracks: defaultTrackEnablement()
 };
 function loadBindings() {
   const base = defaultBindings();
@@ -306,13 +313,24 @@ function loadGameSettings() {
   catch (_) { return { ...DEFAULT_GAME_SETTINGS }; }
 }
 function sanitiseAudioSettings(raw = {}) {
+  const enabledTracks = defaultTrackEnablement();
+  const incomingEnabled = raw.enabledTracks && typeof raw.enabledTracks === "object" ? raw.enabledTracks : {};
+  for (const key of MUSIC_ORDER) enabledTracks[key] = incomingEnabled[key] !== false;
   const track = raw.musicTrack === "shuffle" || MUSIC_TRACKS[raw.musicTrack] ? raw.musicTrack : DEFAULT_AUDIO_SETTINGS.musicTrack;
   return {
     gameVolume: clamp(Number(raw.gameVolume ?? raw.sfxVolume ?? DEFAULT_AUDIO_SETTINGS.gameVolume), 0, 1),
     musicVolume: clamp(Number(raw.musicVolume ?? DEFAULT_AUDIO_SETTINGS.musicVolume), 0, 1),
     musicEnabled: raw.musicEnabled !== false,
-    musicTrack: track
+    musicTrack: track,
+    enabledTracks
   };
+}
+function enabledMusicKeys(settings = audioSettings) {
+  const enabled = settings?.enabledTracks || {};
+  return MUSIC_ORDER.filter(key => MUSIC_TRACKS[key] && enabled[key] !== false);
+}
+function firstEnabledMusicKey(settings = audioSettings) {
+  return enabledMusicKeys(settings)[0] || "";
 }
 function loadAudioSettings() {
   try { return sanitiseAudioSettings(JSON.parse(localStorage.getItem("rlcss_audio_settings") || "{}") || {}); }
@@ -387,7 +405,8 @@ const Music = (() => {
   let audio = null;
   let unlocked = false;
   let currentTrack = "";
-  let shuffleIndex = -1;
+  let recentTracks = [];
+  let playedHistory = [];
 
   function init() {
     if (audio) return audio;
@@ -400,32 +419,78 @@ const Music = (() => {
     return audio;
   }
 
-  function chooseTrack(forceNext = false) {
-    if (audioSettings.musicTrack !== "shuffle") return audioSettings.musicTrack;
-    if (forceNext || shuffleIndex < 0) shuffleIndex = (shuffleIndex + 1 + Math.floor(Math.random() * MUSIC_ORDER.length)) % MUSIC_ORDER.length;
-    return MUSIC_ORDER[shuffleIndex] || MUSIC_ORDER[0];
+  function enabledKeys() {
+    return enabledMusicKeys(audioSettings);
   }
 
-  function setSource(trackKey) {
-    const safe = MUSIC_TRACKS[trackKey] ? trackKey : MUSIC_ORDER[0];
+  function choosePlayableTrack(preferred = "") {
+    const enabled = enabledKeys();
+    if (!enabled.length) return "";
+    if (preferred && MUSIC_TRACKS[preferred] && enabled.includes(preferred)) return preferred;
+    return enabled[0];
+  }
+
+  function chooseRandomNext() {
+    const enabled = enabledKeys();
+    if (!enabled.length) return "";
+    if (enabled.length === 1) return enabled[0];
+
+    const recentLimit = Math.min(4, Math.max(1, enabled.length - 1));
+    const avoid = recentTracks.slice(-recentLimit);
+    let candidates = enabled.filter(key => key !== currentTrack && !avoid.includes(key));
+    if (!candidates.length) candidates = enabled.filter(key => key !== currentTrack);
+    if (!candidates.length) candidates = enabled;
+    const picked = candidates[Math.floor(Math.random() * candidates.length)] || enabled[0];
+    recentTracks.push(picked);
+    while (recentTracks.length > recentLimit) recentTracks.shift();
+    return picked;
+  }
+
+  function chooseTrack(forceNext = false) {
+    if (audioSettings.musicTrack !== "shuffle") return choosePlayableTrack(audioSettings.musicTrack);
+    if (forceNext || !currentTrack || !enabledKeys().includes(currentTrack)) return chooseRandomNext();
+    return currentTrack;
+  }
+
+  function setSource(trackKey, { remember = true } = {}) {
+    const safe = choosePlayableTrack(trackKey);
     init();
-    if (currentTrack === safe && audio.src) return;
+    if (!safe) {
+      currentTrack = "";
+      audio.removeAttribute("src");
+      audio.load();
+      updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
+      return false;
+    }
+    if (currentTrack === safe && audio.src) return true;
+    if (remember && currentTrack && currentTrack !== safe) {
+      playedHistory.push(currentTrack);
+      if (playedHistory.length > 24) playedHistory.shift();
+    }
     currentTrack = safe;
     audio.src = MUSIC_TRACKS[safe].src;
+    audio.currentTime = 0;
     audio.load();
     updateNowPlaying();
+    return true;
   }
 
   function applySettings(tryPlay = true) {
     init();
     audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
-    audio.loop = audioSettings.musicTrack !== "shuffle";
+    audio.loop = false;
     if (!audioSettings.musicEnabled || audioSettings.musicVolume <= 0) {
       audio.pause();
       updateNowPlaying(audioSettings.musicEnabled ? "Music volume is at 0%." : "Music is disabled.");
       return;
     }
-    setSource(chooseTrack(false));
+    const selected = chooseTrack(false);
+    if (!selected) {
+      audio.pause();
+      updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
+      return;
+    }
+    setSource(selected, { remember: false });
     updateNowPlaying();
     if (tryPlay && unlocked) play();
   }
@@ -438,7 +503,9 @@ const Music = (() => {
   function play() {
     init();
     if (!audioSettings.musicEnabled || audioSettings.musicVolume <= 0) return;
-    setSource(chooseTrack(false));
+    const selected = chooseTrack(false);
+    if (!selected) return updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
+    setSource(selected, { remember: false });
     audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
     const promise = audio.play?.();
     if (promise?.catch) promise.catch(() => updateNowPlaying("Tap Preview music to start music."));
@@ -465,29 +532,56 @@ const Music = (() => {
   function next(fromEnded = false) {
     init();
     unlocked = true;
-    if (audioSettings.musicTrack === "shuffle") {
-      setSource(chooseTrack(true));
-    } else if (fromEnded) {
-      audio.currentTime = 0;
-    } else {
-      const currentIndex = MUSIC_ORDER.indexOf(currentTrack);
-      const nextKey = MUSIC_ORDER[(currentIndex + 1 + MUSIC_ORDER.length) % MUSIC_ORDER.length] || MUSIC_ORDER[0];
-      audioSettings.musicTrack = nextKey;
-      saveAudioSettingsLocal();
-      renderSettingsUi();
-      setSource(nextKey);
+    const selected = chooseRandomNext();
+    if (!selected) {
+      audio.pause();
+      updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
+      return;
     }
+    setSource(selected, { remember: true });
+    if (audioSettings.musicEnabled) play();
+  }
+
+  function previous() {
+    init();
+    unlocked = true;
+    if (audio && currentTrack && audio.currentTime > 5) {
+      audio.currentTime = 0;
+      if (audioSettings.musicEnabled) play();
+      updateNowPlaying();
+      return;
+    }
+    const enabled = enabledKeys();
+    let previousKey = "";
+    while (playedHistory.length && !previousKey) {
+      const candidate = playedHistory.pop();
+      if (enabled.includes(candidate)) previousKey = candidate;
+    }
+    if (!previousKey) previousKey = enabled.length > 1 ? enabled.find(key => key !== currentTrack) || enabled[0] : enabled[0];
+    if (!previousKey) {
+      updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
+      return;
+    }
+    setSource(previousKey, { remember: false });
     if (audioSettings.musicEnabled) play();
   }
 
   function updateNowPlaying(message = "") {
-    if (!ui.musicNowPlaying) return;
-    const label = MUSIC_TRACKS[currentTrack]?.label || (audioSettings.musicTrack === "shuffle" ? "Shuffle all songs" : "Music");
-    ui.musicNowPlaying.textContent = message || `Now playing: ${label}`;
+    const enabled = enabledKeys();
+    const label = MUSIC_TRACKS[currentTrack]?.label || (enabled.length ? "Music ready" : "No enabled songs");
+    const text = message || `Now playing: ${label}`;
+    if (ui.musicNowPlaying) ui.musicNowPlaying.textContent = text;
+    if (ui.menuMusicTitle) ui.menuMusicTitle.textContent = message ? message.replace(/^Now playing:\s*/i, "") : label;
     if (ui.previewMusic) ui.previewMusic.textContent = audio && !audio.paused ? "Pause music" : "Preview music";
+    if (ui.menuMusicPlay) ui.menuMusicPlay.textContent = audio && !audio.paused ? "❚❚" : "▶";
   }
 
-  return { applySettings, unlockAndMaybePlay, play, pause, next, togglePreview, updateNowPlaying };
+  function toggleDock() {
+    document.body.classList.toggle("music-dock-open");
+    if (ui.menuMusicToggle) ui.menuMusicToggle.setAttribute("aria-expanded", document.body.classList.contains("music-dock-open") ? "true" : "false");
+  }
+
+  return { applySettings, unlockAndMaybePlay, play, pause, next, previous, togglePreview, toggleDock, updateNowPlaying };
 })();
 
 ui.name.value = playerName;
@@ -675,7 +769,20 @@ function renderSettingsUi() {
   if (ui.musicVolume) ui.musicVolume.value = String(audioSettings.musicVolume);
   if (ui.musicVolumeValue) ui.musicVolumeValue.textContent = `${Math.round(audioSettings.musicVolume * 100)}%`;
   if (ui.musicEnabled) ui.musicEnabled.checked = audioSettings.musicEnabled;
-  if (ui.musicTrackSelect) ui.musicTrackSelect.value = audioSettings.musicTrack;
+  if (ui.musicTrackSelect) {
+    ui.musicTrackSelect.value = audioSettings.musicTrack;
+    Array.from(ui.musicTrackSelect.options).forEach(option => {
+      if (option.value !== "shuffle" && MUSIC_TRACKS[option.value]) option.disabled = audioSettings.enabledTracks?.[option.value] === false;
+    });
+  }
+  if (ui.musicTrackToggles) {
+    ui.musicTrackToggles.innerHTML = MUSIC_ORDER.map(key => `
+      <label class="music-track-toggle">
+        <input type="checkbox" data-music-track-toggle="${key}" ${audioSettings.enabledTracks?.[key] === false ? "" : "checked"} />
+        <span>${escapeHtml(MUSIC_TRACKS[key].label)}</span>
+      </label>`).join("");
+  }
+  Music.updateNowPlaying();
   applyGameSettingsToSelectors({ forceLobbyDefaults: false });
   if (ui.keybindList) {
     ui.keybindList.innerHTML = KEY_ACTIONS.map(([action, label]) => `
@@ -2492,9 +2599,22 @@ if (ui.musicTrackSelect) ui.musicTrackSelect.addEventListener("change", () => {
   audioSettings.musicTrack = ui.musicTrackSelect.value;
   commitAudioSettings({ play: true });
 });
+if (ui.musicTrackToggles) ui.musicTrackToggles.addEventListener("change", e => {
+  const input = e.target.closest("[data-music-track-toggle]");
+  if (!input) return;
+  audioSettings.enabledTracks = { ...defaultTrackEnablement(), ...(audioSettings.enabledTracks || {}) };
+  audioSettings.enabledTracks[input.dataset.musicTrackToggle] = !!input.checked;
+  if (audioSettings.musicTrack !== "shuffle" && audioSettings.enabledTracks[audioSettings.musicTrack] === false) audioSettings.musicTrack = "shuffle";
+  commitAudioSettings({ play: true });
+});
 if (ui.previewMusic) ui.previewMusic.addEventListener("click", () => {
   SFX.resume();
   Music.togglePreview();
+  queueSettingsSave();
+});
+if (ui.previousMusic) ui.previousMusic.addEventListener("click", () => {
+  SFX.resume();
+  Music.previous();
   queueSettingsSave();
 });
 if (ui.nextMusic) ui.nextMusic.addEventListener("click", () => {
@@ -2502,6 +2622,10 @@ if (ui.nextMusic) ui.nextMusic.addEventListener("click", () => {
   Music.next(false);
   queueSettingsSave();
 });
+if (ui.menuMusicToggle) ui.menuMusicToggle.addEventListener("click", () => Music.toggleDock());
+if (ui.menuMusicPrev) ui.menuMusicPrev.addEventListener("click", () => { SFX.resume(); Music.previous(); });
+if (ui.menuMusicNext) ui.menuMusicNext.addEventListener("click", () => { SFX.resume(); Music.next(false); });
+if (ui.menuMusicPlay) ui.menuMusicPlay.addEventListener("click", () => { SFX.resume(); Music.togglePreview(); });
 if (ui.controllerEnabled) ui.controllerEnabled.addEventListener("change", () => {
   controllerSettings.enabled = !!ui.controllerEnabled.checked;
   saveControllerSettings();

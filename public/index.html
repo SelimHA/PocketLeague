@@ -44,11 +44,25 @@
     <strong>SPACE</strong>: JUMP &nbsp;|&nbsp; <strong>CTRL</strong>: DRIFT &nbsp;|&nbsp; <strong>B</strong>: BALL CAM &nbsp;|&nbsp; <strong>R</strong>: RESET &nbsp;|&nbsp; <strong>T</strong>: CHAT &nbsp;|&nbsp; <strong>V</strong>: VOICE &nbsp;|&nbsp; <strong>M</strong>: MIC
   </div>
 
+  <div id="menu-music-dock" class="menu-music-dock" aria-label="Menu music controls">
+    <button id="menu-music-toggle" class="music-dock-toggle" type="button" aria-expanded="false" aria-controls="menu-music-panel" title="Show music controls">♫</button>
+    <div id="menu-music-panel" class="menu-music-panel">
+      <button id="menu-music-prev" class="music-control-btn" type="button" title="Restart / previous song">⏮</button>
+      <button id="menu-music-play" class="music-control-btn" type="button" title="Play / pause music">▶</button>
+      <div class="menu-music-copy">
+        <span>Now playing</span>
+        <strong id="menu-music-title">Music disabled</strong>
+      </div>
+      <button id="menu-music-next" class="music-control-btn" type="button" title="Next song">⏭</button>
+    </div>
+  </div>
+
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
       <div class="menu-kicker">V36 Audio & Music Upgrade</div>
       <h1>RLCSS</h1>
-      <p class="menu-subtitle">Rocket-style car football with richer arenas, voice/text chat, leaderboards, custom matches and full desktop controller support, music loops and audio settings.</p>
+      <p class="menu-subtitle">Rocket-style car football with richer arenas, voice/text chat, leaderboards, custom matches and full desktop controller support, AI music, menu music controls, and audio settings.</p>
+      <div class="ai-music-badge" aria-label="AI music notice">♫ AI-generated soundtrack included</div>
       <div class="controller-hero" aria-label="Controller recommendation">
         <strong>Best with controller on PC</strong>
         <span>Left stick drives, triggers accelerate/brake, right stick pans the camera. Keyboard and phone touch controls still work.</span>
@@ -180,17 +194,28 @@
           <label>
             Menu / match music track
             <select id="music-track-select">
+              <option value="shuffle">Shuffle enabled songs</option>
               <option value="nitro">Nitro Boost Dreams</option>
               <option value="turbo">Turbo Boost Dreams</option>
               <option value="starlight">Boosting Through Starlight</option>
-              <option value="shuffle">Shuffle all songs</option>
+              <option value="ignite">Boost Ignite</option>
+              <option value="hearts">Nitro Hearts Racing</option>
+              <option value="overdrive">Neon Overdrive</option>
+              <option value="anthem2">Boost Mode Anthem 2</option>
+              <option value="anthem">Boost Mode Anthem</option>
             </select>
           </label>
+          <details id="music-track-details" class="track-toggle-details">
+            <summary>Choose which songs can play</summary>
+            <p class="hint">Collapsed by default. Turn off any tracks you do not want in shuffle or menu playback.</p>
+            <div id="music-track-toggles" class="music-track-toggles"></div>
+          </details>
           <div class="audio-actions">
             <button id="preview-music" type="button" class="secondary small-action">Preview music</button>
+            <button id="previous-music" type="button" class="secondary small-action">Restart / previous</button>
             <button id="next-music" type="button" class="secondary small-action">Next song</button>
           </div>
-          <p id="music-now-playing" class="hint">Music starts after your first tap/click because browsers block autoplay.</p>
+          <p id="music-now-playing" class="hint">Music starts after your first tap/click because browsers block autoplay. All included music is AI-generated.</p>
         </div>
       </div>
 
