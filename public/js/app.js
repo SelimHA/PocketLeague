@@ -1141,7 +1141,10 @@ function makeFieldTexture(mode, arena, theme) {
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
   tex.anisotropy = isPhonePortrait() ? 2 : 4;
-  tex.repeat.set(arena.w / 60, arena.l / 100);
+  // The canvas already draws a full pitch. Stretch it over the current arena
+  // instead of repeating it, so 3v3-5v5 looks like one larger field rather
+  // than several mini football pitches tiled together.
+  tex.repeat.set(1, 1);
   return tex;
 }
 
@@ -1173,6 +1176,14 @@ function buildArena(state) {
   const orangeLight = theme.lightOrange ?? 0xff8a1f;
   const trimBlue = new THREE.MeshStandardMaterial({ color: blueLight, emissive: blueLight, emissiveIntensity: 0.48, transparent: true, opacity: 0.66, depthWrite: false });
   const trimOrange = new THREE.MeshStandardMaterial({ color: orangeLight, emissive: orangeLight, emissiveIntensity: 0.48, transparent: true, opacity: 0.66, depthWrite: false });
+  const lightenHex = (hex, amount = 0.38) => {
+    const c = new THREE.Color(hex);
+    return c.lerp(new THREE.Color(0xffffff), amount).getHex();
+  };
+  const goalBlueColor = lightenHex(blueLight, 0.42);
+  const goalOrangeColor = lightenHex(orangeLight, 0.34);
+  const goalBlue = new THREE.MeshStandardMaterial({ color: goalBlueColor, emissive: blueLight, emissiveIntensity: 0.62, transparent: true, opacity: 0.30, depthWrite: false });
+  const goalOrange = new THREE.MeshStandardMaterial({ color: goalOrangeColor, emissive: orangeLight, emissiveIntensity: 0.62, transparent: true, opacity: 0.30, depthWrite: false });
   const neutralTrim = new THREE.MeshStandardMaterial({ color: theme.trim ?? 0xffffff, emissive: blueLight, emissiveIntensity: 0.16 });
 
   function box(w, h, d, x, y, z, mat = wallMat) {
@@ -1489,8 +1500,8 @@ function buildArena(state) {
   box(sideW, 13, 1.2, arena.w / 2 - sideW / 2, 6.5, arena.l / 2);
   box(arena.goalW, 13 - arena.goalH, 1.2, 0, arena.goalH + (13 - arena.goalH) / 2, -arena.l / 2, trimBlue);
   box(arena.goalW, 13 - arena.goalH, 1.2, 0, arena.goalH + (13 - arena.goalH) / 2, arena.l / 2, trimOrange);
-  buildGoal(-1, trimBlue);
-  buildGoal(1, trimOrange);
+  buildGoal(-1, goalBlue);
+  buildGoal(1, goalOrange);
   box(arena.w + 2, 0.8, 0.8, 0, 0.45, -arena.l / 2, trimBlue);
   box(arena.w + 2, 0.8, 0.8, 0, 0.45, arena.l / 2, trimOrange);
   box(0.8, 0.8, arena.l + 2, -arena.w / 2, 0.45, 0, neutralTrim);
@@ -1913,21 +1924,6 @@ function updateCamera(state) {
   const offset = new THREE.Vector3(0, localBallCam ? 8 : 6.8, localBallCam ? -20 : -18);
   offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   const desired = new THREE.Vector3(localCar.x, localCar.y + 1.6, localCar.z).add(offset);
-
-  // At kickoff the car starts close enough to its own goal that the old camera
-  // sat behind the goal frame. Keep that cinematic chase angle, but pull the
-  // camera just inside the pitch and pan it around the frame so posts do not
-  // block the first few seconds on phone.
-  const ownSide = Math.sign(localCar.z || (localCar.team === "blue" ? -1 : 1));
-  const nearOwnGoal = Math.abs(localCar.z) > state.arena.l * 0.28;
-  const cameraBehindGoal = Math.sign(desired.z || ownSide) === ownSide && Math.abs(desired.z) > state.arena.l / 2 - 3.0;
-  if (nearOwnGoal && cameraBehindGoal) {
-    const kickoffBias = Math.max(0, Math.min(1, Number(state.kickoffTimer || 0) / 5));
-    desired.z = ownSide * (state.arena.l / 2 - (5.5 + kickoffBias * 2.5));
-    const sidePan = (localCar.x !== 0 ? Math.sign(localCar.x) : (localCar.team === "blue" ? -1 : 1)) * (4.5 + kickoffBias * 4.0);
-    desired.x += sidePan;
-    desired.y += 1.6 + kickoffBias * 1.3;
-  }
 
   camera.position.lerp(desired, 0.16);
   let look;
