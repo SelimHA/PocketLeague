@@ -791,7 +791,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x070912);
 scene.fog = new THREE.FogExp2(0x070912, 0.0038);
 const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 1200);
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isPhonePortrait(), alpha: false, powerPreference: "high-performance" });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
 renderer.setPixelRatio(desiredPixelRatio());
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -806,8 +806,10 @@ scene.add(sun);
 
 function desiredPixelRatio() {
   const dpr = window.devicePixelRatio || 1;
-  // V23 phone smoothness: keep desktop crisp, but avoid huge mobile back-buffers.
-  return isPhonePortrait() ? Math.min(dpr, 1.15) : Math.min(dpr, 2);
+  // V24 phone crispness: V23's 1.15 cap looked blocky on modern phones.
+  // Keep desktop fully crisp, and give phones a sharper buffer while still
+  // avoiding the 2x/3x DPR cost that caused earlier mobile stutter.
+  return isPhonePortrait() ? Math.min(Math.max(dpr, 1.35), 1.65) : Math.min(dpr, 2);
 }
 
 function applyRenderPerformanceMode() {
@@ -860,7 +862,7 @@ function applySceneTheme(theme) {
 
 function makeFieldTexture(mode, arena, theme) {
   const cnv = document.createElement("canvas");
-  const texSize = isPhonePortrait() ? 512 : 1024;
+  const texSize = isPhonePortrait() ? 1024 : 1024;
   cnv.width = texSize; cnv.height = texSize;
   const ctx = cnv.getContext("2d");
   const base = modeFieldColor(mode, theme);
@@ -888,13 +890,16 @@ function makeFieldTexture(mode, arena, theme) {
   let seed = (arena.w * 31 + arena.l * 17 + (base[0] << 8) + base[1]) >>> 0;
   const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
   ctx.globalAlpha = mode === "ice" ? 0.12 : 0.18;
-  for (let i = 0; i < (isPhonePortrait() ? 650 : 2200); i++) {
+  for (let i = 0; i < (isPhonePortrait() ? 1100 : 2200); i++) {
     const x = rand() * texSize, y = rand() * texSize;
     ctx.fillStyle = rand() > 0.5 ? "#ffffff" : "#000000";
     ctx.fillRect(x, y, 1, 1);
   }
   const tex = new THREE.CanvasTexture(cnv);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = isPhonePortrait() ? 2 : 4;
   tex.repeat.set(arena.w / 60, arena.l / 100);
   return tex;
 }
@@ -1058,11 +1063,94 @@ function buildArena(state) {
       }
     }
 
+    // V24: more deliberate outside-stadium level dressing. These are all
+    // non-colliding, low-poly static props, so they improve arena atmosphere
+    // without changing the pitch or gameplay.
+    const concourseMat = new THREE.MeshStandardMaterial({ color: 0x121826, roughness: 0.88, metalness: 0.02 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x10233b, emissive: blueLight, emissiveIntensity: mobilePerf ? 0.07 : 0.14, roughness: 0.28, metalness: 0.18, transparent: true, opacity: 0.78 });
+    const warmGlassMat = new THREE.MeshStandardMaterial({ color: 0x2b1a12, emissive: orangeLight, emissiveIntensity: mobilePerf ? 0.06 : 0.13, roughness: 0.32, metalness: 0.12, transparent: true, opacity: 0.76 });
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x080b12, roughness: 0.92 });
+    const bannerMat = new THREE.MeshBasicMaterial({ color: trim, transparent: true, opacity: 0.76, side: THREE.DoubleSide });
+
+    // Outer apron/roads make the arena read as part of a bigger venue.
+    propBox(arena.w + 42, 0.12, 4.6, 0, 0.08, -arena.l / 2 - 25.5, roadMat);
+    propBox(arena.w + 42, 0.12, 4.6, 0, 0.08,  arena.l / 2 + 25.5, roadMat);
+    propBox(4.6, 0.12, arena.l + 42, -arena.w / 2 - 25.5, 0.08, 0, roadMat);
+    propBox(4.6, 0.12, arena.l + 42,  arena.w / 2 + 25.5, 0.08, 0, roadMat);
+
+    // Side concourse blocks and glass suites behind the stands.
+    const suiteCount = mobilePerf ? 4 : 8;
+    for (const side of [-1, 1]) {
+      propBox(arena.w + 32, 1.2, 7.0, 0, 0.7, side * (arena.l / 2 + 26.5), concourseMat);
+      for (let i = 0; i < suiteCount; i++) {
+        const x = -arena.w / 2 + (i + 0.5) * (arena.w / suiteCount);
+        const suiteMat = i % 2 ? glassMat : warmGlassMat;
+        propBox(Math.max(5.0, arena.w / suiteCount - 1.1), 3.0, 1.0, x, 7.9, side * (arena.l / 2 + 24.0), suiteMat);
+        if (!mobilePerf || i % 2 === 0) {
+          propBox(Math.max(4.0, arena.w / suiteCount - 2.2), 0.28, 0.46, x, 9.65, side * (arena.l / 2 + 23.35), i % 2 ? glowBlue : glowOrange);
+        }
+      }
+    }
+
+    // Exterior corner buildings / stair towers with team-colour accents.
+    const towerMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.76, metalness: 0.04 });
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const x = sx * (arena.w / 2 + 30.5);
+        const z = sz * (arena.l / 2 + 30.5);
+        propBox(6.4, 8.5, 6.4, x, 4.3, z, towerMat, Math.PI * 0.25);
+        propBox(5.0, 0.42, 5.0, x, 8.85, z, sz < 0 ? glowBlue : glowOrange, Math.PI * 0.25);
+        if (!mobilePerf) {
+          propBox(3.2, 3.4, 0.26, x, 5.0, z - sz * 3.32, glassMat);
+          propBox(0.26, 3.4, 3.2, x - sx * 3.32, 5.0, z, warmGlassMat);
+        }
+      }
+    }
+
+    // Sponsor totems / wayfinding signs visible on phones too.
+    const signCount = mobilePerf ? 4 : 10;
+    for (let i = 0; i < signCount; i++) {
+      const side = i % 2 ? 1 : -1;
+      const t = signCount === 1 ? 0.5 : i / (signCount - 1);
+      const z = -arena.l / 2 + t * arena.l;
+      const x = side * (arena.w / 2 + 10.2);
+      propBox(0.45, 3.4, 0.45, x, 1.9, z, steelMat);
+      propBox(0.55, 1.9, 3.8, x, 3.25, z, i % 3 === 0 ? glowBlue : i % 3 === 1 ? glowOrange : adWhite);
+    }
+
+    // Hanging banners across the end approaches; flat planes are cheap and add depth.
+    const bannerCount = mobilePerf ? 3 : 6;
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < bannerCount; i++) {
+        const x = (i - (bannerCount - 1) / 2) * (arena.w / Math.max(1, bannerCount));
+        const banner = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.25), bannerMat.clone());
+        banner.material.color.setHex(i % 2 ? orangeLight : blueLight);
+        banner.position.set(x, 13.6 + (i % 2) * 0.7, side * (arena.l / 2 + 17.8));
+        banner.rotation.y = side < 0 ? 0 : Math.PI;
+        world.add(banner);
+      }
+    }
+
+    // Small parked display cars outside the side roads on desktop; very sparse on phone.
+    const parkedCount = mobilePerf ? 2 : 8;
+    const parkedMatA = new THREE.MeshStandardMaterial({ color: blueLight, roughness: 0.42, metalness: 0.16, emissive: blueLight, emissiveIntensity: 0.08 });
+    const parkedMatB = new THREE.MeshStandardMaterial({ color: orangeLight, roughness: 0.42, metalness: 0.16, emissive: orangeLight, emissiveIntensity: 0.08 });
+    for (let i = 0; i < parkedCount; i++) {
+      const side = i % 2 ? 1 : -1;
+      const z = -arena.l * 0.36 + i * (arena.l * 0.72 / Math.max(1, parkedCount - 1));
+      const x = side * (arena.w / 2 + 34.5);
+      propBox(2.4, 0.62, 4.0, x, 0.48, z, i % 2 ? parkedMatA : parkedMatB, side * Math.PI * 0.5);
+      propBox(1.55, 0.52, 1.25, x, 1.02, z - side * 0.12, darkMat, side * Math.PI * 0.5);
+    }
+
     if (!mobilePerf) {
       const boardMat = new THREE.MeshStandardMaterial({ color: 0x050814, emissive: 0x0ea5e9, emissiveIntensity: 0.26, roughness: 0.32 });
       propBox(15.0, 5.2, 0.7, 0, 15.6, -arena.l / 2 - 22.5, boardMat);
       propBox(5.2, 0.65, 0.9, -5.0, 15.6, -arena.l / 2 - 22.0, glowBlue);
       propBox(5.2, 0.65, 0.9,  5.0, 15.6, -arena.l / 2 - 22.0, glowOrange);
+      propBox(12.5, 4.0, 0.7, 0, 13.0, arena.l / 2 + 22.5, boardMat);
+      propBox(3.8, 0.52, 0.9, -4.1, 13.0, arena.l / 2 + 22.0, glowBlue);
+      propBox(3.8, 0.52, 0.9,  4.1, 13.0, arena.l / 2 + 22.0, glowOrange);
     }
   }
 
@@ -1273,7 +1361,7 @@ function initVehiclePreview() {
   previewCamera.position.set(0, 2.4, 7.4);
   previewCamera.lookAt(0, 0.85, 0);
   previewRenderer = new THREE.WebGLRenderer({ canvas: ui.vehiclePreview, antialias: true, alpha: true, powerPreference: "low-power" });
-  previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhonePortrait() ? 1.1 : 1.6));
+  previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhonePortrait() ? 1.45 : 1.6));
   previewRenderer.shadowMap.enabled = false;
   previewScene.add(new THREE.AmbientLight(0xffffff, 0.78));
   const key = new THREE.DirectionalLight(0xffffff, 0.95);
@@ -1349,7 +1437,7 @@ function renderVehiclePreview(now) {
   if (!previewRenderer || !previewVehicle || !previewCamera) return;
   const rect = ui.vehiclePreview.getBoundingClientRect();
   if (rect.width < 8 || rect.height < 8) return;
-  previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhonePortrait() ? 1.1 : 1.6));
+  previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhonePortrait() ? 1.45 : 1.6));
   previewRenderer.setSize(rect.width, rect.height, false);
   previewCamera.aspect = rect.width / Math.max(1, rect.height);
   previewCamera.updateProjectionMatrix();
