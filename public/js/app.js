@@ -158,83 +158,163 @@ function randomCode() {
   return out;
 }
 
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function currentSoloMetaPatch() {
+  return {
+    mode: ui.mode?.value || DEFAULT_META.mode,
+    teamSize: Number(ui.teamSize?.value || DEFAULT_META.teamSize),
+    difficulty: ui.difficulty?.value || DEFAULT_META.difficulty,
+    playstyle: ui.playstyle?.value || DEFAULT_META.playstyle
+  };
+}
+
 async function createLobby() {
   isSinglePlayer = false;
-  if (!(await ensureFirebaseReady())) return;
-  setStatus("Creating lobby…");
-  playerName = sanitizeName(ui.name.value);
-  localStorage.setItem("rlcss_online_name", playerName);
-  let code = randomCode();
-  for (let i = 0; i < 8; i++) {
-    const snap = await get(lobbyRef(code));
-    if (!snap.exists()) break;
-    code = randomCode();
-  }
-  const meta = { ...DEFAULT_META, hostId: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: "waiting" };
-  const player = { name: playerName, team: "blue", role: "midfield", ready: false, joinedAt: serverTimestamp(), isHost: true };
+  ui.create.disabled = true;
   try {
-    await set(lobbyRef(code), { meta, players: { [uid]: player }, inputs: {}, state: null });
+    if (!(await ensureFirebaseReady())) return;
+    playerName = sanitizeName(ui.name.value);
+    localStorage.setItem("rlcss_online_name", playerName);
+
+    let code = randomCode();
+    setStatus(`Creating lobby ${code}…`);
+    for (let i = 0; i < 6; i++) {
+      try {
+        const snap = await withTimeout(get(lobbyRef(code)), 6500, "Checking lobby code");
+        if (!snap.exists()) break;
+        code = randomCode();
+        setStatus(`Creating lobby ${code}…`);
+      } catch (err) {
+        console.warn("Could not pre-check lobby code; attempting direct create.", err);
+        break;
+      }
+    }
+
+    const meta = {
+      ...DEFAULT_META,
+      ...currentSoloMetaPatch(),
+      hostId: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      status: "waiting"
+    };
+    const player = { name: playerName, team: ui.team.value || "blue", role: ui.role.value || "midfield", ready: false, joinedAt: serverTimestamp(), isHost: true };
+
+    // Write granularly instead of one large root write. This works with stricter
+    // Realtime Database rules and gives clearer failure messages on phones.
+    await withTimeout(set(lobbyRef(code, "meta"), meta), 12000, "Writing lobby settings");
+    await withTimeout(set(lobbyRef(code, `players/${uid}`), player), 12000, "Adding host player");
+    await withTimeout(set(lobbyRef(code, "inputs"), {}), 6000, "Initialising inputs").catch(() => {});
+    await withTimeout(set(lobbyRef(code, "state"), null), 6000, "Initialising state").catch(() => {});
+
     await enterLobby(code);
-    setStatus(`Lobby ${code} created.`);
+    setStatus(`Lobby ${code} created. Share code ${code}.`);
   } catch (err) {
     console.error(err);
-    setStatus(`Create lobby failed: ${err.message}`);
+    setStatus(`Create lobby failed: ${err.message}. Check Anonymous Auth and Realtime Database rules.`);
+  } finally {
+    ui.create.disabled = false;
   }
 }
 
 async function joinLobby() {
   isSinglePlayer = false;
-  if (!(await ensureFirebaseReady())) return;
-  playerName = sanitizeName(ui.name.value);
-  localStorage.setItem("rlcss_online_name", playerName);
-  const code = ui.joinCode.value.trim().toUpperCase();
-  if (!code) return setStatus("Enter a lobby code first.");
-  const snap = await get(lobbyRef(code));
-  if (!snap.exists()) return setStatus("Lobby not found.");
-  const data = snap.val();
-  const meta = serialiseMeta(data.meta || {});
-  if ((data.meta || {}).status !== "waiting") return setStatus("That match has already started.");
-  const humans = Object.keys(data.players || {}).length;
-  const maxHumans = maxHumansFor(meta.mode, meta.teamSize);
-  if (humans >= maxHumans) return setStatus(`Lobby is full for ${MODE_CONFIGS[meta.mode].label}.`);
-  const counts = countTeams(data.players || {});
-  const team = counts.blue <= counts.orange ? "blue" : "orange";
+  ui.join.disabled = true;
   try {
-    await set(lobbyRef(code, `players/${uid}`), { name: playerName, team, role: "midfield", ready: false, joinedAt: serverTimestamp(), isHost: false });
+    if (!(await ensureFirebaseReady())) return;
+    playerName = sanitizeName(ui.name.value);
+    localStorage.setItem("rlcss_online_name", playerName);
+    const code = ui.joinCode.value.trim().toUpperCase();
+    if (!code) return setStatus("Enter a lobby code first.");
+    setStatus(`Joining lobby ${code}…`);
+    const snap = await withTimeout(get(lobbyRef(code)), 10000, "Loading lobby");
+    if (!snap.exists()) return setStatus("Lobby not found.");
+    const data = snap.val();
+    const meta = serialiseMeta(data.meta || {});
+    if ((data.meta || {}).status !== "waiting") return setStatus("That match has already started.");
+    const humans = Object.keys(data.players || {}).length;
+    const maxHumans = maxHumansFor(meta.mode, meta.teamSize);
+    if (humans >= maxHumans) return setStatus(`Lobby is full for ${MODE_CONFIGS[meta.mode].label}.`);
+    const counts = countTeams(data.players || {});
+    const team = counts.blue <= counts.orange ? "blue" : "orange";
+    await withTimeout(set(lobbyRef(code, `players/${uid}`), { name: playerName, team, role: "midfield", ready: false, joinedAt: serverTimestamp(), isHost: false }), 12000, "Joining lobby");
     await enterLobby(code);
+    setStatus(`Joined lobby ${code}.`);
   } catch (err) {
     console.error(err);
-    setStatus(`Join lobby failed: ${err.message}`);
+    setStatus(`Join lobby failed: ${err.message}.`);
+  } finally {
+    ui.join.disabled = false;
   }
 }
 
 function startSinglePlayer() {
-  document.body.classList.add("game-running");
   cleanupLobbyListeners();
   isSinglePlayer = true;
-  singlePlayerId = uid || LOCAL_UID;
+  singlePlayerId = LOCAL_UID;
   playerName = sanitizeName(ui.name.value);
   localStorage.setItem("rlcss_online_name", playerName);
   lobbyCode = "SOLO";
-
-  // Single player should launch immediately. The previous rebuild put solo
-  // players into the ready-up lobby, which made the game look paused.
-  currentMeta = serialiseMeta({ ...DEFAULT_META, hostId: singlePlayerId, status: "running", startedAt: Date.now(), updatedAt: Date.now() });
+  currentMeta = serialiseMeta({
+    ...DEFAULT_META,
+    ...currentSoloMetaPatch(),
+    hostId: singlePlayerId,
+    status: "waiting",
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  });
   currentPlayers = {
-    [singlePlayerId]: { name: playerName, team: "blue", role: "midfield", ready: true, joinedAt: Date.now(), isHost: true, local: true }
+    [singlePlayerId]: {
+      name: playerName,
+      team: ui.team.value || "blue",
+      role: ui.role.value || "midfield",
+      ready: true,
+      joinedAt: Date.now(),
+      isHost: true,
+      local: true
+    }
   };
-  const initial = makeInitialState(currentMeta, currentPlayers);
-  initial.kickoffTimer = 0.45;
-  currentLobby = { meta: currentMeta, players: currentPlayers, inputs: {}, state: compactState(initial) };
-  latestState = currentLobby.state;
+  currentLobby = { meta: currentMeta, players: currentPlayers, inputs: {}, state: null };
+  latestState = null;
   latestInputs = { [singlePlayerId]: localInput() };
-  hostSim = new PhysicsHost(currentMeta, currentPlayers);
-  hostSim.state = initial;
+  hostSim = null;
 
+  document.body.classList.remove("game-running");
   ui.setup.classList.add("hidden");
-  ui.lobby.classList.add("hidden");
+  ui.lobby.classList.remove("hidden");
   ui.lobby.classList.add("solo");
   ui.lobbyCode.textContent = "SOLO";
+  renderLobby();
+  updateGameVisibility();
+  setStatus("Configure solo match, then press Start Match.");
+}
+
+function startSoloMatch() {
+  if (!isSinglePlayer || !currentMeta || !currentPlayers) return;
+  const localId = activePlayerId();
+  currentPlayers[localId] = {
+    ...(currentPlayers[localId] || {}),
+    name: sanitizeName(ui.name.value),
+    team: ui.team.value || currentPlayers[localId]?.team || "blue",
+    role: ui.role.value || currentPlayers[localId]?.role || "midfield",
+    ready: true
+  };
+  currentMeta = serialiseMeta({ ...currentMeta, status: "running", startedAt: Date.now(), updatedAt: Date.now() });
+  const initial = makeInitialState(currentMeta, currentPlayers);
+  initial.kickoffTimer = 0.45;
+  latestInputs = { [localId]: localInput() };
+  latestState = compactState(initial);
+  currentLobby = { meta: currentMeta, players: currentPlayers, inputs: latestInputs, state: latestState };
+  hostSim = new PhysicsHost(currentMeta, currentPlayers);
+  hostSim.state = initial;
+  ui.lobby.classList.add("hidden");
   startHostLoop();
   updateGameVisibility();
 }
@@ -251,8 +331,8 @@ async function enterLobby(code) {
   ui.lobby.classList.remove("hidden");
   ui.lobby.classList.remove("solo");
   ui.lobbyCode.textContent = code;
-  onDisconnect(lobbyRef(code, `players/${uid}`)).remove();
-  onDisconnect(lobbyRef(code, `inputs/${uid}`)).remove();
+  onDisconnect(lobbyRef(code, `players/${uid}`)).remove().catch(() => {});
+  onDisconnect(lobbyRef(code, `inputs/${uid}`)).remove().catch(() => {});
   unsubLobby = onValue(lobbyRef(code), snap => {
     currentLobby = snap.val();
     if (!currentLobby) {
@@ -298,8 +378,8 @@ function renderLobby() {
   ui.playstyle.value = currentMeta.playstyle;
   ui.team.value = local.team || "blue";
   ui.role.value = local.role || "midfield";
-  ui.ready.classList.toggle("not-ready", !!local.ready);
-  ui.ready.textContent = local.ready ? "Unready" : "Ready";
+  ui.ready.classList.toggle("not-ready", !isSinglePlayer && !!local.ready);
+  ui.ready.textContent = isSinglePlayer ? "Start Match" : (local.ready ? "Unready" : "Ready");
   ui.mode.disabled = ui.teamSize.disabled = ui.difficulty.disabled = ui.playstyle.disabled = !isHost || currentMeta.status !== "waiting";
   ui.copy.disabled = isSinglePlayer;
   ui.copy.textContent = isSinglePlayer ? "Solo" : "Copy Code";
@@ -310,7 +390,9 @@ function renderLobby() {
     : `Max humans in this mode: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
   const allReady = humanCount > 0 && Object.values(currentPlayers).every(p => p.ready);
   if (currentMeta.status === "waiting") {
-    ui.lobbyStatus.textContent = allReady && humanCount <= maxHumans ? "Everyone is ready — starting…" : "Waiting for players to ready up.";
+    ui.lobbyStatus.textContent = isSinglePlayer
+      ? "Solo setup: configure teams, modes and AI, then start."
+      : (allReady && humanCount <= maxHumans ? "Everyone is ready — starting…" : "Waiting for players to ready up.");
   } else if (currentMeta.status === "running") {
     ui.lobbyStatus.textContent = "Match in progress.";
   } else {
@@ -353,9 +435,9 @@ async function updateMetaPatch(patch) {
   const localId = activePlayerId();
   if (!lobbyCode || !currentMeta || (currentMeta.hostId !== localId && !isSinglePlayer)) return;
   if (isSinglePlayer) {
-    currentMeta = serialiseMeta({ ...currentMeta, ...patch, updatedAt: Date.now() });
-    currentLobby = { ...(currentLobby || {}), meta: currentMeta, players: currentPlayers };
-    if (currentPlayers[localId]) currentPlayers[localId].ready = false;
+    currentMeta = serialiseMeta({ ...currentMeta, ...patch, status: "waiting", updatedAt: Date.now() });
+    currentLobby = { ...(currentLobby || {}), meta: currentMeta, players: currentPlayers, state: null };
+    latestState = null;
     renderLobby();
     updateGameVisibility();
     return;
@@ -367,10 +449,9 @@ async function updateLocalPlayer(patch) {
   const localId = activePlayerId();
   if (!lobbyCode || !localId) return;
   if (isSinglePlayer) {
-    currentPlayers[localId] = { ...(currentPlayers[localId] || {}), ...patch };
+    currentPlayers[localId] = { ...(currentPlayers[localId] || {}), ...patch, ready: true };
     currentLobby = { ...(currentLobby || {}), meta: currentMeta, players: currentPlayers };
     renderLobby();
-    maybeAutoStart();
     updateGameVisibility();
     return;
   }
@@ -390,20 +471,9 @@ async function maybeAutoStart() {
   const localId = activePlayerId();
   if (!currentMeta || (currentMeta.hostId !== localId && !isSinglePlayer) || !readyStateAllowsStart()) return;
   const initial = makeInitialState(currentMeta, currentPlayers);
-  if (isSinglePlayer) {
-    currentMeta = serialiseMeta({ ...currentMeta, status: "running", startedAt: Date.now(), updatedAt: Date.now() });
-    currentLobby = { ...(currentLobby || {}), meta: currentMeta, players: currentPlayers, state: compactState(initial) };
-    latestState = currentLobby.state;
-    hostSim = new PhysicsHost(currentMeta, currentPlayers);
-    startHostLoop();
-    renderLobby();
-    updateGameVisibility();
-    return;
-  }
-  await update(lobbyRef(lobbyCode), {
-    meta: { ...currentLobby.meta, status: "running", startedAt: serverTimestamp(), updatedAt: serverTimestamp() },
-    state: compactState(initial)
-  });
+  if (isSinglePlayer) return;
+  await withTimeout(set(lobbyRef(lobbyCode, "state"), compactState(initial)), 12000, "Writing initial match state");
+  await withTimeout(update(lobbyRef(lobbyCode, "meta"), { status: "running", startedAt: serverTimestamp(), updatedAt: serverTimestamp() }), 12000, "Starting match");
   hostSim = new PhysicsHost(currentMeta, currentPlayers);
   startHostLoop();
 }
@@ -417,10 +487,11 @@ function updateGameVisibility() {
   ui.boostBox.classList.toggle("hidden", !running);
   ui.controlsHint.classList.toggle("hidden", !running || isPhonePortrait());
   if (isSinglePlayer) {
-    ui.setup.classList.toggle("hidden", running);
-    ui.lobby.classList.add("hidden");
-  } else {
+    ui.setup.classList.add("hidden");
     ui.lobby.classList.toggle("hidden", running);
+  } else {
+    ui.setup.classList.toggle("hidden", !!lobbyCode);
+    ui.lobby.classList.toggle("hidden", running || !lobbyCode);
   }
   ui.mobile.classList.toggle("hidden", !running || !isPhonePortrait());
   if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
@@ -523,7 +594,10 @@ ui.joinCode.addEventListener("input", () => ui.joinCode.value = ui.joinCode.valu
 ui.copy.addEventListener("click", () => { if (!isSinglePlayer) navigator.clipboard?.writeText(lobbyCode || ""); });
 ui.leaveLobby.addEventListener("click", () => leaveToMenu("Left lobby."));
 ui.leaveGame.addEventListener("click", () => leaveToMenu("Left match."));
-ui.ready.addEventListener("click", () => updateLocalPlayer({ ready: !(currentPlayers[activePlayerId()]?.ready) }));
+ui.ready.addEventListener("click", () => {
+  if (isSinglePlayer) startSoloMatch();
+  else updateLocalPlayer({ ready: !(currentPlayers[activePlayerId()]?.ready) });
+});
 ui.team.addEventListener("change", () => updateLocalPlayer({ team: ui.team.value, ready: false }));
 ui.role.addEventListener("change", () => updateLocalPlayer({ role: ui.role.value, ready: false }));
 ui.mode.addEventListener("change", () => updateMetaPatch({ mode: ui.mode.value }));
