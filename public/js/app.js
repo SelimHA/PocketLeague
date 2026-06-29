@@ -29,7 +29,8 @@ const ui = {
   hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), leaveGame: $("#leave-game"),
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
-  mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob")
+  mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
+  mobileBoostButton: document.querySelector('[data-action="boost"]')
 };
 
 const canvas = $("#game");
@@ -1042,8 +1043,19 @@ function updateHud(state) {
   const t = Math.max(0, Math.ceil(state.timeLeft || 0));
   ui.clock.textContent = `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
   const localCar = state.cars?.[activePlayerId()];
-  if (localCar && ui.boostFill) {
-    ui.boostFill.style.width = `${Math.max(0, Math.min(100, Math.round(localCar.boost || 0)))}%`;
+  const boostPct = localCar ? Math.max(0, Math.min(100, Math.round(localCar.boost || 0))) : 0;
+  if (ui.boostFill) ui.boostFill.style.width = `${boostPct}%`;
+  // Desktop: show a small numeric boost counter over the normal boost bar.
+  if (ui.boostBox) {
+    ui.boostBox.dataset.boost = `${boostPct}`;
+    ui.boostBox.style.setProperty("--boost-pct", `${boostPct}%`);
+  }
+  if (ui.boostLabel) ui.boostLabel.textContent = `BOOST ${boostPct}`;
+  // Phone: the BOOST button itself shows the amount and its fill drains live.
+  if (ui.mobileBoostButton) {
+    ui.mobileBoostButton.style.setProperty("--boost-pct", `${boostPct}%`);
+    ui.mobileBoostButton.innerHTML = `<span class="boost-btn-title">BOOST</span><span class="boost-btn-value">${boostPct}</span>`;
+    ui.mobileBoostButton.classList.toggle("boost-empty", boostPct <= 0);
   }
 }
 

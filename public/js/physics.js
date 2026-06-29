@@ -17,10 +17,13 @@ export const MODE_CONFIGS = {
   },
   ice: {
     label: "Ice Rink",
-    drive: 0.82, brake: 0.58, reverse: 0.72, steer: 0.84, grip: 0.28, driftGrip: 0.22, driftTurn: 1.18,
-    ballFriction: 0.36, ballRestitution: 1.08, wallRestitution: 1.10, ballMax: 0.96,
+    // V21: make Ice Rink clearly slipperier while keeping enough drive
+    // and steering authority to remain playable. Low grip + low drag makes
+    // cars carry speed and slide; reduced brake prevents instant stopping.
+    drive: 0.76, brake: 0.40, reverse: 0.60, steer: 0.72, grip: 0.15, driftGrip: 0.085, driftTurn: 1.34,
+    ballFriction: 0.20, ballRestitution: 1.12, wallRestitution: 1.14, ballMax: 0.98,
     gravity: 1, ballGravity: 1, jump: 1, aerialDrive: 1,
-    floorRoughness: 0.20, floorMetalness: 0.18,
+    floorRoughness: 0.08, floorMetalness: 0.30,
     snooker: false,
     sizeBonus: 0,
     maxHumans: teamSize => teamSize * 2
@@ -509,7 +512,7 @@ function updateCar(car, input, state, cfg, dt) {
       car.vz += right.z * slideAssist * dt;
     }
 
-    const coastDrag = state.mode === "ice" ? 0.991 : 0.982;
+    const coastDrag = state.mode === "ice" ? 0.997 : 0.982;
     if (Math.abs(throttle) < 0.05 && Math.abs(forwardSpeed) < 4 && !driftActive) {
       car.vx += fwd.x * (-forwardSpeed * 5.5 * cfg.brake * dt);
       car.vz += fwd.z * (-forwardSpeed * 5.5 * cfg.brake * dt);
