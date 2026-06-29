@@ -29,9 +29,15 @@
   </div>
 
   <main id="ui-root" class="ui-root">
-    <section id="setup-card" class="panel">
+    <section id="setup-card" class="panel menu-panel">
+      <div class="menu-kicker">V23 Arena Update</div>
       <h1>RLCSS</h1>
-      <p class="muted">Configure a solo AI match, or host an online Firebase lobby. Online hosts create a code; friends join with the code; game starts once everyone is ready.</p>
+      <p class="menu-subtitle">Arcade car football with stadium themes, selectable vehicles, finite boost, double jumps, solo AI, and Firebase lobbies.</p>
+      <div class="menu-feature-grid" aria-label="Game highlights">
+        <div><strong>Solo</strong><span>AI squads &amp; roles</span></div>
+        <div><strong>Online</strong><span>Lobby codes</span></div>
+        <div><strong>Arena</strong><span>Themes &amp; props</span></div>
+      </div>
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
       </div>
@@ -39,11 +45,11 @@
         Player name
         <input id="player-name" maxlength="18" placeholder="Player" autocomplete="nickname" />
       </label>
-      <div class="row two">
+      <div class="row two menu-actions">
         <button id="single-player" type="button" class="primary">Single Player Setup</button>
         <button id="create-lobby" type="button">Create Online Lobby</button>
       </div>
-      <div class="join-row full">
+      <div class="join-row full menu-join">
         <input id="join-code" maxlength="6" placeholder="CODE" />
         <button id="join-lobby" type="button">Join Online Lobby</button>
       </div>
@@ -137,6 +143,13 @@
               <option value="truck">Mini Truck</option>
             </select>
           </label>
+          <div id="vehicle-preview-card" class="vehicle-preview-card" aria-label="Selected vehicle preview">
+            <canvas id="vehicle-preview" width="420" height="220"></canvas>
+            <div class="vehicle-preview-copy">
+              <strong id="vehicle-preview-name">Default Car</strong>
+              <span id="vehicle-preview-desc">Balanced original RLCSS car</span>
+            </div>
+          </div>
           <button id="ready-btn" type="button" class="ready">Ready</button>
           <button id="leave-lobby" type="button" class="secondary">Leave Lobby</button>
         </div>
