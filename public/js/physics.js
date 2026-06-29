@@ -235,10 +235,25 @@ export const VEHICLE_CONFIGS = {
   }
 };
 
+export const PITCH_SIZE_CONFIGS = {
+  compact: { label: "Compact", scale: 0.88 },
+  standard: { label: "Standard", scale: 1 },
+  wide: { label: "Wide", scale: 1.14 },
+  stadium: { label: "Stadium XL", scale: 1.30 }
+};
+
+export const MATCH_LENGTH_OPTIONS = {
+  180: { label: "3 minutes", seconds: 180 },
+  300: { label: "5 minutes", seconds: 300 },
+  420: { label: "7 minutes", seconds: 420 },
+  600: { label: "10 minutes", seconds: 600 }
+};
+
 export const DEFAULT_META = {
   mode: "standard",
   theme: "v10",
   teamSize: 1,
+  pitchSize: "standard",
   difficulty: "pro",
   playstyle: "balanced",
   chatScope: "all",
@@ -295,18 +310,22 @@ const fwdFromYaw = yaw => ({ x: Math.sin(yaw), z: Math.cos(yaw) });
 const rightFromYaw = yaw => ({ x: Math.cos(yaw), z: -Math.sin(yaw) });
 const dot2 = (ax, az, bx, bz) => ax * bx + az * bz;
 
-export function getArenaSize(mode = "standard", teamSize = 1) {
+export function getArenaSize(mode = "standard", teamSize = 1, pitchSize = "standard") {
   const cfg = MODE_CONFIGS[mode] || MODE_CONFIGS.standard;
   const n = clamp(Number(teamSize) || 1, 1, 5);
-  // Match the pre-multiplayer V10 baseline: 1v1 is 72 x 112.
+  const pitchCfg = PITCH_SIZE_CONFIGS[pitchSize] || PITCH_SIZE_CONFIGS.standard;
+  // Match the pre-multiplayer V10 baseline: 1v1 standard is 72 x 112.
+  // Team size still scales the arena, and the new pitch setting applies a
+  // separate multiplier for custom compact/wide/stadium matches.
   const teamScale = 1 + (n - 1) * 0.16;
   const flyingScale = mode === "flying" ? 1.08 : 1;
+  const pitchScale = pitchCfg.scale || 1;
   return {
-    w: BASE_FIELD_W * teamScale * flyingScale,
-    l: BASE_FIELD_L * teamScale * flyingScale,
+    w: BASE_FIELD_W * teamScale * flyingScale * pitchScale,
+    l: BASE_FIELD_L * teamScale * flyingScale * pitchScale,
     wallH: WALL_H,
     ceilingH: mode === "flying" ? CEILING_H_FLYING : CEILING_H_STANDARD,
-    goalW: BASE_GOAL_W * (1 + (n - 1) * 0.055),
+    goalW: BASE_GOAL_W * (1 + (n - 1) * 0.055) * Math.sqrt(pitchScale),
     goalH: GOAL_H,
     goalD: GOAL_D,
     floorRoughness: cfg.floorRoughness,
@@ -346,6 +365,8 @@ export function maxHumansFor(mode, teamSize) {
 export function serialiseMeta(meta = {}) {
   const out = { ...DEFAULT_META, ...meta };
   out.teamSize = clamp(Number(out.teamSize) || 1, 1, 5);
+  if (!PITCH_SIZE_CONFIGS[out.pitchSize]) out.pitchSize = "standard";
+  out.matchLength = clamp(Math.round(Number(out.matchLength) || DEFAULT_META.matchLength), 60, 900);
   if (!MODE_CONFIGS[out.mode]) out.mode = "standard";
   if (!["rookie", "pro", "allstar"].includes(out.difficulty)) out.difficulty = "pro";
   if (!["balanced", "defensive", "aggressive", "chaotic"].includes(out.playstyle)) out.playstyle = "balanced";
@@ -377,7 +398,7 @@ function aiVehicleForSlot(team, i, role) {
 
 export function makeInitialState(meta, players = {}) {
   const cleanMeta = serialiseMeta(meta);
-  const arena = getArenaSize(cleanMeta.mode, cleanMeta.teamSize);
+  const arena = getArenaSize(cleanMeta.mode, cleanMeta.teamSize, cleanMeta.pitchSize);
   const humans = Object.entries(players).map(([id, p]) => ({ id, ...p }));
   const cars = {};
   let slotIndex = 0;
@@ -401,6 +422,7 @@ export function makeInitialState(meta, players = {}) {
     mode: cleanMeta.mode,
     theme: cleanMeta.theme,
     teamSize: cleanMeta.teamSize,
+    pitchSize: cleanMeta.pitchSize,
     arena,
     ball: { x: 0, y: BALL_RADIUS, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, rz: 0, lastTouchTick: 0, lastTouchCar: null, lastTouchImpulse: 0 },
     boostPads: makeBoostPads(arena),
@@ -624,7 +646,7 @@ export class PhysicsHost {
 
   syncMeta(meta, players) {
     const next = serialiseMeta(meta);
-    if (next.mode !== this.meta.mode || next.teamSize !== this.meta.teamSize) {
+    if (next.mode !== this.meta.mode || next.teamSize !== this.meta.teamSize || next.pitchSize !== this.meta.pitchSize || next.matchLength !== this.meta.matchLength) {
       this.meta = next;
       this.state = makeInitialState(this.meta, players);
       return;
@@ -1232,6 +1254,7 @@ export function compactState(state) {
     mode: state.mode,
     theme: state.theme || "v10",
     teamSize: state.teamSize,
+    pitchSize: state.pitchSize || "standard",
     arena: state.arena,
     ball: {
       x: round(state.ball.x), y: round(state.ball.y), z: round(state.ball.z),

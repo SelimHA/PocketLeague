@@ -24,7 +24,16 @@
   <button id="toggle-chat" class="floating-btn chat-toggle hidden" type="button" aria-expanded="false" aria-controls="chat-panel" title="Toggle chat (T)">Chat</button>
   <button id="toggle-voice" class="floating-btn voice-toggle hidden" type="button" aria-pressed="false" title="Join/leave voice chat (V)">Voice</button>
   <button id="mute-voice" class="floating-btn voice-mute hidden" type="button" aria-pressed="false" title="Mute/unmute microphone (M)">Mic</button>
-  <div id="pause-overlay" class="pause-overlay hidden">PAUSED</div>
+  <div id="pause-overlay" class="pause-overlay hidden" role="dialog" aria-live="polite" aria-label="Paused">
+    <div class="pause-card">
+      <div class="pause-title">PAUSED</div>
+      <p class="pause-copy">Open settings without leaving the match.</p>
+      <div class="pause-actions">
+        <button id="pause-open-settings" type="button" class="secondary">Settings</button>
+        <button id="pause-resume" type="button" class="primary">Resume</button>
+      </div>
+    </div>
+  </div>
 
   <div id="boost-label" class="boost-label hidden">BOOST</div>
   <div id="boost-container" class="boost-container hidden"><div id="boost-fill" class="boost-fill"></div></div>
@@ -37,9 +46,13 @@
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V31 Settings, Gamepad & Profile Fixes</div>
+      <div class="menu-kicker">V32 Cloud Settings & Controller Upgrade</div>
       <h1>RLCSS</h1>
-      <p class="menu-subtitle">Rocket-style physics, desktop gamepad support, custom controls, adjustable camera FOV, optional accounts, lobby chat, voice chat, host pause, leaderboards, arenas, vehicles and Firebase lobbies.</p>
+      <p class="menu-subtitle">Rocket-style car football with richer arenas, voice/text chat, leaderboards, custom matches and full desktop controller support.</p>
+      <div class="controller-hero" aria-label="Controller recommendation">
+        <strong>Best with controller on PC</strong>
+        <span>Left stick drives, triggers accelerate/brake, right stick pans the camera. Keyboard and phone touch controls still work.</span>
+      </div>
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
       </div>
@@ -62,9 +75,9 @@
         <button id="join-lobby" type="button">Join Online Lobby</button>
       </div>
       <div class="menu-feature-grid" aria-label="Game highlights">
-        <div><strong>Solo</strong><span>AI squads &amp; roles</span></div>
-        <div><strong>Online</strong><span>Lobby codes</span></div>
-        <div><strong>Arena</strong><span>Themes &amp; props</span></div>
+        <div><strong>Controller</strong><span>PC gamepad camera pan</span></div>
+        <div><strong>Custom</strong><span>Pitch size &amp; match length</span></div>
+        <div><strong>Online</strong><span>Lobby, chat &amp; voice</span></div>
       </div>
       <p id="connection-status" class="status">Connecting to Firebase…</p>
     </section>
@@ -99,42 +112,80 @@
       <div class="panel-head compact-head">
         <div>
           <h2>Settings</h2>
-          <p class="muted">Change keyboard bindings, camera field of view and desktop controller mappings. Settings save on this device.</p>
+          <p class="muted">Tabs keep controls, camera, match defaults and controller setup easier to manage. Guest settings save locally; signed-in settings sync through Firebase.</p>
         </div>
         <button id="close-settings" type="button" class="secondary">Close</button>
       </div>
 
-      <div class="settings-section">
-        <h3>Camera</h3>
-        <label class="range-label">
-          Field of view
-          <input id="fov-range" type="range" min="55" max="85" step="1" />
-          <span id="fov-value" class="setting-value">65°</span>
-        </label>
+      <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+        <button type="button" class="settings-tab active" data-settings-tab="gameplay" role="tab" aria-selected="true">Gameplay</button>
+        <button type="button" class="settings-tab" data-settings-tab="camera" role="tab" aria-selected="false">Camera</button>
+        <button type="button" class="settings-tab" data-settings-tab="keyboard" role="tab" aria-selected="false">Keyboard</button>
+        <button type="button" class="settings-tab" data-settings-tab="controller" role="tab" aria-selected="false">Controller</button>
       </div>
 
-      <div class="settings-section">
-        <h3>Keyboard</h3>
-        <div id="keybind-list" class="bind-list"></div>
-        <button id="reset-keybinds" type="button" class="secondary small-action">Reset keyboard</button>
+      <div class="settings-pane active" data-settings-pane="gameplay" role="tabpanel">
+        <div class="settings-section">
+          <h3>Gameplay defaults</h3>
+          <label>
+            Default pitch size
+            <select id="settings-pitch-size">
+              <option value="compact">Compact</option>
+              <option value="standard" selected>Standard</option>
+              <option value="wide">Wide</option>
+              <option value="stadium">Stadium XL</option>
+            </select>
+          </label>
+          <label>
+            Default match length
+            <select id="settings-match-length">
+              <option value="180">3 minutes</option>
+              <option value="300" selected>5 minutes</option>
+              <option value="420">7 minutes</option>
+              <option value="600">10 minutes</option>
+            </select>
+          </label>
+          <p id="settings-sync-status" class="hint">Settings save automatically.</p>
+        </div>
       </div>
 
-      <div class="settings-section">
-        <h3>Controller</h3>
-        <label class="toggle-label"><input id="controller-enabled" type="checkbox" /> Enable desktop controller support</label>
-        <label class="range-label">
-          Stick deadzone
-          <input id="controller-deadzone" type="range" min="0.05" max="0.35" step="0.01" />
-          <span id="controller-deadzone-value" class="setting-value">0.18</span>
-        </label>
-        <label class="range-label">
-          Right-stick camera pan sensitivity
-          <input id="controller-pan-sensitivity" type="range" min="0.5" max="1.5" step="0.05" />
-          <span id="controller-pan-sensitivity-value" class="setting-value">1.00x</span>
-        </label>
-        <p id="controller-status" class="hint">Connect a controller, then use the left stick to drive and the right stick to pan the camera.</p>
-        <div id="controller-bind-list" class="controller-bind-list"></div>
-        <button id="reset-controller" type="button" class="secondary small-action">Reset controller</button>
+      <div class="settings-pane" data-settings-pane="camera" role="tabpanel" hidden>
+        <div class="settings-section">
+          <h3>Camera</h3>
+          <label class="range-label">
+            Field of view
+            <input id="fov-range" type="range" min="55" max="85" step="1" />
+            <span id="fov-value" class="setting-value">65°</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-pane" data-settings-pane="keyboard" role="tabpanel" hidden>
+        <div class="settings-section">
+          <h3>Keyboard</h3>
+          <div id="keybind-list" class="bind-list"></div>
+          <button id="reset-keybinds" type="button" class="secondary small-action">Reset keyboard</button>
+        </div>
+      </div>
+
+      <div class="settings-pane" data-settings-pane="controller" role="tabpanel" hidden>
+        <div class="settings-section">
+          <h3>Controller</h3>
+          <label class="toggle-label"><input id="controller-enabled" type="checkbox" /> Enable desktop controller support</label>
+          <label class="range-label">
+            Stick deadzone
+            <input id="controller-deadzone" type="range" min="0.05" max="0.35" step="0.01" />
+            <span id="controller-deadzone-value" class="setting-value">0.18</span>
+          </label>
+          <label class="range-label">
+            Right-stick camera pan sensitivity
+            <input id="controller-pan-sensitivity" type="range" min="0.5" max="1.5" step="0.05" />
+            <span id="controller-pan-sensitivity-value" class="setting-value">1.00x</span>
+          </label>
+          <p id="controller-status" class="hint">Connect a controller, then use the left stick to drive and the right stick to pan the camera. Use Detect to move a button/axis instead of picking it manually.</p>
+          <div id="controller-bind-list" class="controller-bind-list"></div>
+          <button id="reset-controller" type="button" class="secondary small-action">Reset controller</button>
+        </div>
       </div>
     </section>
 
@@ -188,6 +239,24 @@
               <option value="3">3v3</option>
               <option value="4">4v4</option>
               <option value="5">5v5</option>
+            </select>
+          </label>
+          <label>
+            Pitch size
+            <select id="pitch-size-select">
+              <option value="compact">Compact</option>
+              <option value="standard" selected>Standard</option>
+              <option value="wide">Wide</option>
+              <option value="stadium">Stadium XL</option>
+            </select>
+          </label>
+          <label>
+            Match length
+            <select id="match-length-select">
+              <option value="180">3 minutes</option>
+              <option value="300" selected>5 minutes</option>
+              <option value="420">7 minutes</option>
+              <option value="600">10 minutes</option>
             </select>
           </label>
           <label>

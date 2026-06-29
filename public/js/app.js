@@ -5,6 +5,8 @@ import {
   MODE_CONFIGS,
   ROLES,
   STADIUM_THEMES,
+  PITCH_SIZE_CONFIGS,
+  MATCH_LENGTH_OPTIONS,
   VEHICLE_CONFIGS,
   VISUAL_CONSTANTS,
   PhysicsHost,
@@ -27,12 +29,12 @@ const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountAuthFields: $("#account-auth-fields"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
-  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
+  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
-  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), toggleVoice: $("#toggle-voice"), muteVoice: $("#mute-voice"), pauseOverlay: $("#pause-overlay"),
+  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), toggleVoice: $("#toggle-voice"), muteVoice: $("#mute-voice"), pauseOverlay: $("#pause-overlay"), pauseOpenSettings: $("#pause-open-settings"), pauseResume: $("#pause-resume"),
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
@@ -248,19 +250,42 @@ let voicePresenceUnsub = null;
 let voiceRenderKey = "";
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
-const SETTINGS_VERSION = "v31";
+const SETTINGS_VERSION = "v32";
 const KEY_ACTIONS = [
   ["forward", "Drive forward"], ["backward", "Brake / reverse"], ["left", "Steer left"], ["right", "Steer right"],
   ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide"], ["cam", "Ball cam"], ["reset", "Reset"],
   ["pause", "Pause (host)"], ["chat", "Toggle chat"], ["voice", "Toggle voice"], ["mic", "Mute mic"]
 ];
 const DEFAULT_FOV = 65;
+const DEFAULT_GAME_SETTINGS = {
+  pitchSize: DEFAULT_META.pitchSize || "standard",
+  matchLength: DEFAULT_META.matchLength || 300
+};
 function loadBindings() {
   const base = defaultBindings();
   try {
     const saved = JSON.parse(localStorage.getItem("rlcss_key_bindings") || "{}");
-    return { ...base, ...saved };
+    return sanitiseBindings({ ...base, ...saved });
   } catch (_) { return { ...base }; }
+}
+function sanitiseBindings(raw = {}) {
+  const base = defaultBindings();
+  const out = { ...base };
+  for (const [action] of KEY_ACTIONS) {
+    if (typeof raw[action] === "string" && raw[action]) out[action] = raw[action];
+  }
+  return out;
+}
+function sanitiseGameSettings(raw = {}) {
+  const pitchSize = PITCH_SIZE_CONFIGS[raw.pitchSize] ? raw.pitchSize : DEFAULT_GAME_SETTINGS.pitchSize;
+  const matchLength = MATCH_LENGTH_OPTIONS[String(raw.matchLength)]
+    ? Number(raw.matchLength)
+    : clamp(Math.round(Number(raw.matchLength) || DEFAULT_GAME_SETTINGS.matchLength), 60, 900);
+  return { pitchSize, matchLength };
+}
+function loadGameSettings() {
+  try { return sanitiseGameSettings(JSON.parse(localStorage.getItem("rlcss_gameplay_settings") || "{}") || {}); }
+  catch (_) { return { ...DEFAULT_GAME_SETTINGS }; }
 }
 const bindings = loadBindings();
 const DEFAULT_CONTROLLER = {
@@ -282,16 +307,42 @@ const DEFAULT_CONTROLLER = {
   voiceButton: 10,
   micButton: 11
 };
+function sanitiseControllerSettings(raw = {}) {
+  const merged = { ...DEFAULT_CONTROLLER, ...(raw || {}) };
+  merged.enabled = merged.enabled !== false;
+  merged.deadzone = clamp(Number(merged.deadzone) || DEFAULT_CONTROLLER.deadzone, 0.05, 0.35);
+  merged.panSensitivity = clamp(Number(merged.panSensitivity) || DEFAULT_CONTROLLER.panSensitivity, 0.5, 1.5);
+  for (const key of ["steerAxis", "throttleAxis", "brakeAxis", "cameraXAxis", "cameraYAxis"]) merged[key] = clamp(Math.round(Number(merged[key]) || 0), 0, 7);
+  for (const key of ["jumpButton", "boostButton", "driftButton", "camButton", "resetButton", "pauseButton", "chatButton", "voiceButton", "micButton"]) merged[key] = clamp(Math.round(Number(merged[key]) || 0), 0, 17);
+  return merged;
+}
+const CONTROLLER_BIND_ROWS = [
+  ["steerAxis", "Left stick steer", "axis"], ["throttleAxis", "Right trigger / drive", "axis"], ["brakeAxis", "Left trigger / reverse", "axis"],
+  ["cameraXAxis", "Right stick pan X", "axis"], ["cameraYAxis", "Right stick pan Y", "axis"],
+  ["jumpButton", "Jump", "button"], ["boostButton", "Boost", "button"], ["driftButton", "Drift", "button"], ["camButton", "Ball cam", "button"],
+  ["resetButton", "Reset", "button"], ["pauseButton", "Pause", "button"], ["chatButton", "Chat", "button"], ["voiceButton", "Voice", "button"], ["micButton", "Mic mute", "button"]
+];
 function loadControllerSettings() {
-  try { return { ...DEFAULT_CONTROLLER, ...(JSON.parse(localStorage.getItem("rlcss_controller_settings") || "{}") || {}) }; }
+  try { return sanitiseControllerSettings(JSON.parse(localStorage.getItem("rlcss_controller_settings") || "{}") || {}); }
   catch (_) { return { ...DEFAULT_CONTROLLER }; }
 }
+let gameSettings = loadGameSettings();
 let cameraFov = clamp(Number(localStorage.getItem("rlcss_camera_fov")) || DEFAULT_FOV, 55, 85);
 let controllerSettings = loadControllerSettings();
 let pendingKeyBind = null;
 const controllerLatches = {};
 let controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
 let controllerLook = { x: 0, y: 0, active: false };
+let cloudSettingsLoadedForUid = null;
+let settingsSaveTimer = 0;
+let applyingCloudSettings = false;
+let activeSettingsTab = localStorage.getItem("rlcss_settings_tab") || "gameplay";
+let settingsOpenedFromPause = false;
+let pendingControllerBind = null;
+let controllerBindBaseline = null;
+let controllerBindStartedAt = 0;
+const controllerNavLatches = {};
+let controllerNavLastMove = 0;
 const mobileInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
 let mobileDriftTimer = 0;
 let mobileDriftCooldownTimer = 0;
@@ -300,10 +351,15 @@ let touchDevice = matchMedia("(pointer: coarse)").matches;
 
 ui.name.value = playerName;
 populateChoiceSelects();
+applyGameSettingsToSelectors({ forceLobbyDefaults: true });
 renderSettingsUi();
 
 function populateChoiceSelects() {
   fillSelect(ui.theme, STADIUM_THEMES, DEFAULT_META.theme);
+  fillSelect(ui.pitchSize, PITCH_SIZE_CONFIGS, gameSettings.pitchSize);
+  fillSelect(ui.settingsPitchSize, PITCH_SIZE_CONFIGS, gameSettings.pitchSize);
+  fillSelect(ui.matchLength, MATCH_LENGTH_OPTIONS, String(gameSettings.matchLength));
+  fillSelect(ui.settingsMatchLength, MATCH_LENGTH_OPTIONS, String(gameSettings.matchLength));
   fillSelect(ui.vehicle, VEHICLE_CONFIGS, "default");
 }
 
@@ -313,7 +369,7 @@ function fillSelect(select, configs, fallback) {
   select.innerHTML = Object.entries(configs)
     .map(([key, cfg]) => `<option value="${key}">${escapeHtml(cfg.label || key)}</option>`)
     .join("");
-  select.value = configs[current] ? current : fallback;
+  select.value = configs[current] ? current : String(fallback);
 }
 
 function actionLabel(action) {
@@ -330,15 +386,123 @@ function keyLabel(code) {
 function saveBindings() {
   localStorage.setItem("rlcss_key_bindings", JSON.stringify(bindings));
   renderSettingsUi();
+  queueSettingsSave();
 }
 
 function saveControllerSettings() {
+  controllerSettings = sanitiseControllerSettings(controllerSettings);
   localStorage.setItem("rlcss_controller_settings", JSON.stringify(controllerSettings));
   renderSettingsUi();
+  queueSettingsSave();
+}
+
+function saveGameSettingsLocal() {
+  gameSettings = sanitiseGameSettings(gameSettings);
+  localStorage.setItem("rlcss_gameplay_settings", JSON.stringify(gameSettings));
+}
+
+function settingsRef(id = uid) {
+  return ref(db, `settings/${id}`);
+}
+
+function cloudSettingsPayload() {
+  return {
+    version: SETTINGS_VERSION,
+    keyboard: { ...bindings },
+    camera: { fov: cameraFov },
+    controller: sanitiseControllerSettings(controllerSettings),
+    gameplay: sanitiseGameSettings(gameSettings),
+    ui: { settingsTab: activeSettingsTab },
+    updatedAt: serverTimestamp()
+  };
+}
+
+function setSettingsSyncStatus(text) {
+  if (ui.settingsSyncStatus) ui.settingsSyncStatus.textContent = text;
+}
+
+function saveLocalSettings() {
+  localStorage.setItem("rlcss_key_bindings", JSON.stringify(bindings));
+  localStorage.setItem("rlcss_camera_fov", String(cameraFov));
+  localStorage.setItem("rlcss_controller_settings", JSON.stringify(sanitiseControllerSettings(controllerSettings)));
+  localStorage.setItem("rlcss_settings_tab", activeSettingsTab);
+  saveGameSettingsLocal();
+}
+
+function queueSettingsSave() {
+  saveLocalSettings();
+  if (applyingCloudSettings) return;
+  if (!isAccountUser() || !db || !uid) {
+    setSettingsSyncStatus("Settings saved on this device. Sign in to sync them.");
+    return;
+  }
+  clearTimeout(settingsSaveTimer);
+  setSettingsSyncStatus("Saving settings to Firebase…");
+  settingsSaveTimer = setTimeout(() => saveSettingsToFirebase(), 650);
+}
+
+async function saveSettingsToFirebase() {
+  if (!isAccountUser() || !db || !uid) return;
+  try {
+    await set(settingsRef(uid), cloudSettingsPayload());
+    cloudSettingsLoadedForUid = uid;
+    setSettingsSyncStatus("Settings saved to Firebase.");
+  } catch (err) {
+    console.warn("Settings save failed", err);
+    setSettingsSyncStatus("Could not sync settings; local copy is saved.");
+  }
+}
+
+function applyLoadedSettings(raw = {}) {
+  applyingCloudSettings = true;
+  try {
+    const cloudKeys = sanitiseBindings(raw.keyboard || raw.keyBindings || {});
+    Object.keys(bindings).forEach(key => delete bindings[key]);
+    Object.assign(bindings, cloudKeys);
+    cameraFov = clamp(Number(raw.camera?.fov ?? raw.cameraFov) || DEFAULT_FOV, 55, 85);
+    controllerSettings = sanitiseControllerSettings(raw.controller || raw.controllerSettings || {});
+    gameSettings = sanitiseGameSettings(raw.gameplay || raw.gameSettings || {});
+    if (raw.ui?.settingsTab) activeSettingsTab = raw.ui.settingsTab;
+    saveLocalSettings();
+    applyCameraSettings();
+    applyGameSettingsToSelectors({ forceLobbyDefaults: !lobbyCode });
+    renderSettingsUi();
+    updateControlsHintText();
+  } finally {
+    applyingCloudSettings = false;
+  }
+}
+
+async function loadSettingsFromFirebase() {
+  if (!isAccountUser() || !db || !uid || cloudSettingsLoadedForUid === uid) return;
+  try {
+    const snap = await get(settingsRef(uid));
+    if (snap.exists()) {
+      applyLoadedSettings(snap.val() || {});
+      cloudSettingsLoadedForUid = uid;
+      setSettingsSyncStatus("Settings loaded from Firebase.");
+    } else {
+      await saveSettingsToFirebase();
+    }
+  } catch (err) {
+    console.warn("Settings load failed", err);
+    setSettingsSyncStatus("Could not load cloud settings; using this device.");
+  }
+}
+
+function applyGameSettingsToSelectors({ forceLobbyDefaults = false } = {}) {
+  const pitch = PITCH_SIZE_CONFIGS[gameSettings.pitchSize] ? gameSettings.pitchSize : DEFAULT_META.pitchSize;
+  const length = MATCH_LENGTH_OPTIONS[String(gameSettings.matchLength)] ? String(gameSettings.matchLength) : String(DEFAULT_META.matchLength);
+  if (ui.settingsPitchSize) ui.settingsPitchSize.value = pitch;
+  if (ui.settingsMatchLength) ui.settingsMatchLength.value = length;
+  if (forceLobbyDefaults || !lobbyCode) {
+    if (ui.pitchSize) ui.pitchSize.value = pitch;
+    if (ui.matchLength) ui.matchLength.value = length;
+  }
 }
 
 function axisOptions(selected) {
-  return Array.from({ length: 8 }, (_, i) => `<option value="${i}" ${Number(selected) === i ? "selected" : ""}>Axis ${i}</option>`).join("");
+  return Array.from({ length: 8 }, (_, i) => `<option value="${i}" ${Number(selected) === i ? "selected" : ""}>Axis ${i} / Button ${i}</option>`).join("");
 }
 
 function buttonOptions(selected) {
@@ -348,6 +512,7 @@ function buttonOptions(selected) {
 function renderSettingsUi() {
   if (ui.fovRange) ui.fovRange.value = String(cameraFov);
   if (ui.fovValue) ui.fovValue.textContent = `${Math.round(cameraFov)}°`;
+  applyGameSettingsToSelectors({ forceLobbyDefaults: false });
   if (ui.keybindList) {
     ui.keybindList.innerHTML = KEY_ACTIONS.map(([action, label]) => `
       <div class="bind-row">
@@ -361,21 +526,57 @@ function renderSettingsUi() {
   if (ui.controllerPanSensitivity) ui.controllerPanSensitivity.value = String(controllerSettings.panSensitivity ?? DEFAULT_CONTROLLER.panSensitivity);
   if (ui.controllerPanSensitivityValue) ui.controllerPanSensitivityValue.textContent = `${Number(controllerSettings.panSensitivity ?? DEFAULT_CONTROLLER.panSensitivity).toFixed(2)}x`;
   if (ui.controllerBindList) {
-    const rows = [
-      ["steerAxis", "Left stick steer", "axis"], ["throttleAxis", "Right trigger / drive axis", "axis"], ["brakeAxis", "Left trigger / reverse axis", "axis"],
-      ["cameraXAxis", "Right stick pan X", "axis"], ["cameraYAxis", "Right stick pan Y", "axis"],
-      ["jumpButton", "Jump", "button"], ["boostButton", "Boost", "button"], ["driftButton", "Drift", "button"], ["camButton", "Ball cam", "button"],
-      ["resetButton", "Reset", "button"], ["pauseButton", "Pause", "button"], ["chatButton", "Chat", "button"], ["voiceButton", "Voice", "button"], ["micButton", "Mic mute", "button"]
-    ];
-    ui.controllerBindList.innerHTML = rows.map(([key, label, type]) => `
-      <label class="controller-bind-row">
+    ui.controllerBindList.innerHTML = CONTROLLER_BIND_ROWS.map(([key, label, type]) => {
+      const listening = pendingControllerBind?.key === key;
+      return `
+      <label class="controller-bind-row ${listening ? "listening" : ""}">
         <span>${escapeHtml(label)}</span>
-        <select data-controller-bind="${key}">${type === "axis" ? axisOptions(controllerSettings[key]) : buttonOptions(controllerSettings[key])}</select>
-      </label>`).join("");
+        <div class="controller-bind-controls">
+          <select data-controller-bind="${key}">${type === "axis" ? axisOptions(controllerSettings[key]) : buttonOptions(controllerSettings[key])}</select>
+          <button type="button" class="detect-controller-btn ${listening ? "listening" : ""}" data-controller-detect="${key}" data-controller-type="${type}">${listening ? "Move input…" : "Detect"}</button>
+        </div>
+      </label>`;
+    }).join("");
   }
   const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
   if (ui.controllerStatus) ui.controllerStatus.textContent = pads.length ? `Controller detected: ${pads[0].id}` : "No controller detected yet. Plug one in, press a button, then use the left stick to drive and right stick to pan.";
   updateControlsHintText();
+}
+
+function setSettingsTab(tab = "gameplay") {
+  const safe = ["gameplay", "camera", "keyboard", "controller"].includes(tab) ? tab : "gameplay";
+  activeSettingsTab = safe;
+  localStorage.setItem("rlcss_settings_tab", safe);
+  document.querySelectorAll("[data-settings-tab]").forEach(btn => {
+    const active = btn.dataset.settingsTab === safe;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  document.querySelectorAll("[data-settings-pane]").forEach(pane => {
+    const active = pane.dataset.settingsPane === safe;
+    pane.classList.toggle("active", active);
+    pane.hidden = !active;
+  });
+}
+
+function openSettingsPanel(fromPause = false) {
+  settingsOpenedFromPause = !!fromPause;
+  document.body.classList.toggle("settings-open", !!fromPause || currentMeta?.status !== "running");
+  showMenuPanel("settings");
+  setSettingsTab(activeSettingsTab);
+}
+
+function closeSettingsPanel() {
+  if (currentMeta?.status === "running") {
+    if (ui.settingsCard) ui.settingsCard.classList.add("hidden");
+    document.body.classList.remove("settings-open");
+    settingsOpenedFromPause = false;
+    updateGameVisibility();
+    return;
+  }
+  document.body.classList.remove("settings-open");
+  settingsOpenedFromPause = false;
+  showMenuPanel("setup");
 }
 
 function applyCameraSettings() {
@@ -448,7 +649,9 @@ async function bootFirebase() {
           clearTimeout(timer);
           uid = user.uid;
           firebaseReady = true;
-          refreshAccountProfile().finally(() => updateAccountUi());
+          refreshAccountProfile().then(profile => {
+            if (profile?.username) return loadSettingsFromFirebase();
+          }).finally(() => updateAccountUi());
           startLeaderboardListener();
           ui.connection.textContent = "Connected. Create a lobby or join with a code.";
           ui.create.disabled = false;
@@ -539,7 +742,7 @@ function updateAccountUi() {
   if (ui.signOutAccount) ui.signOutAccount.classList.toggle("hidden", !signedIn);
   if (ui.accountMessage && !ui.accountMessage.dataset.busy) {
     ui.accountMessage.textContent = signedIn
-      ? `You are signed in as ${accountName()}. Sign-in fields are hidden; use Sign Out to switch account.`
+      ? `You are signed in as ${accountName()}. Sign-in fields are hidden; settings sync through Firebase.`
       : (authUser ? "Guest play works. Create or sign in to save leaderboard stats." : "Connect Firebase to create accounts and save leaderboard stats.");
   }
   if (signedIn) {
@@ -591,6 +794,7 @@ async function saveProfile(username) {
   localStorage.setItem("rlcss_online_name", playerName);
   if (ui.name) ui.name.value = playerName;
   updateAccountUi();
+  queueSettingsSave();
 }
 
 function setAccountMessage(text, busy = false) {
@@ -613,7 +817,8 @@ async function createAccount() {
   uid = cred.user.uid;
   await saveProfile(username);
   await initialiseOwnLeaderboard(username);
-  setAccountMessage(`Signed in as ${username}. Leaderboard stats will now save.`);
+  await loadSettingsFromFirebase();
+  setAccountMessage(`Signed in as ${username}. Leaderboard stats and settings will now save.`);
   startLeaderboardListener();
 }
 
@@ -630,7 +835,8 @@ async function signInAccount() {
   await refreshAccountProfile();
   if (!accountProfile?.username) await saveProfile(username);
   await initialiseOwnLeaderboard(username);
-  setAccountMessage(`Signed in as ${accountName()}.`);
+  await loadSettingsFromFirebase();
+  setAccountMessage(`Signed in as ${accountName()}. Settings loaded from Firebase when available.`);
   startLeaderboardListener();
 }
 
@@ -639,6 +845,7 @@ async function signOutAccount() {
   setAccountMessage("Signing out…", true);
   await signOut(auth);
   accountProfile = null;
+  cloudSettingsLoadedForUid = null;
   uid = null;
   authUser = null;
   updateAccountUi();
@@ -766,6 +973,8 @@ function currentSoloMetaPatch() {
     mode: ui.mode?.value || DEFAULT_META.mode,
     theme: ui.theme?.value || DEFAULT_META.theme,
     teamSize: Number(ui.teamSize?.value || DEFAULT_META.teamSize),
+    pitchSize: ui.pitchSize?.value || gameSettings.pitchSize || DEFAULT_META.pitchSize,
+    matchLength: Number(ui.matchLength?.value || gameSettings.matchLength || DEFAULT_META.matchLength),
     difficulty: ui.difficulty?.value || DEFAULT_META.difficulty,
     playstyle: ui.playstyle?.value || DEFAULT_META.playstyle,
     chatScope: ui.chatScope?.value || DEFAULT_META.chatScope,
@@ -981,6 +1190,8 @@ function renderLobby() {
   ui.mode.value = currentMeta.mode;
   if (ui.theme) ui.theme.value = currentMeta.theme || DEFAULT_META.theme;
   ui.teamSize.value = String(currentMeta.teamSize);
+  if (ui.pitchSize) ui.pitchSize.value = currentMeta.pitchSize || DEFAULT_META.pitchSize;
+  if (ui.matchLength) ui.matchLength.value = String(currentMeta.matchLength || DEFAULT_META.matchLength);
   ui.difficulty.value = currentMeta.difficulty;
   ui.playstyle.value = currentMeta.playstyle;
   if (ui.chatScope) ui.chatScope.value = currentMeta.chatScope || DEFAULT_META.chatScope;
@@ -992,6 +1203,8 @@ function renderLobby() {
   ui.ready.classList.toggle("not-ready", !isSinglePlayer && !!local.ready);
   ui.ready.textContent = isSinglePlayer ? "Start Match" : (local.ready ? "Unready" : "Ready");
   ui.mode.disabled = ui.teamSize.disabled = ui.difficulty.disabled = ui.playstyle.disabled = !isHost || currentMeta.status !== "waiting";
+  if (ui.pitchSize) ui.pitchSize.disabled = !isHost || currentMeta.status !== "waiting";
+  if (ui.matchLength) ui.matchLength.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.chatScope) ui.chatScope.disabled = !isHost || currentMeta.status !== "waiting";
   if (ui.voiceScope) ui.voiceScope.disabled = !isHost || currentMeta.status !== "waiting" || voiceActive;
   if (ui.theme) ui.theme.disabled = !isHost || currentMeta.status !== "waiting";
@@ -1002,9 +1215,11 @@ function renderLobby() {
   const humanCount = Object.keys(currentPlayers).length;
   const chatCopy = (currentMeta.chatScope || "all") === "team" ? "Game chat: same-team" : "Game chat: everyone";
   const voiceCopy = currentMeta.voiceScope === "off" ? "Voice: off" : (currentMeta.voiceScope === "all" ? "Voice: everyone" : "Voice: team");
+  const pitchCopy = (PITCH_SIZE_CONFIGS[currentMeta.pitchSize] || PITCH_SIZE_CONFIGS.standard).label;
+  const lengthCopy = `${Math.round((currentMeta.matchLength || DEFAULT_META.matchLength) / 60)} min`;
   ui.maxHumans.textContent = isSinglePlayer
-    ? `Solo mode · ${themeLabel(currentMeta.theme)} · ${chatCopy} · ${voiceCopy} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`
-    : `Lobby theme: ${themeLabel(currentMeta.theme)} · ${chatCopy} · ${voiceCopy} · Max humans: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
+    ? `Solo mode · ${themeLabel(currentMeta.theme)} · ${pitchCopy} pitch · ${lengthCopy} · ${chatCopy} · ${voiceCopy} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`
+    : `Lobby theme: ${themeLabel(currentMeta.theme)} · ${pitchCopy} pitch · ${lengthCopy} · ${chatCopy} · ${voiceCopy} · Max humans: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
   const allReady = humanCount > 0 && Object.values(currentPlayers).every(p => p.ready);
   if (currentMeta.status === "waiting") {
     ui.lobbyStatus.textContent = isSinglePlayer
@@ -1105,7 +1320,10 @@ function updateGameVisibility() {
   if (running) {
     if (ui.accountCard) ui.accountCard.classList.add("hidden");
     if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
-    if (ui.settingsCard) ui.settingsCard.classList.add("hidden");
+    if (ui.settingsCard && (!currentMeta?.paused || !settingsOpenedFromPause)) {
+      ui.settingsCard.classList.add("hidden");
+      document.body.classList.remove("settings-open");
+    }
   }
   ui.hud.classList.toggle("hidden", !running);
   ui.leaveGame.classList.toggle("hidden", !running);
@@ -1115,6 +1333,8 @@ function updateGameVisibility() {
     ui.pauseGame.textContent = currentMeta?.paused ? "Resume" : "Pause";
   }
   if (ui.pauseOverlay) ui.pauseOverlay.classList.toggle("hidden", !running || !currentMeta?.paused);
+  if (ui.pauseResume) ui.pauseResume.classList.toggle("hidden", !isHostPlayer);
+  if (ui.pauseOpenSettings) ui.pauseOpenSettings.classList.toggle("hidden", !running || !currentMeta?.paused);
   if (running && !chatOpenPreferenceSet && !isPhonePortrait()) chatOpen = true;
   if (ui.toggleChat) {
     ui.toggleChat.classList.toggle("hidden", !running);
@@ -1203,7 +1423,8 @@ async function leaveToMenu(message = "") {
   singlePlayerId = null;
   lobbyCode = null; currentLobby = null; currentMeta = null; currentPlayers = {}; currentChat = {}; latestState = null; latestInputs = {};
   ui.lobby.classList.remove("solo");
-  document.body.classList.remove("game-running");
+  document.body.classList.remove("game-running", "settings-open");
+  settingsOpenedFromPause = false;
   ui.setup.classList.remove("hidden");
   if (ui.accountCard) ui.accountCard.classList.add("hidden");
   if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
@@ -1259,11 +1480,166 @@ function latchButton(name, pressed, handler) {
   } else if (!pressed) controllerLatches[name] = false;
 }
 
+function getFirstRawGamepad() {
+  if (!navigator.getGamepads) return null;
+  return Array.from(navigator.getGamepads()).find(Boolean) || null;
+}
+
+function gamepadSnapshot(pad) {
+  return {
+    axes: Array.from(pad?.axes || []),
+    buttons: Array.from(pad?.buttons || []).map(btn => Number(btn?.value || (btn?.pressed ? 1 : 0)) || 0)
+  };
+}
+
+function startControllerBindDetect(key, type) {
+  const pad = getFirstRawGamepad();
+  pendingControllerBind = { key, type };
+  controllerBindBaseline = gamepadSnapshot(pad || { axes: [], buttons: [] });
+  controllerBindStartedAt = performance.now();
+  renderSettingsUi();
+  if (ui.controllerStatus) ui.controllerStatus.textContent = pad ? "Move the controller input you want to assign…" : "Press a button on the controller, then move the input you want to assign…";
+}
+
+function finishControllerBindDetect(value) {
+  if (!pendingControllerBind) return;
+  controllerSettings[pendingControllerBind.key] = Number(value);
+  pendingControllerBind = null;
+  controllerBindBaseline = null;
+  saveControllerSettings();
+  if (ui.controllerStatus) ui.controllerStatus.textContent = "Controller binding detected and saved.";
+}
+
+function cancelControllerBindDetect(message = "Controller detect cancelled.") {
+  pendingControllerBind = null;
+  controllerBindBaseline = null;
+  renderSettingsUi();
+  if (ui.controllerStatus) ui.controllerStatus.textContent = message;
+}
+
+function updateControllerBindDetect() {
+  if (!pendingControllerBind) return;
+  const pad = getFirstRawGamepad();
+  if (!pad) return;
+  if (performance.now() - controllerBindStartedAt > 12000) return cancelControllerBindDetect("Controller detect timed out. Try again and move one input clearly.");
+  const base = controllerBindBaseline || gamepadSnapshot(pad);
+  const axes = Array.from(pad.axes || []);
+  const buttons = Array.from(pad.buttons || []).map(btn => Number(btn?.value || (btn?.pressed ? 1 : 0)) || 0);
+  if (pendingControllerBind.type === "axis") {
+    for (let i = 0; i < axes.length; i++) {
+      const v = Number(axes[i]) || 0;
+      const old = Number(base.axes?.[i]) || 0;
+      if (Math.abs(v - old) > 0.45 || Math.abs(v) > 0.72) return finishControllerBindDetect(i);
+    }
+    // Many browsers expose triggers as buttons, but the existing axis mapping
+    // intentionally also checks buttonValue(index), so saving the button index
+    // here works for common LT/RT controller layouts.
+    for (let i = 0; i < buttons.length; i++) {
+      const v = buttons[i];
+      const old = Number(base.buttons?.[i]) || 0;
+      if (v > 0.55 && v - old > 0.35) return finishControllerBindDetect(i);
+    }
+  } else {
+    for (let i = 0; i < buttons.length; i++) {
+      const v = buttons[i];
+      const old = Number(base.buttons?.[i]) || 0;
+      if (v > 0.55 && v - old > 0.35) return finishControllerBindDetect(i);
+    }
+  }
+}
+
+function isVisibleElement(el) {
+  if (!el || el.disabled || el.closest(".hidden") || el.hidden) return false;
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function menuFocusableElements() {
+  const root = document.querySelector("#ui-root");
+  const selectors = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])";
+  const items = Array.from(root?.querySelectorAll(selectors) || []).filter(isVisibleElement);
+  const pauseItems = Array.from(document.querySelectorAll("#pause-overlay button:not(:disabled)")).filter(isVisibleElement);
+  return [...items, ...pauseItems];
+}
+
+function focusMenuElement(delta = 1) {
+  const items = menuFocusableElements();
+  if (!items.length) return;
+  const idx = Math.max(0, items.indexOf(document.activeElement));
+  const next = items[(idx + delta + items.length) % items.length];
+  next.focus({ preventScroll: false });
+}
+
+function clickFocusedMenuElement() {
+  const el = document.activeElement;
+  if (!isVisibleElement(el)) return focusMenuElement(1);
+  if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return;
+  el.click();
+}
+
+function stepFocusedSelect(delta) {
+  const el = document.activeElement;
+  if (!el || el.tagName !== "SELECT") return false;
+  const next = clamp(el.selectedIndex + delta, 0, el.options.length - 1);
+  if (next === el.selectedIndex) return true;
+  el.selectedIndex = next;
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  return true;
+}
+
+function navButtonEdge(name, pressed) {
+  if (pressed && !controllerNavLatches[name]) {
+    controllerNavLatches[name] = true;
+    return true;
+  }
+  if (!pressed) controllerNavLatches[name] = false;
+  return false;
+}
+
+function settingsTabDelta(delta) {
+  if (!ui.settingsCard || ui.settingsCard.classList.contains("hidden")) return false;
+  const tabs = ["gameplay", "camera", "keyboard", "controller"];
+  const idx = Math.max(0, tabs.indexOf(activeSettingsTab));
+  setSettingsTab(tabs[(idx + delta + tabs.length) % tabs.length]);
+  return true;
+}
+
+function pollControllerMenuNavigation() {
+  if (pendingControllerBind) return;
+  const activeMenu = !document.body.classList.contains("game-running") || (currentMeta?.paused && (!ui.settingsCard?.classList.contains("hidden") || !ui.pauseOverlay?.classList.contains("hidden")));
+  if (!activeMenu) return;
+  const pad = getFirstRawGamepad();
+  if (!pad) return;
+  const buttons = pad.buttons || [];
+  const axisX = axisValue(pad, 0, 0.42);
+  const axisY = axisValue(pad, 1, 0.42);
+  const dUp = buttons[12]?.pressed || axisY < -0.65;
+  const dDown = buttons[13]?.pressed || axisY > 0.65;
+  const dLeft = buttons[14]?.pressed || axisX < -0.65;
+  const dRight = buttons[15]?.pressed || axisX > 0.65;
+  const now = performance.now();
+  if ((dUp || dDown || dLeft || dRight) && now - controllerNavLastMove > 170) {
+    controllerNavLastMove = now;
+    if (dLeft && (stepFocusedSelect(-1) || settingsTabDelta(-1))) return;
+    if (dRight && (stepFocusedSelect(1) || settingsTabDelta(1))) return;
+    focusMenuElement(dDown || dRight ? 1 : -1);
+  }
+  if (navButtonEdge("a", !!buttons[0]?.pressed)) clickFocusedMenuElement();
+  if (navButtonEdge("b", !!buttons[1]?.pressed)) {
+    if (ui.settingsCard && !ui.settingsCard.classList.contains("hidden")) closeSettingsPanel();
+    else if (ui.accountCard && !ui.accountCard.classList.contains("hidden")) showMenuPanel("setup");
+    else if (ui.leaderboardCard && !ui.leaderboardCard.classList.contains("hidden")) showMenuPanel("setup");
+  }
+  if (navButtonEdge("lb", !!buttons[4]?.pressed)) settingsTabDelta(-1);
+  if (navButtonEdge("rb", !!buttons[5]?.pressed)) settingsTabDelta(1);
+}
+
 function pollController() {
   const pad = getFirstGamepad();
   controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
   controllerLook = { x: 0, y: 0, active: false };
   if (!pad) return controllerInput;
+  if (pendingControllerBind) return controllerInput;
 
   const steerAxis = axisValue(pad, controllerSettings.steerAxis);
   const driveTrigger = Math.max(triggerValueFromAxis(pad, controllerSettings.throttleAxis), buttonValue(pad, controllerSettings.throttleAxis));
@@ -1739,9 +2115,22 @@ function safeUi(handler, label) {
 }
 
 function showMenuPanel(which = "setup") {
+  const running = currentMeta?.status === "running";
   const showAccount = which === "account";
   const showLeaderboard = which === "leaderboard";
   const showSettings = which === "settings";
+  if (running) {
+    document.body.classList.toggle("settings-open", showSettings && !!currentMeta?.paused);
+    if (ui.setup) ui.setup.classList.add("hidden");
+    if (ui.lobby) ui.lobby.classList.add("hidden");
+    if (ui.accountCard) ui.accountCard.classList.add("hidden");
+    if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
+    if (ui.settingsCard) ui.settingsCard.classList.toggle("hidden", !showSettings || !currentMeta?.paused);
+    if (showSettings) { renderSettingsUi(); setSettingsTab(activeSettingsTab); }
+    return;
+  }
+  settingsOpenedFromPause = false;
+  document.body.classList.toggle("settings-open", showSettings);
   if (ui.setup) ui.setup.classList.toggle("hidden", showAccount || showLeaderboard || showSettings || !!lobbyCode);
   if (ui.accountCard) ui.accountCard.classList.toggle("hidden", !showAccount);
   if (ui.leaderboardCard) ui.leaderboardCard.classList.toggle("hidden", !showLeaderboard);
@@ -1752,7 +2141,7 @@ function showMenuPanel(which = "setup") {
   }
   if (showAccount && ui.accountUsername && !ui.accountUsername.value) ui.accountUsername.value = normalizeUsername(ui.name?.value || accountProfile?.username || "");
   if (showAccount) updateAccountUi();
-  if (showSettings) renderSettingsUi();
+  if (showSettings) { renderSettingsUi(); setSettingsTab(activeSettingsTab); }
 }
 
 // UI events
@@ -1762,8 +2151,9 @@ ui.join.addEventListener("click", safeUi(joinLobby, "Join lobby"));
 ui.joinCode.addEventListener("input", () => ui.joinCode.value = ui.joinCode.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
 if (ui.openAccount) ui.openAccount.addEventListener("click", () => showMenuPanel("account"));
 if (ui.closeAccount) ui.closeAccount.addEventListener("click", () => showMenuPanel("setup"));
-if (ui.openSettings) ui.openSettings.addEventListener("click", () => showMenuPanel("settings"));
-if (ui.closeSettings) ui.closeSettings.addEventListener("click", () => showMenuPanel("setup"));
+if (ui.openSettings) ui.openSettings.addEventListener("click", () => openSettingsPanel(false));
+if (ui.closeSettings) ui.closeSettings.addEventListener("click", closeSettingsPanel);
+document.querySelectorAll("[data-settings-tab]").forEach(btn => btn.addEventListener("click", () => setSettingsTab(btn.dataset.settingsTab)));
 if (ui.openLeaderboard) ui.openLeaderboard.addEventListener("click", () => showMenuPanel("leaderboard"));
 if (ui.closeLeaderboard) ui.closeLeaderboard.addEventListener("click", () => showMenuPanel("setup"));
 if (ui.createAccount) ui.createAccount.addEventListener("click", safeUi(createAccount, "Create account"));
@@ -1788,6 +2178,19 @@ if (ui.fovRange) ui.fovRange.addEventListener("input", () => {
   localStorage.setItem("rlcss_camera_fov", String(cameraFov));
   if (ui.fovValue) ui.fovValue.textContent = `${Math.round(cameraFov)}°`;
   applyCameraSettings();
+  queueSettingsSave();
+});
+if (ui.settingsPitchSize) ui.settingsPitchSize.addEventListener("change", () => {
+  gameSettings.pitchSize = ui.settingsPitchSize.value;
+  saveGameSettingsLocal();
+  applyGameSettingsToSelectors({ forceLobbyDefaults: !lobbyCode });
+  queueSettingsSave();
+});
+if (ui.settingsMatchLength) ui.settingsMatchLength.addEventListener("change", () => {
+  gameSettings.matchLength = Number(ui.settingsMatchLength.value) || DEFAULT_META.matchLength;
+  saveGameSettingsLocal();
+  applyGameSettingsToSelectors({ forceLobbyDefaults: !lobbyCode });
+  queueSettingsSave();
 });
 if (ui.controllerEnabled) ui.controllerEnabled.addEventListener("change", () => {
   controllerSettings.enabled = !!ui.controllerEnabled.checked;
@@ -1796,18 +2199,23 @@ if (ui.controllerEnabled) ui.controllerEnabled.addEventListener("change", () => 
 if (ui.controllerDeadzone) ui.controllerDeadzone.addEventListener("input", () => {
   controllerSettings.deadzone = clamp(Number(ui.controllerDeadzone.value) || DEFAULT_CONTROLLER.deadzone, 0.05, 0.35);
   if (ui.controllerDeadzoneValue) ui.controllerDeadzoneValue.textContent = controllerSettings.deadzone.toFixed(2);
-  localStorage.setItem("rlcss_controller_settings", JSON.stringify(controllerSettings));
+  saveControllerSettings();
 });
 if (ui.controllerPanSensitivity) ui.controllerPanSensitivity.addEventListener("input", () => {
   controllerSettings.panSensitivity = clamp(Number(ui.controllerPanSensitivity.value) || DEFAULT_CONTROLLER.panSensitivity, 0.5, 1.5);
   if (ui.controllerPanSensitivityValue) ui.controllerPanSensitivityValue.textContent = `${controllerSettings.panSensitivity.toFixed(2)}x`;
-  localStorage.setItem("rlcss_controller_settings", JSON.stringify(controllerSettings));
+  saveControllerSettings();
 });
 if (ui.controllerBindList) ui.controllerBindList.addEventListener("change", e => {
   const sel = e.target.closest("[data-controller-bind]");
   if (!sel) return;
   controllerSettings[sel.dataset.controllerBind] = Number(sel.value);
   saveControllerSettings();
+});
+if (ui.controllerBindList) ui.controllerBindList.addEventListener("click", e => {
+  const btn = e.target.closest("[data-controller-detect]");
+  if (!btn) return;
+  startControllerBindDetect(btn.dataset.controllerDetect, btn.dataset.controllerType || "button");
 });
 if (ui.resetController) ui.resetController.addEventListener("click", () => {
   controllerSettings = { ...DEFAULT_CONTROLLER };
@@ -1817,6 +2225,8 @@ ui.copy.addEventListener("click", () => { if (!isSinglePlayer) navigator.clipboa
 ui.leaveLobby.addEventListener("click", safeUi(() => leaveToMenu("Left lobby."), "Leave lobby"));
 ui.leaveGame.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
 if (ui.pauseGame) ui.pauseGame.addEventListener("click", safeUi(togglePause, "Toggle pause"));
+if (ui.pauseResume) ui.pauseResume.addEventListener("click", safeUi(togglePause, "Resume match"));
+if (ui.pauseOpenSettings) ui.pauseOpenSettings.addEventListener("click", () => openSettingsPanel(true));
 if (ui.toggleChat) ui.toggleChat.addEventListener("click", safeUi(toggleChatOpen, "Toggle chat"));
 if (ui.toggleVoice) ui.toggleVoice.addEventListener("click", safeUi(toggleVoice, "Toggle voice"));
 if (ui.muteVoice) ui.muteVoice.addEventListener("click", safeUi(toggleVoiceMuted, "Toggle microphone"));
@@ -1830,6 +2240,18 @@ if (ui.vehicle) ui.vehicle.addEventListener("change", () => { updateVehiclePrevi
 ui.mode.addEventListener("change", () => updateMetaPatch({ mode: ui.mode.value }));
 if (ui.theme) ui.theme.addEventListener("change", () => updateMetaPatch({ theme: ui.theme.value }));
 ui.teamSize.addEventListener("change", () => updateMetaPatch({ teamSize: Number(ui.teamSize.value) }));
+if (ui.pitchSize) ui.pitchSize.addEventListener("change", () => {
+  gameSettings.pitchSize = ui.pitchSize.value;
+  saveGameSettingsLocal();
+  queueSettingsSave();
+  updateMetaPatch({ pitchSize: ui.pitchSize.value });
+});
+if (ui.matchLength) ui.matchLength.addEventListener("change", () => {
+  gameSettings.matchLength = Number(ui.matchLength.value) || DEFAULT_META.matchLength;
+  saveGameSettingsLocal();
+  queueSettingsSave();
+  updateMetaPatch({ matchLength: gameSettings.matchLength });
+});
 ui.difficulty.addEventListener("change", () => updateMetaPatch({ difficulty: ui.difficulty.value }));
 ui.playstyle.addEventListener("change", () => updateMetaPatch({ playstyle: ui.playstyle.value }));
 if (ui.chatScope) ui.chatScope.addEventListener("change", () => updateMetaPatch({ chatScope: ui.chatScope.value }));
@@ -2107,6 +2529,105 @@ let ballMesh = null;
 const carMeshes = new Map();
 const boostPadMeshes = new Map();
 const nameSprites = new Map();
+const menuDemo = new THREE.Group();
+scene.add(menuDemo);
+let menuDemoBuilt = false;
+let menuDemoThemeApplied = false;
+const menuDemoCars = [];
+
+function buildMenuDemo() {
+  if (menuDemoBuilt) return;
+  menuDemoBuilt = true;
+  const trackMat = new THREE.MeshStandardMaterial({ color: 0x08111f, roughness: 0.72, metalness: 0.02 });
+  const grassMat = new THREE.MeshStandardMaterial({ color: 0x0f5132, roughness: 0.86, metalness: 0.02 });
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x12b9ff, transparent: true, opacity: 0.56 });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(210, 150), grassMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -0.04;
+  menuDemo.add(floor);
+  const track = new THREE.Mesh(new THREE.RingGeometry(34, 50, 96), trackMat);
+  track.rotation.x = -Math.PI / 2;
+  track.scale.set(1.45, 1, 1);
+  menuDemo.add(track);
+  const inner = new THREE.Mesh(new THREE.RingGeometry(52, 52.7, 96), glowMat);
+  inner.rotation.x = -Math.PI / 2;
+  inner.scale.set(1.45, 1, 1);
+  inner.position.y = 0.03;
+  menuDemo.add(inner);
+  const outer = new THREE.Mesh(new THREE.RingGeometry(33, 33.7, 96), new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, opacity: 0.50 }));
+  outer.rotation.x = -Math.PI / 2;
+  outer.scale.set(1.45, 1, 1);
+  outer.position.y = 0.04;
+  menuDemo.add(outer);
+  const boardMat = new THREE.MeshStandardMaterial({ color: 0x0b1020, emissive: 0x0ea5e9, emissiveIntensity: 0.18, roughness: 0.45 });
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2;
+    const x = Math.cos(a) * 85;
+    const z = Math.sin(a) * 56;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(8.5, 2.2, 0.35), boardMat);
+    b.position.set(x, 1.35, z);
+    b.rotation.y = -a + Math.PI / 2;
+    menuDemo.add(b);
+  }
+  const colors = [0x12b9ff, 0xff8a1f, 0x52ffcf, 0xfacc15];
+  for (let i = 0; i < 4; i++) {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 5.0), new THREE.MeshStandardMaterial({ color: colors[i], roughness: 0.38, metalness: 0.18, emissive: colors[i], emissiveIntensity: 0.08 }));
+    body.position.y = 0.72;
+    g.add(body);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.62, 2.0), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.24, metalness: 0.38 }));
+    cab.position.set(0, 1.26, -0.25);
+    g.add(cab);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 4.7), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }));
+    stripe.position.set(0, 1.15, 0.05);
+    g.add(stripe);
+    for (const sx of [-1, 1]) for (const sz of [-1.6, 1.6]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.34, 12), new THREE.MeshStandardMaterial({ color: 0x05070c, roughness: 0.72 }));
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(sx * 1.75, 0.48, sz);
+      g.add(wheel);
+    }
+    g.userData.phase = i * 0.24;
+    g.userData.speed = 0.00018 + i * 0.000018;
+    menuDemoCars.push(g);
+    menuDemo.add(g);
+  }
+  menuDemo.visible = false;
+}
+
+function updateMenuDemo(now) {
+  const pausedMidGame = document.body.classList.contains("game-running") && currentMeta?.paused;
+  const active = !document.body.classList.contains("game-running") && !pausedMidGame;
+  buildMenuDemo();
+  menuDemo.visible = active;
+  world.visible = !active;
+  if (!active) {
+    if (menuDemoThemeApplied) arenaSignature = "";
+    menuDemoThemeApplied = false;
+    return false;
+  }
+  if (!menuDemoThemeApplied) {
+    applySceneTheme(STADIUM_THEMES.neon || STADIUM_THEMES.v10);
+    menuDemoThemeApplied = true;
+  }
+  const t = now;
+  for (let i = 0; i < menuDemoCars.length; i++) {
+    const car = menuDemoCars[i];
+    const a = (t * car.userData.speed + car.userData.phase) * Math.PI * 2;
+    const rx = 62;
+    const rz = 40;
+    const x = Math.cos(a) * rx;
+    const z = Math.sin(a) * rz;
+    const dx = -Math.sin(a) * rx;
+    const dz = Math.cos(a) * rz;
+    car.position.set(x, 0, z);
+    car.rotation.y = Math.atan2(dx, dz);
+  }
+  const camA = t * 0.000055;
+  camera.position.set(Math.cos(camA) * 72, 44, 72 + Math.sin(camA) * 18);
+  camera.lookAt(0, 0, 0);
+  return true;
+}
 
 let lastRenderSize = { w: 0, h: 0, dpr: 0, mobile: null };
 function resizeRenderer(force = false) {
@@ -3044,11 +3565,15 @@ function updateCamera(state) {
 
 function renderLoop() {
   requestAnimationFrame(renderLoop);
-  if (latestState) updateVisuals(latestState);
+  const now = performance.now();
+  updateControllerBindDetect();
+  pollControllerMenuNavigation();
+  const menuDemoActive = updateMenuDemo(now);
+  if (latestState && !menuDemoActive) updateVisuals(latestState);
   resizeRenderer();
-  SFX.update(latestState, activePlayerId());
+  if (!menuDemoActive) SFX.update(latestState, activePlayerId());
   renderer.render(scene, camera);
-  renderVehiclePreview(performance.now());
+  renderVehiclePreview(now);
 }
 
 setupMobileControls();
