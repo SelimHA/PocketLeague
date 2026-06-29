@@ -24,6 +24,7 @@
   <button id="toggle-chat" class="floating-btn chat-toggle hidden" type="button" aria-expanded="false" aria-controls="chat-panel" title="Toggle chat (T)">Chat</button>
   <button id="toggle-voice" class="floating-btn voice-toggle hidden" type="button" aria-pressed="false" title="Join/leave voice chat (V)">Voice</button>
   <button id="mute-voice" class="floating-btn voice-mute hidden" type="button" aria-pressed="false" title="Mute/unmute microphone (M)">Mic</button>
+  <div id="active-speakers" class="active-speakers hidden" aria-live="polite" aria-label="Active voice speakers"></div>
   <div id="pause-overlay" class="pause-overlay hidden" role="dialog" aria-live="polite" aria-label="Paused">
     <div class="pause-card">
       <div class="pause-title">PAUSED</div>
@@ -59,7 +60,7 @@
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V38 Kickoff AI Boost Patch</div>
+      <div class="menu-kicker">V39 Voice Audio Patch</div>
       <h1>RLCSS</h1>
       <p class="menu-subtitle">Rocket-style car football with richer arenas, voice/text chat, leaderboards, custom matches and full desktop controller support, AI music, menu music controls, and audio settings.</p>
       <div class="ai-music-badge" aria-label="AI music notice">♫ AI-generated soundtrack included</div>
@@ -204,6 +205,22 @@
             <input id="music-volume" type="range" min="0" max="1" step="0.01" />
             <span id="music-volume-value" class="setting-value">45%</span>
           </label>
+          <div class="voice-test-card">
+            <div>
+              <strong>Voice check</strong>
+              <span>Record a short mic sample and play it back through your speakers/headphones.</span>
+            </div>
+            <button id="voice-test-playback" type="button" class="secondary small-action">Test mic playback</button>
+          </div>
+          <label>
+            Active speaker overlay (PC only)
+            <select id="voice-speaker-mode">
+              <option value="always">Always on</option>
+              <option value="menus">Only in menus</option>
+              <option value="off">Always off</option>
+            </select>
+          </label>
+          <p id="voice-test-status" class="hint">Voice check is local only and does not join lobby voice chat.</p>
           <label>
             Menu / match music track
             <select id="music-track-select">

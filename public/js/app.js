@@ -29,12 +29,12 @@ const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountSubtitle: $("#account-subtitle"), accountAuthFields: $("#account-auth-fields"), accountProfileFields: $("#account-profile-fields"), accountProfileName: $("#account-profile-name"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), accountNewPassword: $("#account-new-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), changePasswordAccount: $("#change-password-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), voiceTestPlayback: $("#voice-test-playback"), voiceTestStatus: $("#voice-test-status"), voiceSpeakerMode: $("#voice-speaker-mode"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
-  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), toggleVoice: $("#toggle-voice"), muteVoice: $("#mute-voice"), pauseOverlay: $("#pause-overlay"), pauseOpenSettings: $("#pause-open-settings"), pauseResume: $("#pause-resume"),
+  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), toggleVoice: $("#toggle-voice"), muteVoice: $("#mute-voice"), activeSpeakers: $("#active-speakers"), pauseOverlay: $("#pause-overlay"), pauseOpenSettings: $("#pause-open-settings"), pauseResume: $("#pause-resume"),
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
@@ -254,9 +254,14 @@ let voicePeers = new Map();
 let voiceSignalUnsub = null;
 let voicePresenceUnsub = null;
 let voiceRenderKey = "";
+let voiceAnalysisCtx = null;
+let voiceAnalysers = new Map();
+let voiceActivityTimer = 0;
+let voiceTalkers = {};
+let voiceSelfTestBusy = false;
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
-const SETTINGS_VERSION = "v37";
+const SETTINGS_VERSION = "v39";
 const KEY_ACTIONS = [
   ["forward", "Drive forward"], ["backward", "Brake / reverse"], ["left", "Steer left"], ["right", "Steer right"],
   ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide"], ["cam", "Ball cam"], ["reset", "Reset"],
@@ -283,6 +288,7 @@ const DEFAULT_AUDIO_SETTINGS = {
   gameVolume: 0.75,
   musicVolume: 0.45,
   musicEnabled: true,
+  voiceSpeakerMode: "always",
   musicTrack: "shuffle",
   enabledTracks: defaultTrackEnablement()
 };
@@ -317,10 +323,12 @@ function sanitiseAudioSettings(raw = {}) {
   const incomingEnabled = raw.enabledTracks && typeof raw.enabledTracks === "object" ? raw.enabledTracks : {};
   for (const key of MUSIC_ORDER) enabledTracks[key] = incomingEnabled[key] !== false;
   const track = raw.musicTrack === "shuffle" || MUSIC_TRACKS[raw.musicTrack] ? raw.musicTrack : DEFAULT_AUDIO_SETTINGS.musicTrack;
+  const voiceSpeakerMode = ["always", "menus", "off"].includes(raw.voiceSpeakerMode) ? raw.voiceSpeakerMode : DEFAULT_AUDIO_SETTINGS.voiceSpeakerMode;
   return {
     gameVolume: clamp(Number(raw.gameVolume ?? raw.sfxVolume ?? DEFAULT_AUDIO_SETTINGS.gameVolume), 0, 1),
     musicVolume: clamp(Number(raw.musicVolume ?? DEFAULT_AUDIO_SETTINGS.musicVolume), 0, 1),
     musicEnabled: raw.musicEnabled !== false,
+    voiceSpeakerMode,
     musicTrack: track,
     enabledTracks
   };
@@ -832,6 +840,8 @@ function renderSettingsUi() {
   if (ui.musicVolume) ui.musicVolume.value = String(audioSettings.musicVolume);
   if (ui.musicVolumeValue) ui.musicVolumeValue.textContent = `${Math.round(audioSettings.musicVolume * 100)}%`;
   if (ui.musicEnabled) ui.musicEnabled.checked = audioSettings.musicEnabled;
+  if (ui.voiceSpeakerMode) ui.voiceSpeakerMode.value = audioSettings.voiceSpeakerMode || DEFAULT_AUDIO_SETTINGS.voiceSpeakerMode;
+  renderActiveSpeakers();
   if (ui.musicTrackSelect) {
     ui.musicTrackSelect.value = audioSettings.musicTrack;
     Array.from(ui.musicTrackSelect.options).forEach(option => {
@@ -2276,6 +2286,176 @@ function voiceIceConfig() {
   return cfg.iceServers ? cfg : fallback;
 }
 
+
+function isDesktopVoiceOverlayAvailable() {
+  return !!(window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine) and (min-width: 900px)").matches);
+}
+
+function shouldShowActiveSpeakerOverlay() {
+  const mode = audioSettings.voiceSpeakerMode || DEFAULT_AUDIO_SETTINGS.voiceSpeakerMode;
+  if (mode === "off" || !isDesktopVoiceOverlayAvailable()) return false;
+  if (mode === "menus" && document.body.classList.contains("game-running") && !document.body.classList.contains("settings-open")) return false;
+  return voiceActive && Object.values(voiceTalkers || {}).some(t => t && t.talking);
+}
+
+function voiceDisplayFor(id) {
+  if (id === "local") {
+    const local = localVoicePlayer();
+    return {
+      name: sanitizeName(local.name || playerName || ui.name?.value || "You"),
+      team: local.team === "orange" ? "orange" : "blue",
+      muted: voiceMuted
+    };
+  }
+  const presence = voicePresence?.[id] || {};
+  const player = currentPlayers?.[id] || {};
+  return {
+    name: sanitizeName(presence.name || player.name || "Player"),
+    team: (presence.team || player.team) === "orange" ? "orange" : "blue",
+    muted: !!presence.muted
+  };
+}
+
+function renderActiveSpeakers() {
+  if (!ui.activeSpeakers) return;
+  const talkers = Object.entries(voiceTalkers || {})
+    .filter(([, info]) => info && info.talking)
+    .map(([id, info]) => ({ id, ...voiceDisplayFor(id), level: info.level || 0 }))
+    .filter(t => !t.muted)
+    .sort((a, b) => b.level - a.level)
+    .slice(0, 4);
+  const show = shouldShowActiveSpeakerOverlay() && talkers.length > 0;
+  ui.activeSpeakers.classList.toggle("hidden", !show);
+  if (!show) {
+    ui.activeSpeakers.innerHTML = "";
+    return;
+  }
+  ui.activeSpeakers.innerHTML = `
+    <div class="active-speakers-title">Talking</div>
+    ${talkers.map(t => `<div class="active-speaker ${t.team}"><span></span>${escapeHtml(t.name)}</div>`).join("")}
+  `;
+}
+
+function getVoiceAnalysisContext() {
+  if (!voiceAnalysisCtx) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return null;
+    voiceAnalysisCtx = new AudioContext();
+  }
+  if (voiceAnalysisCtx.state === "suspended") voiceAnalysisCtx.resume?.().catch(() => {});
+  return voiceAnalysisCtx;
+}
+
+function attachVoiceAnalyser(id, stream) {
+  if (!id || !stream || voiceAnalysers.has(id)) return;
+  const ctx = getVoiceAnalysisContext();
+  if (!ctx) return;
+  try {
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.55;
+    source.connect(analyser);
+    voiceAnalysers.set(id, { source, analyser, data: new Uint8Array(analyser.fftSize) });
+    ensureVoiceActivityLoop();
+  } catch (err) {
+    console.warn("Voice activity analyser failed", err);
+  }
+}
+
+function detachVoiceAnalyser(id) {
+  const analyser = voiceAnalysers.get(id);
+  if (analyser?.source) {
+    try { analyser.source.disconnect(); } catch (_) {}
+  }
+  voiceAnalysers.delete(id);
+  delete voiceTalkers[id];
+  if (!voiceAnalysers.size && voiceActivityTimer) {
+    clearInterval(voiceActivityTimer);
+    voiceActivityTimer = 0;
+  }
+  renderActiveSpeakers();
+}
+
+function ensureVoiceActivityLoop() {
+  if (voiceActivityTimer) return;
+  voiceActivityTimer = setInterval(() => {
+    let changed = false;
+    for (const [id, item] of voiceAnalysers.entries()) {
+      item.analyser.getByteTimeDomainData(item.data);
+      let sum = 0;
+      for (let i = 0; i < item.data.length; i++) {
+        const v = (item.data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const level = Math.sqrt(sum / Math.max(1, item.data.length));
+      const threshold = id === "local" ? 0.06 : 0.045;
+      const previous = voiceTalkers[id] || { talking: false, level: 0 };
+      const talking = level > threshold;
+      if (previous.talking !== talking || Math.abs((previous.level || 0) - level) > 0.02) changed = true;
+      voiceTalkers[id] = { talking, level, lastHeard: talking ? Date.now() : previous.lastHeard || 0 };
+    }
+    if (changed) renderActiveSpeakers();
+  }, 160);
+}
+
+async function runVoiceSelfTest() {
+  if (voiceSelfTestBusy) return;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = "Mic test is not supported in this browser.";
+    return;
+  }
+  voiceSelfTestBusy = true;
+  if (ui.voiceTestPlayback) ui.voiceTestPlayback.disabled = true;
+  if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = "Requesting microphone permission…";
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false
+    });
+    if (!window.MediaRecorder) {
+      if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = "Mic is detected, but this browser cannot record playback samples.";
+      return;
+    }
+    const chunks = [];
+    const recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+    const done = new Promise((resolve, reject) => {
+      recorder.onstop = resolve;
+      recorder.onerror = () => reject(recorder.error || new Error("Recorder failed"));
+    });
+    if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = "Recording your mic for 2 seconds… speak now.";
+    recorder.start();
+    await new Promise(resolve => setTimeout(resolve, 2100));
+    if (recorder.state !== "inactive") recorder.stop();
+    await done;
+    if (!chunks.length) {
+      if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = "No microphone audio was captured. Check your input device/permission.";
+      return;
+    }
+    const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+    const url = URL.createObjectURL(blob);
+    const playback = new Audio(url);
+    playback.volume = clamp(Number(audioSettings.gameVolume || DEFAULT_AUDIO_SETTINGS.gameVolume), 0.15, 1);
+    if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = "Playing back your mic sample…";
+    await playback.play().catch(err => {
+      if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = "Recorded OK. Tap the test button again if playback was blocked.";
+      throw err;
+    });
+    await new Promise(resolve => { playback.onended = resolve; setTimeout(resolve, 3500); });
+    URL.revokeObjectURL(url);
+    if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = "Voice check complete. If you heard yourself, mic and output are working.";
+  } catch (err) {
+    console.error(err);
+    if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = `Voice check failed: ${err.message || err}.`;
+  } finally {
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    voiceSelfTestBusy = false;
+    if (ui.voiceTestPlayback) ui.voiceTestPlayback.disabled = false;
+  }
+}
+
 function updateVoiceUi() {
   const runningOnline = !!(!isSinglePlayer && currentMeta?.status === "running" && lobbyCode);
   const disabledByHost = currentMeta?.voiceScope === "off";
@@ -2297,6 +2477,7 @@ function updateVoiceUi() {
     ui.muteVoice.textContent = voiceMuted ? "Mic Off" : "Mic On";
   }
   if (disabledByHost && voiceActive) stopVoice(true);
+  renderActiveSpeakers();
 }
 
 async function publishVoicePresence() {
@@ -2380,6 +2561,7 @@ async function startVoice() {
       video: false
     });
     voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = !voiceMuted; });
+    attachVoiceAnalyser("local", voiceLocalStream);
     voiceActive = true;
     setupVoiceSubscriptions();
     await publishVoicePresence();
@@ -2419,6 +2601,7 @@ async function stopVoice(silent = false) {
 }
 
 function stopLocalVoiceTracks() {
+  detachVoiceAnalyser("local");
   if (voiceLocalStream) voiceLocalStream.getTracks().forEach(track => track.stop());
   voiceLocalStream = null;
 }
@@ -2474,6 +2657,7 @@ async function createVoicePeer(remoteId, makeOffer = false) {
       peer.audio = audio;
     }
     peer.audio.srcObject = stream;
+    attachVoiceAnalyser(remoteId, stream);
     peer.audio.play?.().catch(() => {});
   };
   pc.onconnectionstatechange = () => {
@@ -2536,6 +2720,7 @@ function closeVoicePeer(remoteId, keepPresence = false) {
   if (peer.audio) {
     try { peer.audio.srcObject = null; peer.audio.remove(); } catch (_) {}
   }
+  detachVoiceAnalyser(remoteId);
   voicePeers.delete(remoteId);
   if (!keepPresence && voicePresence?.[remoteId]) delete voicePresence[remoteId];
   updateVoiceUi();
@@ -2675,6 +2860,12 @@ if (ui.musicEnabled) ui.musicEnabled.addEventListener("change", () => {
   audioSettings.musicEnabled = !!ui.musicEnabled.checked;
   commitAudioSettings({ play: true });
 });
+if (ui.voiceSpeakerMode) ui.voiceSpeakerMode.addEventListener("change", () => {
+  audioSettings.voiceSpeakerMode = ui.voiceSpeakerMode.value;
+  commitAudioSettings({ play: false });
+  renderActiveSpeakers();
+});
+if (ui.voiceTestPlayback) ui.voiceTestPlayback.addEventListener("click", safeUi(runVoiceSelfTest, "Voice playback test"));
 if (ui.musicTrackSelect) ui.musicTrackSelect.addEventListener("change", () => {
   audioSettings.musicTrack = ui.musicTrackSelect.value;
   commitAudioSettings({ play: true });
