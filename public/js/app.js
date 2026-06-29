@@ -4,6 +4,8 @@ import {
   DEFAULT_META,
   MODE_CONFIGS,
   ROLES,
+  STADIUM_THEMES,
+  VEHICLE_CONFIGS,
   VISUAL_CONSTANTS,
   PhysicsHost,
   compactState,
@@ -23,8 +25,8 @@ const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
-  mode: $("#mode-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"),
-  maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), ready: $("#ready-btn"),
+  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"),
+  maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
   hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), leaveGame: $("#leave-game"),
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
@@ -67,6 +69,29 @@ let camKeyLatch = false;
 let touchDevice = matchMedia("(pointer: coarse)").matches;
 
 ui.name.value = playerName;
+populateChoiceSelects();
+
+function populateChoiceSelects() {
+  fillSelect(ui.theme, STADIUM_THEMES, DEFAULT_META.theme);
+  fillSelect(ui.vehicle, VEHICLE_CONFIGS, "default");
+}
+
+function fillSelect(select, configs, fallback) {
+  if (!select) return;
+  const current = select.value || fallback;
+  select.innerHTML = Object.entries(configs)
+    .map(([key, cfg]) => `<option value="${key}">${escapeHtml(cfg.label || key)}</option>`)
+    .join("");
+  select.value = configs[current] ? current : fallback;
+}
+
+function vehicleLabel(model) {
+  return (VEHICLE_CONFIGS[model] || VEHICLE_CONFIGS.default).label;
+}
+
+function themeLabel(theme) {
+  return (STADIUM_THEMES[theme] || STADIUM_THEMES.v10).label;
+}
 
 function activePlayerId() {
   return isSinglePlayer ? singlePlayerId : uid;
@@ -171,6 +196,7 @@ function withTimeout(promise, ms, label) {
 function currentSoloMetaPatch() {
   return {
     mode: ui.mode?.value || DEFAULT_META.mode,
+    theme: ui.theme?.value || DEFAULT_META.theme,
     teamSize: Number(ui.teamSize?.value || DEFAULT_META.teamSize),
     difficulty: ui.difficulty?.value || DEFAULT_META.difficulty,
     playstyle: ui.playstyle?.value || DEFAULT_META.playstyle
@@ -209,7 +235,7 @@ async function createLobby() {
       updatedAt: serverTimestamp(),
       status: "waiting"
     };
-    const player = { name: playerName, team: ui.team.value || "blue", role: ui.role.value || "midfield", ready: false, joinedAt: serverTimestamp(), isHost: true };
+    const player = { name: playerName, team: ui.team.value || "blue", role: ui.role.value || "midfield", model: ui.vehicle?.value || "default", ready: false, joinedAt: serverTimestamp(), isHost: true };
 
     // Write granularly instead of one large root write. This works with stricter
     // Realtime Database rules and gives clearer failure messages on phones.
@@ -246,7 +272,7 @@ async function joinLobby() {
     if (humans >= maxHumans) return setStatus(`Lobby is full for ${MODE_CONFIGS[meta.mode].label}.`);
     const counts = countTeams(data.players || {});
     const team = counts.blue <= counts.orange ? "blue" : "orange";
-    await withTimeout(set(lobbyRef(code, `players/${uid}`), { name: playerName, team, role: "midfield", ready: false, joinedAt: serverTimestamp(), isHost: false }), 12000, "Joining lobby");
+    await withTimeout(set(lobbyRef(code, `players/${uid}`), { name: playerName, team, role: "midfield", model: ui.vehicle?.value || "default", ready: false, joinedAt: serverTimestamp(), isHost: false }), 12000, "Joining lobby");
     await enterLobby(code);
     setStatus(`Joined lobby ${code}.`);
   } catch (err) {
@@ -277,6 +303,7 @@ function startSinglePlayer() {
       name: playerName,
       team: ui.team.value || "blue",
       role: ui.role.value || "midfield",
+      model: ui.vehicle?.value || "default",
       ready: true,
       joinedAt: Date.now(),
       isHost: true,
@@ -307,6 +334,7 @@ function startSoloMatch() {
     name: sanitizeName(ui.name.value),
     team: ui.team.value || currentPlayers[localId]?.team || "blue",
     role: ui.role.value || currentPlayers[localId]?.role || "midfield",
+    model: ui.vehicle?.value || currentPlayers[localId]?.model || "default",
     ready: true
   };
   currentMeta = serialiseMeta({ ...currentMeta, status: "running", startedAt: Date.now(), updatedAt: Date.now() });
@@ -378,21 +406,25 @@ function renderLobby() {
   const isHost = isSinglePlayer || currentMeta.hostId === localId;
   const local = currentPlayers[localId] || {};
   ui.mode.value = currentMeta.mode;
+  if (ui.theme) ui.theme.value = currentMeta.theme || DEFAULT_META.theme;
   ui.teamSize.value = String(currentMeta.teamSize);
   ui.difficulty.value = currentMeta.difficulty;
   ui.playstyle.value = currentMeta.playstyle;
   ui.team.value = local.team || "blue";
   ui.role.value = local.role || "midfield";
+  if (ui.vehicle) ui.vehicle.value = (VEHICLE_CONFIGS[local.model] ? local.model : "default");
   ui.ready.classList.toggle("not-ready", !isSinglePlayer && !!local.ready);
   ui.ready.textContent = isSinglePlayer ? "Start Match" : (local.ready ? "Unready" : "Ready");
   ui.mode.disabled = ui.teamSize.disabled = ui.difficulty.disabled = ui.playstyle.disabled = !isHost || currentMeta.status !== "waiting";
+  if (ui.theme) ui.theme.disabled = !isHost || currentMeta.status !== "waiting";
+  if (ui.vehicle) ui.vehicle.disabled = currentMeta.status !== "waiting";
   ui.copy.disabled = isSinglePlayer;
   ui.copy.textContent = isSinglePlayer ? "Solo" : "Copy Code";
   const maxHumans = maxHumansFor(currentMeta.mode, currentMeta.teamSize);
   const humanCount = Object.keys(currentPlayers).length;
   ui.maxHumans.textContent = isSinglePlayer
-    ? `Solo mode · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`
-    : `Max humans in this mode: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
+    ? `Solo mode · ${themeLabel(currentMeta.theme)} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`
+    : `Lobby theme: ${themeLabel(currentMeta.theme)} · Max humans: ${maxHumans} · Humans joined: ${humanCount}/${maxHumans} · AI fills the rest to ${currentMeta.teamSize}v${currentMeta.teamSize}`;
   const allReady = humanCount > 0 && Object.values(currentPlayers).every(p => p.ready);
   if (currentMeta.status === "waiting") {
     ui.lobbyStatus.textContent = isSinglePlayer
@@ -415,7 +447,7 @@ function renderTeamList(team, root) {
     const entry = teamHumans[i];
     if (entry) {
       const [id, p] = entry;
-      html += `<div class="slot ${team}"><span class="dot"></span><div><div class="name">${escapeHtml(p.name || "Player")}${id === activePlayerId() ? " (you)" : ""}</div><div class="meta">${roleLabel(p.role)}${id === meta.hostId ? " · Host" : ""}</div></div><span class="ready-pill">${p.ready ? "READY" : "NOT READY"}</span></div>`;
+      html += `<div class="slot ${team}"><span class="dot"></span><div><div class="name">${escapeHtml(p.name || "Player")}${id === activePlayerId() ? " (you)" : ""}</div><div class="meta">${roleLabel(p.role)} · ${vehicleLabel(p.model || "default")}${id === meta.hostId ? " · Host" : ""}</div></div><span class="ready-pill">${p.ready ? "READY" : "NOT READY"}</span></div>`;
     } else {
       const role = meta.aiRoles?.[team]?.[i] || defaultRoleForSlot(i, meta.teamSize);
       const isHost = (isSinglePlayer || meta.hostId === activePlayerId()) && meta.status === "waiting";
@@ -622,7 +654,9 @@ ui.ready.addEventListener("click", () => {
 });
 ui.team.addEventListener("change", () => updateLocalPlayer({ team: ui.team.value, ready: false }));
 ui.role.addEventListener("change", () => updateLocalPlayer({ role: ui.role.value, ready: false }));
+if (ui.vehicle) ui.vehicle.addEventListener("change", () => updateLocalPlayer({ model: ui.vehicle.value, ready: false }));
 ui.mode.addEventListener("change", () => updateMetaPatch({ mode: ui.mode.value }));
+if (ui.theme) ui.theme.addEventListener("change", () => updateMetaPatch({ theme: ui.theme.value }));
 ui.teamSize.addEventListener("change", () => updateMetaPatch({ teamSize: Number(ui.teamSize.value) }));
 ui.difficulty.addEventListener("change", () => updateMetaPatch({ difficulty: ui.difficulty.value }));
 ui.playstyle.addEventListener("change", () => updateMetaPatch({ playstyle: ui.playstyle.value }));
@@ -780,26 +814,58 @@ function resizeRenderer() {
 window.addEventListener("resize", resizeRenderer);
 resizeRenderer();
 
-function makeFieldTexture(mode, arena) {
+function themeForState(state) {
+  return STADIUM_THEMES[state?.theme] || STADIUM_THEMES.v10;
+}
+
+function modeFieldColor(mode, theme) {
+  if (mode === "ice") return theme.iceField || [185, 230, 255];
+  if (mode === "snooker") return theme.snookerField || [16, 92, 50];
+  if (mode === "flying") return theme.flyingField || [34, 40, 72];
+  return theme.field || [30, 84, 54];
+}
+
+function applySceneTheme(theme) {
+  scene.background = new THREE.Color(theme.background ?? 0x070912);
+  scene.fog = new THREE.FogExp2(theme.fog ?? theme.background ?? 0x070912, theme.fogDensity ?? 0.0065);
+  ambient.color.setHex(theme.ambient ?? 0xffffff);
+  ambient.intensity = theme.ambientIntensity ?? 0.5;
+  sun.color.setHex(theme.sun ?? 0xffffff);
+  sun.intensity = theme.sunIntensity ?? 0.95;
+  const pos = theme.sunPosition || [40, 75, 35];
+  sun.position.set(pos[0], pos[1], pos[2]);
+}
+
+function makeFieldTexture(mode, arena, theme) {
   const cnv = document.createElement("canvas");
   cnv.width = 1024; cnv.height = 1024;
   const ctx = cnv.getContext("2d");
-  const base = mode === "ice" ? [185, 230, 255] : mode === "snooker" ? [16, 92, 50] : mode === "flying" ? [34, 40, 72] : [30, 84, 54];
+  const base = modeFieldColor(mode, theme);
   ctx.fillStyle = `rgb(${base[0]},${base[1]},${base[2]})`;
   ctx.fillRect(0, 0, 1024, 1024);
   for (let i = 0; i < 18; i++) {
-    ctx.fillStyle = `rgba(255,255,255,${i % 2 ? 0.045 : 0.02})`;
+    const alpha = i % 2 ? (theme.stripeAlpha ?? 0.045) : Math.max(0.018, (theme.stripeAlpha ?? 0.045) * 0.45);
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
     ctx.fillRect(0, i * 60, 1024, 30);
   }
-  ctx.strokeStyle = mode === "ice" ? "rgba(255,255,255,0.72)" : "rgba(255,255,255,0.52)";
+  if (mode === "ice") {
+    ctx.strokeStyle = "rgba(255,255,255,0.78)";
+  } else {
+    ctx.strokeStyle = `rgba(255,255,255,${theme.lineAlpha ?? 0.56})`;
+  }
   ctx.lineWidth = 7;
   ctx.strokeRect(68, 68, 888, 888);
   ctx.beginPath(); ctx.moveTo(68, 512); ctx.lineTo(956, 512); ctx.stroke();
   ctx.beginPath(); ctx.arc(512, 512, 90, 0, Math.PI * 2); ctx.stroke();
-  ctx.globalAlpha = 0.18;
+
+  // Subtle deterministic turf/ice grain. This avoids the field looking flat
+  // while keeping the selected lobby theme stable for every client.
+  let seed = (arena.w * 31 + arena.l * 17 + (base[0] << 8) + base[1]) >>> 0;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  ctx.globalAlpha = mode === "ice" ? 0.12 : 0.18;
   for (let i = 0; i < 2200; i++) {
-    const x = Math.random() * 1024, y = Math.random() * 1024;
-    ctx.fillStyle = Math.random() > 0.5 ? "#ffffff" : "#000000";
+    const x = rand() * 1024, y = rand() * 1024;
+    ctx.fillStyle = rand() > 0.5 ? "#ffffff" : "#000000";
     ctx.fillRect(x, y, 1, 1);
   }
   const tex = new THREE.CanvasTexture(cnv);
@@ -809,7 +875,8 @@ function makeFieldTexture(mode, arena) {
 }
 
 function buildArena(state) {
-  const sig = `${state.mode}:${state.arena.w}:${state.arena.l}:${state.arena.goalW}`;
+  const theme = themeForState(state);
+  const sig = `${state.mode}:${state.theme || "v10"}:${state.arena.w}:${state.arena.l}:${state.arena.goalW}`;
   if (sig === arenaSignature) return;
   arenaSignature = sig;
   while (world.children.length) world.remove(world.children[0]);
@@ -817,20 +884,24 @@ function buildArena(state) {
   carMeshes.clear();
   boostPadMeshes.clear();
   nameSprites.clear();
+  applySceneTheme(theme);
 
   const arena = state.arena;
   const field = new THREE.Mesh(
     new THREE.PlaneGeometry(arena.w, arena.l),
-    new THREE.MeshStandardMaterial({ map: makeFieldTexture(state.mode, arena), roughness: state.mode === "ice" ? 0.28 : 0.84, metalness: 0.0 })
+    new THREE.MeshStandardMaterial({ map: makeFieldTexture(state.mode, arena, theme), roughness: state.mode === "ice" ? 0.24 : (arena.floorRoughness ?? 0.74), metalness: state.mode === "ice" ? 0.12 : (arena.floorMetalness ?? 0.03) })
   );
   field.rotation.x = -Math.PI / 2;
   field.receiveShadow = true;
   world.add(field);
 
-  const wallMat = new THREE.MeshStandardMaterial({ color: state.mode === "ice" ? 0xa6ddff : 0x1d2438, transparent: true, opacity: 0.48, roughness: 0.4 });
-  const trimBlue = new THREE.MeshStandardMaterial({ color: 0x12b9ff, emissive: 0x12b9ff, emissiveIntensity: 0.45 });
-  const trimOrange = new THREE.MeshStandardMaterial({ color: 0xff8a1f, emissive: 0xff8a1f, emissiveIntensity: 0.45 });
-  const neutralTrim = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x4466ff, emissiveIntensity: 0.16 });
+  const wallColor = state.mode === "ice" ? 0xa6ddff : (theme.wall ?? 0x1d2438);
+  const wallMat = new THREE.MeshStandardMaterial({ color: wallColor, transparent: true, opacity: theme.wallOpacity ?? 0.48, roughness: 0.4 });
+  const blueLight = theme.lightBlue ?? 0x12b9ff;
+  const orangeLight = theme.lightOrange ?? 0xff8a1f;
+  const trimBlue = new THREE.MeshStandardMaterial({ color: blueLight, emissive: blueLight, emissiveIntensity: 0.45 });
+  const trimOrange = new THREE.MeshStandardMaterial({ color: orangeLight, emissive: orangeLight, emissiveIntensity: 0.45 });
+  const neutralTrim = new THREE.MeshStandardMaterial({ color: theme.trim ?? 0xffffff, emissive: blueLight, emissiveIntensity: 0.16 });
 
   function box(w, h, d, x, y, z, mat = wallMat) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -894,18 +965,25 @@ function buildArena(state) {
   box(0.8, 0.8, arena.l + 2, -arena.w / 2, 0.45, 0, neutralTrim);
   box(0.8, 0.8, arena.l + 2, arena.w / 2, 0.45, 0, neutralTrim);
 
-  const standsMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 });
+  const standsMat = new THREE.MeshStandardMaterial({ color: theme.stands ?? 0x111827, roughness: 0.9 });
+  const crowd = theme.crowd || [0x1f2937, 0x0f172a, 0x243b53];
   for (const side of [-1, 1]) {
     for (let i = 0; i < 5; i++) {
       const stand = box(arena.w + 20 + i * 5, 2.2, 4, 0, 3 + i * 2.2, side * (arena.l / 2 + 10 + i * 3), standsMat);
       stand.rotation.x = side * 0.08;
+      if (i > 0) {
+        const crowdMat = new THREE.MeshBasicMaterial({ color: crowd[i % crowd.length], transparent: true, opacity: 0.36 });
+        const ribbon = new THREE.Mesh(new THREE.BoxGeometry(arena.w + 14 + i * 5, 0.45, 0.16), crowdMat);
+        ribbon.position.set(0, 4.4 + i * 2.2, side * (arena.l / 2 + 7.8 + i * 3));
+        world.add(ribbon);
+      }
     }
-    const light = new THREE.PointLight(side < 0 ? 0x12b9ff : 0xff8a1f, 1.25, arena.w * 1.4);
+    const light = new THREE.PointLight(side < 0 ? blueLight : orangeLight, 1.25, arena.w * 1.4);
     light.position.set(0, 18, side * (arena.l / 2 + 8));
     world.add(light);
   }
   for (const x of [-arena.w / 2 - 13, arena.w / 2 + 13]) {
-    const light = new THREE.PointLight(0xffffff, 0.82, arena.l * 0.9);
+    const light = new THREE.PointLight(theme.trim ?? 0xffffff, 0.82, arena.l * 0.9);
     light.position.set(x, 24, 0);
     world.add(light);
   }
@@ -973,32 +1051,84 @@ function updateBoostPadVisuals(state) {
   }
 }
 
-function carMaterial(team, human) {
-  const color = team === "blue" ? 0x0a91ff : 0xff6a00;
-  return new THREE.MeshStandardMaterial({ color, roughness: human ? 0.35 : 0.55, metalness: human ? 0.18 : 0.06 });
+function carMaterial(team, human, model = "default") {
+  const base = team === "blue" ? 0x0a91ff : 0xff6a00;
+  const metalness = model === "truck" ? 0.08 : human ? 0.18 : 0.06;
+  const roughness = model === "sport" ? 0.28 : human ? 0.35 : 0.55;
+  return new THREE.MeshStandardMaterial({ color: base, roughness, metalness });
+}
+
+function createWheelMesh(x, z, scale = 1) {
+  const wheel = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.34 * scale, 0.34 * scale, 0.42 * scale, 14),
+    new THREE.MeshStandardMaterial({ color: 0x07080b, roughness: 0.72, metalness: 0.08 })
+  );
+  wheel.rotation.z = Math.PI / 2;
+  wheel.position.set(x, 0.36 * scale, z);
+  wheel.castShadow = true;
+  return wheel;
 }
 
 function createCarMesh(car, state) {
+  const modelKey = VEHICLE_CONFIGS[car.model] ? car.model : "default";
+  const vehicle = VEHICLE_CONFIGS[modelKey];
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.9, 3.7), carMaterial(car.team, car.human));
-  body.position.y = 0.45; body.castShadow = true;
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.75, 1.55), new THREE.MeshStandardMaterial({ color: 0x10141e, roughness: 0.22, metalness: 0.4 }));
-  cabin.position.set(0, 1.15, 0.18); cabin.castShadow = true;
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.32, 0.25), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: car.team === "blue" ? 0x0044aa : 0xaa3300, emissiveIntensity: 0.25 }));
-  nose.position.set(0, 0.72, 1.95);
+  g.userData.model = modelKey;
+  g.userData.team = car.team;
+
+  const [bodyW, bodyH, bodyD] = vehicle.body || VEHICLE_CONFIGS.default.body;
+  const [cabinW, cabinH, cabinD] = vehicle.cabin || VEHICLE_CONFIGS.default.cabin;
+  const [cabinX, cabinY, cabinZ] = vehicle.cabinOffset || VEHICLE_CONFIGS.default.cabinOffset;
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, bodyD), carMaterial(car.team, car.human, modelKey));
+  body.position.y = bodyH / 2;
+  body.castShadow = true;
+
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(cabinW, cabinH, cabinD), new THREE.MeshStandardMaterial({ color: 0x10141e, roughness: 0.22, metalness: 0.4 }));
+  cabin.position.set(cabinX, cabinY, cabinZ);
+  cabin.castShadow = true;
+
+  const accentMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: car.team === "blue" ? 0x0044aa : 0xaa3300, emissiveIntensity: 0.25 });
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(Math.max(1.45, bodyW * 0.72), 0.30, 0.26), accentMat);
+  nose.position.set(0, bodyH * 0.76, bodyD / 2 + 0.10);
+
+  const wheelScale = vehicle.wheelScale || 1;
+  const wheelX = bodyW / 2 + 0.04;
+  const wheelZ = bodyD * 0.34;
+  g.add(
+    createWheelMesh(-wheelX, -wheelZ, wheelScale),
+    createWheelMesh(wheelX, -wheelZ, wheelScale),
+    createWheelMesh(-wheelX, wheelZ, wheelScale),
+    createWheelMesh(wheelX, wheelZ, wheelScale)
+  );
+
+  if (modelKey === "rally") {
+    const rollBar = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.055, 8, 18, Math.PI), new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.36, metalness: 0.5 }));
+    rollBar.rotation.z = Math.PI;
+    rollBar.position.set(0, 1.44, -0.26);
+    g.add(rollBar);
+  }
+
+  if (modelKey === "truck") {
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.84, 0.30, bodyD * 0.34), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.48, metalness: 0.16 }));
+    bed.position.set(0, bodyH + 0.18, -bodyD * 0.22);
+    g.add(bed);
+  }
+
   const flameGeo = new THREE.ConeGeometry(0.58, 2.2, 14).rotateX(-Math.PI / 2);
   const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: 0xff8a00, transparent: true, opacity: 0.88 }));
-  flame.position.set(0, 0.48, -2.45);
+  flame.position.set(0, Math.max(0.44, bodyH * 0.52), -bodyD / 2 - 0.58);
   flame.visible = false;
   g.userData.flame = flame;
   g.add(body, cabin, nose, flame);
+
   if (state.mode === "snooker") {
     const cueMat = new THREE.MeshStandardMaterial({ color: 0xd8b47a, roughness: 0.4 });
     const cue = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.19, 4.6, 12), cueMat);
     cue.rotation.x = Math.PI / 2;
-    cue.position.set(0, 0.7, 3.05);
+    cue.position.set(0, 0.7, bodyD / 2 + 1.20);
     const tip = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), new THREE.MeshStandardMaterial({ color: 0xf7f0da, emissive: 0x665522, emissiveIntensity: 0.1 }));
-    tip.position.set(0, 0.7, 5.32);
+    tip.position.set(0, 0.7, bodyD / 2 + 3.47);
     g.add(cue, tip);
   }
   world.add(g);
@@ -1019,7 +1149,14 @@ function updateVisuals(state) {
   }
   updateBoostPadVisuals(state);
   for (const car of Object.values(state.cars || {})) {
-    const mesh = carMeshes.get(car.id) || createCarMesh(car, state);
+    let mesh = carMeshes.get(car.id);
+    const modelKey = VEHICLE_CONFIGS[car.model] ? car.model : "default";
+    if (mesh && (mesh.userData.model !== modelKey || mesh.userData.team !== car.team)) {
+      world.remove(mesh);
+      carMeshes.delete(car.id);
+      mesh = null;
+    }
+    mesh = mesh || createCarMesh(car, state);
     mesh.position.set(car.x, car.y, car.z);
     mesh.rotation.set(car.pitch || 0, car.yaw, car.roll || 0, "YXZ");
     const scale = car.cueCooldown > 0 ? 1 + car.cueCooldown * 0.45 : 1;

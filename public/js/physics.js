@@ -50,8 +50,140 @@ export const MODE_CONFIGS = {
   }
 };
 
+
+export const STADIUM_THEMES = {
+  v10: {
+    label: "V10 Classic Stadium",
+    background: 0x070912,
+    fog: 0x070912,
+    fogDensity: 0.0065,
+    ambient: 0xffffff,
+    ambientIntensity: 0.50,
+    sun: 0xffffff,
+    sunIntensity: 1.05,
+    sunPosition: [-30, 70, 25],
+    field: [30, 84, 54],
+    iceField: [185, 230, 255],
+    snookerField: [16, 92, 50],
+    flyingField: [34, 40, 72],
+    stripeAlpha: 0.045,
+    lineAlpha: 0.56,
+    wall: 0x1d2438,
+    wallOpacity: 0.48,
+    trim: 0xffffff,
+    stands: 0x111827,
+    crowd: [0x1f2937, 0x0f172a, 0x243b53],
+    lightBlue: 0x12b9ff,
+    lightOrange: 0xff8a1f
+  },
+  neon: {
+    label: "Neon Bowl",
+    background: 0x050815,
+    fog: 0x050815,
+    fogDensity: 0.0072,
+    ambient: 0xdff6ff,
+    ambientIntensity: 0.44,
+    sun: 0x9fdcff,
+    sunIntensity: 0.82,
+    sunPosition: [40, 75, 35],
+    field: [22, 70, 56],
+    iceField: [170, 222, 255],
+    snookerField: [12, 72, 43],
+    flyingField: [28, 32, 78],
+    stripeAlpha: 0.062,
+    lineAlpha: 0.62,
+    wall: 0x17213a,
+    wallOpacity: 0.52,
+    trim: 0xa7f3ff,
+    stands: 0x0c1326,
+    crowd: [0x1d4ed8, 0x0f766e, 0x7c2d12],
+    lightBlue: 0x00e5ff,
+    lightOrange: 0xff7a18
+  },
+  sunset: {
+    label: "Sunset Arena",
+    background: 0x170916,
+    fog: 0x170916,
+    fogDensity: 0.0062,
+    ambient: 0xffdfc2,
+    ambientIntensity: 0.52,
+    sun: 0xffc18a,
+    sunIntensity: 1.10,
+    sunPosition: [-52, 55, -18],
+    field: [43, 91, 50],
+    iceField: [205, 226, 255],
+    snookerField: [19, 84, 43],
+    flyingField: [50, 38, 72],
+    stripeAlpha: 0.05,
+    lineAlpha: 0.54,
+    wall: 0x30203a,
+    wallOpacity: 0.50,
+    trim: 0xffd18a,
+    stands: 0x211425,
+    crowd: [0x7c2d12, 0x9a3412, 0x4338ca],
+    lightBlue: 0x38bdf8,
+    lightOrange: 0xff9f1a
+  },
+  storm: {
+    label: "Storm Dome",
+    background: 0x060a10,
+    fog: 0x09121c,
+    fogDensity: 0.0080,
+    ambient: 0xd7eaff,
+    ambientIntensity: 0.38,
+    sun: 0xb8dcff,
+    sunIntensity: 0.74,
+    sunPosition: [18, 82, -42],
+    field: [23, 72, 67],
+    iceField: [160, 218, 255],
+    snookerField: [10, 80, 54],
+    flyingField: [24, 33, 57],
+    stripeAlpha: 0.07,
+    lineAlpha: 0.66,
+    wall: 0x0d1b2a,
+    wallOpacity: 0.58,
+    trim: 0xdbeafe,
+    stands: 0x07111d,
+    crowd: [0x1e293b, 0x334155, 0x0f172a],
+    lightBlue: 0x7dd3fc,
+    lightOrange: 0xf97316
+  }
+};
+
+export const VEHICLE_CONFIGS = {
+  default: {
+    label: "Default Car",
+    description: "Balanced original RLCSS car",
+    drive: 1, brake: 1, reverse: 1, steer: 1, grip: 1, driftGrip: 1, driftTurn: 1,
+    maxSpeed: 1, boost: 1, aerial: 1, jump: 1, mass: 1, hit: 1,
+    body: [2.25, 0.9, 3.7], cabin: [1.55, 0.75, 1.55], cabinOffset: [0, 1.15, 0.18], nose: true, wheelScale: 1
+  },
+  sport: {
+    label: "Sport Coupe",
+    description: "Tiny bit sharper and lower",
+    drive: 1.025, brake: 1.0, reverse: 0.99, steer: 1.04, grip: 0.99, driftGrip: 0.98, driftTurn: 1.03,
+    maxSpeed: 1.01, boost: 1.01, aerial: 1.02, jump: 1.0, mass: 0.98, hit: 0.985,
+    body: [2.12, 0.78, 3.95], cabin: [1.42, 0.62, 1.34], cabinOffset: [0, 1.04, 0.02], nose: true, wheelScale: 0.92
+  },
+  rally: {
+    label: "Rally Buggy",
+    description: "A little more steering and slide",
+    drive: 1.0, brake: 0.98, reverse: 1.02, steer: 1.055, grip: 0.975, driftGrip: 0.93, driftTurn: 1.06,
+    maxSpeed: 0.995, boost: 1.0, aerial: 1.0, jump: 1.01, mass: 0.99, hit: 0.995,
+    body: [2.05, 0.84, 3.45], cabin: [1.25, 0.7, 1.12], cabinOffset: [0, 1.12, -0.12], nose: true, wheelScale: 1.08
+  },
+  truck: {
+    label: "Mini Truck",
+    description: "Slightly heavier with calmer turning",
+    drive: 0.965, brake: 0.965, reverse: 0.98, steer: 0.94, grip: 1.025, driftGrip: 1.04, driftTurn: 0.95,
+    maxSpeed: 0.985, boost: 0.985, aerial: 0.96, jump: 0.985, mass: 1.065, hit: 1.035,
+    body: [2.55, 1.05, 4.05], cabin: [1.65, 1.0, 1.35], cabinOffset: [0, 1.35, -0.28], nose: true, wheelScale: 1.18
+  }
+};
+
 export const DEFAULT_META = {
   mode: "standard",
+  theme: "v10",
   teamSize: 1,
   difficulty: "pro",
   playstyle: "balanced",
@@ -145,6 +277,7 @@ export function serialiseMeta(meta = {}) {
   if (!MODE_CONFIGS[out.mode]) out.mode = "standard";
   if (!["rookie", "pro", "allstar"].includes(out.difficulty)) out.difficulty = "pro";
   if (!["balanced", "defensive", "aggressive", "chaotic"].includes(out.playstyle)) out.playstyle = "balanced";
+  if (!STADIUM_THEMES[out.theme]) out.theme = "v10";
   return out;
 }
 
@@ -154,6 +287,17 @@ export function defaultRoleForSlot(i, teamSize) {
   if (teamSize >= 4 && i === 1) return "defence";
   if (i === teamSize - 1) return "attack";
   return "midfield";
+}
+
+export function sanitiseVehicleModel(model) {
+  return VEHICLE_CONFIGS[model] ? model : "default";
+}
+
+function aiVehicleForSlot(team, i, role) {
+  if (role === "goalkeeper") return "truck";
+  if (role === "defence") return i % 2 ? "rally" : "default";
+  if (role === "midfield") return i % 2 ? "sport" : "rally";
+  return team === "blue" ? (i % 2 ? "sport" : "default") : (i % 2 ? "rally" : "sport");
 }
 
 export function makeInitialState(meta, players = {}) {
@@ -170,7 +314,8 @@ export function makeInitialState(meta, players = {}) {
       const configuredAiRole = cleanMeta.aiRoles?.[team]?.[i];
       const role = human?.role || configuredAiRole || defaultRoleForSlot(i, cleanMeta.teamSize);
       const spawn = kickoffSpawn(team, i, cleanMeta.teamSize, arena, role, !!human);
-      cars[id] = makeCar(id, team, role, !!human, human?.name || aiName(team, role, i), spawn.x, spawn.z, spawn.yaw, slotIndex++);
+      const model = human ? sanitiseVehicleModel(human.model || human.vehicle || human.carModel) : aiVehicleForSlot(team, i, role);
+      cars[id] = makeCar(id, team, role, !!human, human?.name || aiName(team, role, i), spawn.x, spawn.z, spawn.yaw, slotIndex++, model);
     }
   }
   return {
@@ -179,6 +324,7 @@ export function makeInitialState(meta, players = {}) {
     timeLeft: cleanMeta.matchLength,
     score: { blue: 0, orange: 0 },
     mode: cleanMeta.mode,
+    theme: cleanMeta.theme,
     teamSize: cleanMeta.teamSize,
     arena,
     ball: { x: 0, y: BALL_RADIUS, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, rz: 0 },
@@ -224,9 +370,9 @@ function kickoffSpawn(team, i, teamSize, arena, role = "attack", human = false) 
   return { x: clamp(x, -arena.w / 2 + 8, arena.w / 2 - 8), z, yaw };
 }
 
-function makeCar(id, team, role, human, name, x, z, yaw, slotIndex) {
+function makeCar(id, team, role, human, name, x, z, yaw, slotIndex, model = "default") {
   return {
-    id, team, role, human, name, slotIndex,
+    id, team, role, human, name, slotIndex, model: sanitiseVehicleModel(model),
     x, y: CAR_GROUND_Y, z,
     vx: 0, vy: 0, vz: 0,
     yaw,
@@ -401,6 +547,7 @@ export class PhysicsHost {
       return;
     }
     this.meta = next;
+    if (this.state) this.state.theme = next.theme;
   }
 
   setInputs(inputs) { this.inputs = inputs || {}; }
@@ -430,6 +577,7 @@ export class PhysicsHost {
         car.name = players[car.id].name || car.name;
         car.role = players[car.id].role || car.role;
         car.team = players[car.id].team || car.team;
+        car.model = sanitiseVehicleModel(players[car.id].model || players[car.id].vehicle || car.model);
       }
       const input = car.human ? normaliseInput(this.inputs[car.id]) : makeAIInput(car, state, this.meta);
       updateCar(car, state.kickoffTimer > 0 ? { throttle: 0, steer: 0, boost: false, jump: false, drift: false } : input, state, cfg, dt);
@@ -470,17 +618,21 @@ function updateCar(car, input, state, cfg, dt) {
   const handbrake = !!input.drift;
   const wantsBoost = !!input.boost && throttle >= 0 && car.boost > 0.1 && (car.grounded || state.mode === "flying");
   const jump = !!input.jump;
+  const vehicle = VEHICLE_CONFIGS[car.model] || VEHICLE_CONFIGS.default;
 
   car.boosting = false;
   car.drifting = false;
 
   if (car.grounded) {
     let driveAcc = 0;
-    const maxForward = (wantsBoost ? 50 : 35) * (state.mode === "ice" ? 1.05 : 1);
-    const maxReverse = 16 * cfg.reverse;
-    const accel = 56 * cfg.drive;
-    const brake = 92 * cfg.brake;
-    const reverseAccel = 28 * cfg.reverse;
+    // Standard mode keeps the exact V10 baseline constants; vehicle models only
+    // apply tiny multipliers so the selected body has personality without changing
+    // the core game balance.
+    const maxForward = (wantsBoost ? 50 : 35) * (state.mode === "ice" ? 1.05 : 1) * vehicle.maxSpeed;
+    const maxReverse = 16 * cfg.reverse * vehicle.maxSpeed;
+    const accel = 56 * cfg.drive * vehicle.drive;
+    const brake = 92 * cfg.brake * vehicle.brake;
+    const reverseAccel = 28 * cfg.reverse * vehicle.reverse;
 
     if (throttle > 0) {
       if (forwardSpeed < maxForward) driveAcc = accel * throttle;
@@ -494,14 +646,14 @@ function updateCar(car, input, state, cfg, dt) {
     if (wantsBoost) {
       car.boosting = true;
       car.boost = Math.max(0, car.boost - (state.mode === "flying" ? 26 : 33) * dt);
-      car.vx += fwd.x * 62 * cfg.drive * dt;
-      car.vz += fwd.z * 62 * cfg.drive * dt;
+      car.vx += fwd.x * 62 * cfg.drive * vehicle.boost * dt;
+      car.vz += fwd.z * 62 * cfg.drive * vehicle.boost * dt;
     }
 
     const driftActive = handbrake && speed > 7.0;
     car.drifting = driftActive;
-    const normalGrip = 18.0 * cfg.grip;
-    const driftGrip = 2.25 * cfg.driftGrip;
+    const normalGrip = 18.0 * cfg.grip * vehicle.grip;
+    const driftGrip = 2.25 * cfg.driftGrip * vehicle.driftGrip;
     const grip = driftActive ? driftGrip : normalGrip;
     car.vx += right.x * (-sideSpeed * grip * dt);
     car.vz += right.z * (-sideSpeed * grip * dt);
@@ -523,7 +675,7 @@ function updateCar(car, input, state, cfg, dt) {
 
     const sign = forwardSpeed >= -1 ? 1 : -1;
     const speedFactor = clamp(speed / 24, 0.45, 1);
-    const baseTurn = (driftActive ? 5.35 * cfg.driftTurn : 2.9) * cfg.steer * speedFactor;
+    const baseTurn = (driftActive ? 5.35 * cfg.driftTurn * vehicle.driftTurn : 2.9) * cfg.steer * vehicle.steer * speedFactor;
     const targetYawVel = steer * sign * baseTurn;
     const yawSharpness = driftActive ? (state.mode === "ice" ? 2.3 : 3.3) : 9.0;
     car.yawVel = smooth(car.yawVel, targetYawVel, yawSharpness, dt);
@@ -531,7 +683,7 @@ function updateCar(car, input, state, cfg, dt) {
     if (!driftActive) car.yawVel *= Math.pow(0.78, dt * 120);
 
     const newSpeed = Math.hypot(car.vx, car.vz);
-    const maxSpeed = wantsBoost ? 53 : (forwardSpeed < -1 ? 18 * cfg.reverse : 37 * (state.mode === "ice" ? 1.04 : 1));
+    const maxSpeed = (wantsBoost ? 53 : (forwardSpeed < -1 ? 18 * cfg.reverse : 37 * (state.mode === "ice" ? 1.04 : 1))) * vehicle.maxSpeed;
     if (newSpeed > maxSpeed) {
       const s = maxSpeed / newSpeed;
       car.vx *= s; car.vz *= s;
@@ -540,21 +692,21 @@ function updateCar(car, input, state, cfg, dt) {
     if (jump && !car.jumpLatch && car.jumpCooldown <= 0) {
       car.grounded = false;
       car.onGround = false;
-      car.vy = (state.mode === "ice" ? 17.4 : 18.5) * cfg.jump;
+      car.vy = (state.mode === "ice" ? 17.4 : 18.5) * cfg.jump * vehicle.jump;
       car.jumpCooldown = 0.22;
       car.justJumped = true;
     }
   } else {
     car.yaw += steer * 1.55 * cfg.steer * dt;
     if (Math.abs(throttle) > 0.001) {
-      car.vx += fwd.x * throttle * 11 * cfg.drive * cfg.aerialDrive * dt;
-      car.vz += fwd.z * throttle * 11 * cfg.drive * cfg.aerialDrive * dt;
+      car.vx += fwd.x * throttle * 11 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
+      car.vz += fwd.z * throttle * 11 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
     }
     if (wantsBoost) {
       car.boosting = true;
       car.boost = Math.max(0, car.boost - 26 * dt);
-      car.vx += fwd.x * 48 * cfg.drive * dt;
-      car.vz += fwd.z * 48 * cfg.drive * dt;
+      car.vx += fwd.x * 48 * cfg.drive * vehicle.boost * dt;
+      car.vz += fwd.z * 48 * cfg.drive * vehicle.boost * dt;
     }
     car.vy -= GRAVITY * cfg.gravity * dt;
   }
@@ -647,8 +799,10 @@ function resolveCarCar(state) {
       const closing = -(relX * nx + relZ * nz);
       if (closing > 0) {
         const impulse = closing * 0.42;
-        a.vx += nx * impulse; a.vz += nz * impulse;
-        b.vx -= nx * impulse; b.vz -= nz * impulse;
+        const massA = (VEHICLE_CONFIGS[a.model] || VEHICLE_CONFIGS.default).mass;
+        const massB = (VEHICLE_CONFIGS[b.model] || VEHICLE_CONFIGS.default).mass;
+        a.vx += nx * impulse / massA; a.vz += nz * impulse / massA;
+        b.vx -= nx * impulse / massB; b.vz -= nz * impulse / massB;
         a.bumpCooldown = b.bumpCooldown = 0.1;
       }
     }
@@ -795,6 +949,7 @@ function resolveCueHit(car, b, state, cfg) {
 }
 
 function resolveCarBallOBB(car, b, state, cfg) {
+  const vehicle = VEHICLE_CONFIGS[car.model] || VEHICLE_CONFIGS.default;
   const fwd = fwdFromYaw(car.yaw);
   const right = rightFromYaw(car.yaw);
   const relX = b.x - car.x;
@@ -839,7 +994,7 @@ function resolveCarBallOBB(car, b, state, cfg) {
   const speed = horizontalSpeed(car);
   const frontBonus = clamp(fwd.x * nx + fwd.z * nz, -0.2, 1) * 5.5;
   const jumpBonus = car.justJumped ? 7.0 : 0;
-  const impulse = Math.max(0, closing * 1.18) + 4.4 + speed * 0.34 + frontBonus + jumpBonus;
+  const impulse = (Math.max(0, closing * 1.18) + 4.4 + speed * 0.34 + frontBonus + jumpBonus) * vehicle.hit;
   b.vx += nx * impulse;
   b.vy += ny * impulse;
   b.vz += nz * impulse;
@@ -848,9 +1003,10 @@ function resolveCarBallOBB(car, b, state, cfg) {
   const maxBallSpeed = BALL_MAX_SPEED * cfg.ballMax;
   const bs = Math.hypot(b.vx, b.vy, b.vz);
   if (bs > maxBallSpeed) { const s = maxBallSpeed / bs; b.vx *= s; b.vy *= s; b.vz *= s; }
-  car.vx -= nx * Math.min(7, impulse * 0.085);
-  car.vy -= ny * Math.min(7, impulse * 0.085);
-  car.vz -= nz * Math.min(7, impulse * 0.085);
+  const recoil = Math.min(7, impulse * 0.085) / vehicle.mass;
+  car.vx -= nx * recoil;
+  car.vy -= ny * recoil;
+  car.vz -= nz * recoil;
   car.lastTouch = state.tick;
 }
 
@@ -894,7 +1050,7 @@ export function compactState(state) {
   const cars = {};
   for (const [id, c] of Object.entries(state.cars)) {
     cars[id] = {
-      id: c.id, team: c.team, role: c.role, human: c.human, name: c.name,
+      id: c.id, team: c.team, role: c.role, human: c.human, name: c.name, model: sanitiseVehicleModel(c.model),
       x: round(c.x), y: round(c.y), z: round(c.z),
       vx: round(c.vx), vy: round(c.vy), vz: round(c.vz),
       yaw: round(c.yaw), yawVel: round(c.yawVel), pitch: round(c.pitch || 0), roll: round(c.roll || 0), grounded: !!c.grounded,
@@ -908,6 +1064,7 @@ export function compactState(state) {
     timeLeft: round(state.timeLeft),
     score: state.score,
     mode: state.mode,
+    theme: state.theme || "v10",
     teamSize: state.teamSize,
     arena: state.arena,
     ball: {
