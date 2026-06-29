@@ -21,6 +21,7 @@
 
   <button id="leave-game" class="floating-btn hidden" type="button">Leave</button>
   <button id="pause-game" class="floating-btn pause-btn hidden" type="button">Pause</button>
+  <button id="toggle-chat" class="floating-btn chat-toggle hidden" type="button" aria-expanded="false" aria-controls="chat-panel" title="Toggle chat (T)">Chat</button>
   <div id="pause-overlay" class="pause-overlay hidden">PAUSED</div>
 
   <div id="boost-label" class="boost-label hidden">BOOST</div>
@@ -29,14 +30,14 @@
   <div id="controls-hint" class="controls-hint hidden">
     <div id="cam-indicator">BALL CAM: <span id="cam-state">OFF</span></div>
     <strong>WASD</strong>: DRIVE &amp; STEER &nbsp;|&nbsp; <strong class="boost-text">SHIFT</strong>: BOOST<br />
-    <strong>SPACE</strong>: JUMP &nbsp;|&nbsp; <strong>CTRL</strong>: DRIFT &nbsp;|&nbsp; <strong>B</strong>: BALL CAM &nbsp;|&nbsp; <strong>R</strong>: RESET
+    <strong>SPACE</strong>: JUMP &nbsp;|&nbsp; <strong>CTRL</strong>: DRIFT &nbsp;|&nbsp; <strong>B</strong>: BALL CAM &nbsp;|&nbsp; <strong>R</strong>: RESET &nbsp;|&nbsp; <strong>T</strong>: CHAT
   </div>
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V28 Performance, Chat & Rocket Feel</div>
+      <div class="menu-kicker">V29 Accounts, Leaderboard & Chat Toggle</div>
       <h1>RLCSS</h1>
-      <p class="menu-subtitle">Smoother Rocket-style physics, better desktop performance, team/game chat, host pause, richer arenas, sound effects, double jumps, solo AI, and Firebase lobbies.</p>
+      <p class="menu-subtitle">Rocket-style physics, smoother desktop performance, player accounts, lobby chat, host pause, leaderboard stats, arenas, vehicles, sound effects and Firebase lobbies.</p>
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
       </div>
@@ -44,6 +45,11 @@
         Player name
         <input id="player-name" maxlength="18" placeholder="Player" autocomplete="nickname" />
       </label>
+      <div class="account-strip" aria-live="polite">
+        <span id="account-status">Playing as guest</span>
+        <button id="open-account" type="button" class="secondary small-action">Account</button>
+        <button id="open-leaderboard" type="button" class="secondary small-action">Leaderboard</button>
+      </div>
       <div class="row two menu-actions">
         <button id="single-player" type="button" class="primary">Single Player Setup</button>
         <button id="create-lobby" type="button">Create Online Lobby</button>
@@ -58,6 +64,42 @@
         <div><strong>Arena</strong><span>Themes &amp; props</span></div>
       </div>
       <p id="connection-status" class="status">Connecting to Firebase…</p>
+    </section>
+
+    <section id="account-card" class="panel account-panel hidden" aria-label="Account sign in">
+      <div class="panel-head compact-head">
+        <div>
+          <h2>Account</h2>
+          <p class="muted">Use a username and password for leaderboard stats. Guest play still works.</p>
+        </div>
+        <button id="close-account" type="button" class="secondary">Close</button>
+      </div>
+      <label>
+        Username
+        <input id="account-username" maxlength="18" placeholder="username" autocomplete="username" />
+      </label>
+      <label>
+        Password
+        <input id="account-password" type="password" maxlength="64" placeholder="password" autocomplete="current-password" />
+      </label>
+      <div class="row two account-actions">
+        <button id="create-account" type="button" class="primary">Create Account</button>
+        <button id="sign-in-account" type="button">Sign In</button>
+      </div>
+      <button id="sign-out-account" type="button" class="secondary full-width hidden">Sign Out</button>
+      <p id="account-message" class="status">Accounts use Firebase Email/Password behind the scenes, with your username converted to a private game-only login.</p>
+    </section>
+
+    <section id="leaderboard-card" class="panel leaderboard-panel hidden" aria-label="Leaderboard">
+      <div class="panel-head compact-head">
+        <div>
+          <h2>Leaderboard</h2>
+          <p class="muted">Ranked by points: 3 for a win, 1 for a draw.</p>
+        </div>
+        <button id="close-leaderboard" type="button" class="secondary">Close</button>
+      </div>
+      <div id="leaderboard-list" class="leaderboard-list">Loading leaderboard…</div>
+      <p class="hint">Stats are saved after completed matches for signed-in accounts.</p>
     </section>
 
     <section id="lobby-card" class="panel wide hidden">
