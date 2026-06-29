@@ -676,7 +676,9 @@ function setupMobileControls() {
     const dy = rawDy * scale;
     const nx = dx / max;
     const ny = dy / max;
-    mobileInput.steer = clamp(nx, -1, 1);
+    // Mobile stick is screen-relative: dragging right should turn the car right.
+    // Physics yaw uses the opposite sign from the DOM X-axis, so invert here only.
+    mobileInput.steer = clamp(-nx, -1, 1);
     mobileInput.throttle = clamp(-ny, -1, 1);
     knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
     zone.classList.add("active");
@@ -765,6 +767,7 @@ scene.add(world);
 let arenaSignature = "";
 let ballMesh = null;
 const carMeshes = new Map();
+const boostPadMeshes = new Map();
 const nameSprites = new Map();
 
 function resizeRenderer() {
@@ -811,6 +814,7 @@ function buildArena(state) {
   while (world.children.length) world.remove(world.children[0]);
   ballMesh = null;
   carMeshes.clear();
+  boostPadMeshes.clear();
   nameSprites.clear();
 
   const arena = state.arena;
@@ -834,6 +838,45 @@ function buildArena(state) {
     world.add(m);
     return m;
   }
+
+  function buildGoal(side, frameMat) {
+    const goalLineZ = side * arena.l / 2;
+    const backZ = side * (arena.l / 2 + arena.goalD);
+    const midZ = (goalLineZ + backZ) / 2;
+    const halfW = arena.goalW / 2;
+    const post = 0.62;
+    // Real goal frame: posts touch the ground, crossbar sits at goal height,
+    // and rails/nets extend backwards into the goal depth.
+    box(post, arena.goalH, post, -halfW, arena.goalH / 2, goalLineZ, frameMat);
+    box(post, arena.goalH, post,  halfW, arena.goalH / 2, goalLineZ, frameMat);
+    box(arena.goalW + post, post, post, 0, arena.goalH, goalLineZ, frameMat);
+    box(arena.goalW + post, 0.42, post, 0, 0.21, goalLineZ, frameMat);
+    box(post * 0.72, arena.goalH, post * 0.72, -halfW, arena.goalH / 2, backZ, frameMat);
+    box(post * 0.72, arena.goalH, post * 0.72,  halfW, arena.goalH / 2, backZ, frameMat);
+    box(arena.goalW + post, post * 0.72, post * 0.72, 0, arena.goalH, backZ, frameMat);
+    box(post * 0.72, post * 0.72, arena.goalD, -halfW, arena.goalH, midZ, frameMat);
+    box(post * 0.72, post * 0.72, arena.goalD,  halfW, arena.goalH, midZ, frameMat);
+    box(post * 0.58, post * 0.58, arena.goalD, -halfW, 0.32, midZ, frameMat);
+    box(post * 0.58, post * 0.58, arena.goalD,  halfW, 0.32, midZ, frameMat);
+
+    const netMat = new THREE.MeshBasicMaterial({ color: frameMat.color || new THREE.Color(0xffffff), wireframe: true, transparent: true, opacity: 0.26, side: THREE.DoubleSide });
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(arena.goalW, arena.goalH), netMat);
+    back.position.set(0, arena.goalH / 2, backZ);
+    world.add(back);
+    const left = new THREE.Mesh(new THREE.PlaneGeometry(arena.goalD, arena.goalH), netMat);
+    left.rotation.y = Math.PI / 2;
+    left.position.set(-halfW, arena.goalH / 2, midZ);
+    world.add(left);
+    const right = new THREE.Mesh(new THREE.PlaneGeometry(arena.goalD, arena.goalH), netMat);
+    right.rotation.y = Math.PI / 2;
+    right.position.set(halfW, arena.goalH / 2, midZ);
+    world.add(right);
+    const roof = new THREE.Mesh(new THREE.PlaneGeometry(arena.goalW, arena.goalD), netMat);
+    roof.rotation.x = Math.PI / 2;
+    roof.position.set(0, arena.goalH, midZ);
+    world.add(roof);
+  }
+
   box(1.2, 13, arena.l, -arena.w / 2, 6.5, 0);
   box(1.2, 13, arena.l, arena.w / 2, 6.5, 0);
   const sideW = (arena.w - arena.goalW) / 2;
@@ -843,6 +886,8 @@ function buildArena(state) {
   box(sideW, 13, 1.2, arena.w / 2 - sideW / 2, 6.5, arena.l / 2);
   box(arena.goalW, 13 - arena.goalH, 1.2, 0, arena.goalH + (13 - arena.goalH) / 2, -arena.l / 2, trimBlue);
   box(arena.goalW, 13 - arena.goalH, 1.2, 0, arena.goalH + (13 - arena.goalH) / 2, arena.l / 2, trimOrange);
+  buildGoal(-1, trimBlue);
+  buildGoal(1, trimOrange);
   box(arena.w + 2, 0.8, 0.8, 0, 0.45, -arena.l / 2, trimBlue);
   box(arena.w + 2, 0.8, 0.8, 0, 0.45, arena.l / 2, trimOrange);
   box(0.8, 0.8, arena.l + 2, -arena.w / 2, 0.45, 0, neutralTrim);
@@ -872,6 +917,61 @@ function buildArena(state) {
   world.add(ballMesh);
 }
 
+
+function createBoostPadMesh(pad) {
+  const g = new THREE.Group();
+  const diskMat = new THREE.MeshStandardMaterial({
+    color: 0xffb000,
+    emissive: 0xff8a00,
+    emissiveIntensity: 0.65,
+    transparent: true,
+    opacity: 0.74,
+    roughness: 0.35
+  });
+  const disk = new THREE.Mesh(new THREE.CylinderGeometry(pad.radius || 2.15, pad.radius || 2.15, 0.18, 28), diskMat);
+  disk.position.y = 0.09;
+  disk.receiveShadow = true;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry((pad.radius || 2.15) * 0.92, 0.08, 8, 32), new THREE.MeshBasicMaterial({ color: 0xfff2a8 }));
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.26;
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.62, 18, 12), new THREE.MeshBasicMaterial({ color: 0xffd55a }));
+  orb.position.y = 1.02;
+  const halo = new THREE.PointLight(0xffa000, 0.55, 9);
+  halo.position.y = 1.2;
+  g.add(disk, ring, orb, halo);
+  g.position.set(pad.x, 0, pad.z);
+  g.userData = { orb, ring, disk, halo };
+  world.add(g);
+  boostPadMeshes.set(pad.id, g);
+  return g;
+}
+
+function updateBoostPadVisuals(state) {
+  const pads = state.boostPads || [];
+  const live = new Set(pads.map(p => p.id));
+  for (const [id, mesh] of boostPadMeshes.entries()) {
+    if (!live.has(id)) { world.remove(mesh); boostPadMeshes.delete(id); }
+  }
+  const t = performance.now() * 0.004;
+  for (const pad of pads) {
+    const mesh = boostPadMeshes.get(pad.id) || createBoostPadMesh(pad);
+    mesh.position.set(pad.x, 0, pad.z);
+    const active = pad.active !== false;
+    mesh.visible = true;
+    mesh.userData.disk.visible = active;
+    mesh.userData.ring.visible = active;
+    mesh.userData.orb.visible = active;
+    mesh.userData.halo.visible = active;
+    if (active) {
+      const pulse = 1 + Math.sin(t * 2.5 + pad.x * 0.07 + pad.z * 0.03) * 0.12;
+      mesh.userData.orb.position.y = 1.03 + Math.sin(t + pad.x) * 0.18;
+      mesh.userData.orb.scale.setScalar(pulse);
+      mesh.userData.ring.rotation.z += 0.035;
+      mesh.userData.halo.intensity = 0.45 + pulse * 0.18;
+    }
+  }
+}
+
 function carMaterial(team, human) {
   const color = team === "blue" ? 0x0a91ff : 0xff6a00;
   return new THREE.MeshStandardMaterial({ color, roughness: human ? 0.35 : 0.55, metalness: human ? 0.18 : 0.06 });
@@ -885,7 +985,12 @@ function createCarMesh(car, state) {
   cabin.position.set(0, 1.15, 0.18); cabin.castShadow = true;
   const nose = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.32, 0.25), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: car.team === "blue" ? 0x0044aa : 0xaa3300, emissiveIntensity: 0.25 }));
   nose.position.set(0, 0.72, 1.95);
-  g.add(body, cabin, nose);
+  const flameGeo = new THREE.ConeGeometry(0.58, 2.2, 14).rotateX(-Math.PI / 2);
+  const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: 0xff8a00, transparent: true, opacity: 0.88 }));
+  flame.position.set(0, 0.48, -2.45);
+  flame.visible = false;
+  g.userData.flame = flame;
+  g.add(body, cabin, nose, flame);
   if (state.mode === "snooker") {
     const cueMat = new THREE.MeshStandardMaterial({ color: 0xd8b47a, roughness: 0.4 });
     const cue = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.19, 4.6, 12), cueMat);
@@ -911,12 +1016,21 @@ function updateVisuals(state) {
     ballMesh.position.set(state.ball.x, state.ball.y, state.ball.z);
     ballMesh.rotation.set(state.ball.rx, 0, state.ball.rz);
   }
+  updateBoostPadVisuals(state);
   for (const car of Object.values(state.cars || {})) {
     const mesh = carMeshes.get(car.id) || createCarMesh(car, state);
     mesh.position.set(car.x, car.y - VISUAL_CONSTANTS.CAR_RADIUS + 0.08, car.z);
     mesh.rotation.y = car.yaw;
     const scale = car.cueCooldown > 0 ? 1 + car.cueCooldown * 0.45 : 1;
     mesh.scale.set(1, 1, scale);
+    if (mesh.userData.flame) {
+      const boosting = !!car.boosting && (car.boost || 0) > 0;
+      mesh.userData.flame.visible = boosting;
+      if (boosting) {
+        const f = 0.85 + Math.random() * 0.45;
+        mesh.userData.flame.scale.set(1, f, 1 + Math.random() * 0.22);
+      }
+    }
   }
   updateHud(state);
   updateCamera(state);

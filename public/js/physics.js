@@ -68,6 +68,8 @@ const GOAL_W_BASE = 18;
 const GOAL_H = 7.5;
 const GOAL_D = 7.0;
 const BOOST_MAX = 100;
+const BOOST_PAD_RADIUS = 2.15;
+const BOOST_PAD_RESPAWN = 6.0;
 const MATCH_TICKS_PER_WRITE = 3;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -86,6 +88,36 @@ export function getArenaSize(mode = "standard", teamSize = 1) {
     goalH: GOAL_H,
     goalD: GOAL_D
   };
+}
+
+
+function makeBoostPads(arena) {
+  const w = arena.w, l = arena.l;
+  const raw = [
+    { x: -0.40 * w, z: 0, amount: 42 },
+    { x:  0.40 * w, z: 0, amount: 42 },
+    { x: -0.30 * w, z: -0.34 * l, amount: 42 },
+    { x:  0.30 * w, z: -0.34 * l, amount: 42 },
+    { x: -0.30 * w, z:  0.34 * l, amount: 42 },
+    { x:  0.30 * w, z:  0.34 * l, amount: 42 },
+    { x: 0, z: -0.25 * l, amount: 30 },
+    { x: 0, z:  0.25 * l, amount: 30 },
+    { x: -0.18 * w, z: -0.13 * l, amount: 24 },
+    { x:  0.18 * w, z: -0.13 * l, amount: 24 },
+    { x: -0.18 * w, z:  0.13 * l, amount: 24 },
+    { x:  0.18 * w, z:  0.13 * l, amount: 24 }
+  ];
+  return raw.map((p, i) => ({
+    id: `pad_${i}`,
+    x: clamp(p.x, -w / 2 + 5, w / 2 - 5),
+    z: clamp(p.z, -l / 2 + 9, l / 2 - 9),
+    y: 0.12,
+    radius: BOOST_PAD_RADIUS,
+    amount: p.amount,
+    active: true,
+    timer: 0,
+    respawn: BOOST_PAD_RESPAWN
+  }));
 }
 
 export function maxHumansFor(mode, teamSize) {
@@ -135,6 +167,7 @@ export function makeInitialState(meta, players = {}) {
     teamSize: cleanMeta.teamSize,
     arena,
     ball: { x: 0, y: BALL_RADIUS, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, rz: 0 },
+    boostPads: makeBoostPads(arena),
     cars,
     goalFlash: null,
     kickoffTimer: 2.0,
@@ -178,6 +211,8 @@ function makeCar(id, team, role, human, name, x, z, yaw, slotIndex) {
     yawVel: 0,
     grounded: true,
     boost: 45,
+    boosting: false,
+    boostPickup: 0,
     jumpLatch: false,
     cueCooldown: 0,
     bumpCooldown: 0,
@@ -320,6 +355,7 @@ export class PhysicsHost {
       }
     }
 
+    updateBoostPads(state, dt);
     resolveCarCar(state);
     updateBall(state, cfg, dt);
     resolveBallHits(state, cfg, dt, this.meta.mode);
@@ -368,13 +404,14 @@ function updateCar(car, input, state, cfg, dt) {
     car.vz -= fwd.z * amount;
   }
 
-  if (input.boost && car.boost > 0 && speed < boostMaxSpeed) {
+  const boostAllowed = input.boost && car.boost > 0;
+  car.boosting = false;
+  if (boostAllowed && speed < boostMaxSpeed + 1.5) {
     car.vx += fwd.x * 72 * dt;
     car.vz += fwd.z * 72 * dt;
     if (!car.grounded && flying) car.vy += 11 * dt;
-    car.boost = Math.max(0, car.boost - 25 * dt);
-  } else if (car.grounded) {
-    car.boost = Math.min(BOOST_MAX, car.boost + 4.5 * dt);
+    car.boost = Math.max(0, car.boost - 33 * dt);
+    car.boosting = true;
   }
 
   const steerSpeedFactor = clamp(Math.abs(forwardSpeed) / 17, 0.18, 1.0);
@@ -429,6 +466,7 @@ function updateCar(car, input, state, cfg, dt) {
   }
 
   clampCarToArena(car, arena);
+  car.boostPickup = Math.max(0, (car.boostPickup || 0) - dt);
   car.cueCooldown = Math.max(0, car.cueCooldown - dt);
   car.bumpCooldown = Math.max(0, car.bumpCooldown - dt);
 }
@@ -444,6 +482,35 @@ function clampCarToArena(car, arena) {
   if (Math.abs(car.z) > zLim) {
     car.z = Math.sign(car.z) * zLim;
     car.vz *= -0.18;
+  }
+}
+
+
+function updateBoostPads(state, dt) {
+  if (!Array.isArray(state.boostPads)) state.boostPads = makeBoostPads(state.arena);
+  for (const pad of state.boostPads) {
+    pad.radius = pad.radius || BOOST_PAD_RADIUS;
+    pad.amount = pad.amount || 34;
+    pad.respawn = pad.respawn || BOOST_PAD_RESPAWN;
+    if (!pad.active) {
+      pad.timer = Math.max(0, (Number(pad.timer) || 0) - dt);
+      if (pad.timer <= 0) pad.active = true;
+      continue;
+    }
+    for (const car of Object.values(state.cars || {})) {
+      if (Math.abs(car.y - CAR_RADIUS) > 2.4) continue;
+      const d = Math.hypot(car.x - pad.x, car.z - pad.z);
+      if (d <= CAR_RADIUS + pad.radius) {
+        const before = car.boost || 0;
+        car.boost = Math.min(BOOST_MAX, before + pad.amount);
+        if (car.boost > before) {
+          car.boostPickup = 0.16;
+          pad.active = false;
+          pad.timer = pad.respawn;
+        }
+        break;
+      }
+    }
   }
 }
 
@@ -593,7 +660,7 @@ function resetKickoff(state, players) {
     car.x = spawn.x; car.y = CAR_RADIUS; car.z = spawn.z;
     car.vx = 0; car.vy = 0; car.vz = 0;
     car.yaw = spawn.yaw; car.yawVel = 0;
-    car.grounded = true; car.boost = Math.max(car.boost, 45);
+    car.grounded = true; car.boost = Math.min(BOOST_MAX, Math.max(car.boost || 0, 33)); car.boosting = false; car.boostPickup = 0;
   }
 }
 
@@ -606,7 +673,7 @@ export function compactState(state) {
       x: round(c.x), y: round(c.y), z: round(c.z),
       vx: round(c.vx), vy: round(c.vy), vz: round(c.vz),
       yaw: round(c.yaw), yawVel: round(c.yawVel), grounded: c.grounded,
-      boost: Math.round(c.boost), cueCooldown: round(c.cueCooldown), slotIndex: c.slotIndex
+      boost: Math.round(c.boost), boosting: !!c.boosting, boostPickup: round(c.boostPickup || 0), cueCooldown: round(c.cueCooldown), slotIndex: c.slotIndex
     };
   }
   return {
@@ -622,6 +689,10 @@ export function compactState(state) {
       vx: round(state.ball.vx), vy: round(state.ball.vy), vz: round(state.ball.vz),
       rx: round(state.ball.rx), rz: round(state.ball.rz)
     },
+    boostPads: (state.boostPads || []).map(p => ({
+      id: p.id, x: round(p.x), z: round(p.z), y: round(p.y || 0.12), radius: round(p.radius || BOOST_PAD_RADIUS),
+      amount: p.amount || 34, active: p.active !== false, timer: round(p.timer || 0), respawn: p.respawn || BOOST_PAD_RESPAWN
+    })),
     cars,
     goalFlash: state.goalFlash,
     kickoffTimer: round(state.kickoffTimer),
