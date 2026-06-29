@@ -662,3 +662,96 @@ body.game-running #lobby-card { display: none !important; }
   .vehicle-preview-copy strong { font-size: 12px; }
   .vehicle-preview-copy span { font-size: 10px; }
 }
+
+/* V24: sharper phone rendering + mobile menu/lobby visibility fixes */
+@media (pointer: coarse) and (orientation: portrait) {
+  body:not(.game-running) #game-wrap {
+    bottom: 0 !important;
+  }
+  body:not(.game-running) .ui-root {
+    inset: 0;
+    display: block;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: max(10px, env(safe-area-inset-top)) 10px max(18px, env(safe-area-inset-bottom));
+    place-items: initial;
+    align-items: initial;
+  }
+  body:not(.game-running) .panel,
+  body:not(.game-running) .menu-panel,
+  body:not(.game-running) #lobby-card {
+    width: min(96vw, 540px);
+    max-height: none !important;
+    margin: 0 auto;
+    overflow: visible;
+  }
+  body:not(.game-running) .menu-panel {
+    overflow-x: hidden;
+    overflow-y: visible;
+    padding: 16px;
+  }
+  body:not(.game-running) .menu-kicker {
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    font-size: 10px;
+  }
+  body:not(.game-running) .panel h1 {
+    font-size: clamp(38px, 13vw, 56px);
+    margin-bottom: 8px;
+  }
+  body:not(.game-running) .menu-subtitle {
+    margin-bottom: 10px;
+    line-height: 1.35;
+  }
+  body:not(.game-running) label {
+    margin: 8px 0;
+  }
+  body:not(.game-running) input,
+  body:not(.game-running) select {
+    padding: 10px 11px;
+  }
+  body:not(.game-running) .menu-actions {
+    gap: 8px;
+  }
+  body:not(.game-running) .menu-actions button {
+    min-height: 48px;
+    font-size: 13px;
+  }
+  body:not(.game-running) .menu-join {
+    grid-template-columns: minmax(92px, .72fr) minmax(145px, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+  }
+  body:not(.game-running) .menu-join input {
+    font-size: 16px;
+    letter-spacing: .12em;
+  }
+  body:not(.game-running) .menu-join button {
+    min-height: 44px;
+    padding-inline: 12px;
+    font-size: 12px;
+  }
+  body:not(.game-running) .menu-feature-grid {
+    margin: 10px 0 6px;
+  }
+  body:not(.game-running) .status {
+    margin: 8px 0 0;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+}
+
+@media (pointer: coarse) and (orientation: portrait) and (max-height: 720px) {
+  body:not(.game-running) .menu-feature-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  body:not(.game-running) .menu-feature-grid > div {
+    padding: 7px 5px;
+  }
+  body:not(.game-running) .menu-feature-grid span {
+    display: none;
+  }
+  body:not(.game-running) .menu-subtitle {
+    font-size: 12px;
+  }
+}
