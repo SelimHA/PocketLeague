@@ -291,14 +291,17 @@ const CAR_RADIUS = 2.35;
 const CAR_GROUND_Y = CAR_HALF_Y + 0.08;
 const GRAVITY = 44;
 const BOOST_MAX = 100;
-// V25: still finite and a little faster than the old slow drain, but backed
-// off slightly from V23/V24 so each tank lasts just a touch longer.
-const BOOST_DRAIN_GROUND = 35;
-const BOOST_DRAIN_AIR = 29;
-const BOOST_DRAIN_FLYING = 31;
+// V38: slightly tighter boost economy. Everyone now starts with the same
+// amount and the tank drains a little faster, so kickoff/boost-pad decisions
+// matter more without making boost feel scarce.
+const STARTING_BOOST = 28;
+const BOOST_DRAIN_GROUND = 38;
+const BOOST_DRAIN_AIR = 32;
+const BOOST_DRAIN_FLYING = 34;
 const DOUBLE_JUMP_VELOCITY = 17.2;
 const DOUBLE_JUMP_FORWARD_KICK = 6.3;
 const MATCH_TICKS_PER_WRITE = 4;
+const KICKOFF_SPAWN_RADIUS = 40;
 
 // V28: Rocket League-style feel pass. The numbers still preserve the V10 baseline,
 // but make standard handling more immediate, more predictable, and less floaty.
@@ -419,6 +422,7 @@ function aiVehicleForSlot(team, i, role) {
 export function makeInitialState(meta, players = {}) {
   const cleanMeta = serialiseMeta(meta);
   const arena = getArenaSize(cleanMeta.mode, cleanMeta.teamSize, cleanMeta.pitchSize);
+  const kickoffVariant = cleanMeta.teamSize <= 1 ? makeKickoffVariant(arena) : null;
   const humans = Object.entries(players).map(([id, p]) => ({ id, ...p }));
   const cars = {};
   let slotIndex = 0;
@@ -429,7 +433,7 @@ export function makeInitialState(meta, players = {}) {
       const id = human ? human.id : `AI_${team}_${i}`;
       const configuredAiRole = cleanMeta.aiRoles?.[team]?.[i];
       const role = human?.role || configuredAiRole || defaultRoleForSlot(i, cleanMeta.teamSize);
-      const spawn = kickoffSpawn(team, i, cleanMeta.teamSize, arena, role, !!human);
+      const spawn = kickoffSpawn(team, i, cleanMeta.teamSize, arena, role, !!human, kickoffVariant);
       const model = human ? sanitiseVehicleModel(human.model || human.vehicle || human.carModel) : aiVehicleForSlot(team, i, role);
       cars[id] = makeCar(id, team, role, !!human, human?.name || aiName(team, role, i), spawn.x, spawn.z, spawn.yaw, slotIndex++, model);
     }
@@ -444,6 +448,7 @@ export function makeInitialState(meta, players = {}) {
     teamSize: cleanMeta.teamSize,
     pitchSize: cleanMeta.pitchSize,
     arena,
+    kickoffVariant,
     ball: { x: 0, y: BALL_RADIUS, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, rz: 0, lastTouchTick: 0, lastTouchCar: null, lastTouchImpulse: 0 },
     boostPads: makeBoostPads(arena),
     cars,
@@ -465,11 +470,41 @@ function laneOffset(index, count, spacing) {
   return (index - (count - 1) / 2) * spacing;
 }
 
-function kickoffSpawn(team, i, teamSize, arena, role = "attack", human = false) {
+function makeKickoffVariant(arena) {
+  // V38: 1v1 kickoffs now choose a Rocket League-like symmetric spawn around
+  // the centre ball. The distance from centre remains the old 40-unit baseline,
+  // but the angle can be straight-on or diagonal and is mirrored for the teams.
+  const radius = Math.min(KICKOFF_SPAWN_RADIUS, Math.max(24, arena.l * 0.36));
+  if (Math.random() < 0.38) return { kind: "straight", radius, side: 0, x: 0, z: radius };
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const x = clamp(radius * 0.56, 12, Math.max(12, arena.w / 2 - 10));
+  const z = Math.sqrt(Math.max(16, radius * radius - x * x));
+  return { kind: "diagonal", radius, side, x, z };
+}
+
+function normaliseKickoffVariant(raw, arena) {
+  if (!raw || typeof raw !== "object") return makeKickoffVariant(arena);
+  const radius = Math.min(KICKOFF_SPAWN_RADIUS, Math.max(24, arena.l * 0.36));
+  const kind = raw.kind === "diagonal" ? "diagonal" : "straight";
+  const side = raw.side < 0 ? -1 : raw.side > 0 ? 1 : 0;
+  if (kind === "straight" || !side) return { kind: "straight", radius, side: 0, x: 0, z: radius };
+  const x = clamp(Math.abs(Number(raw.x) || radius * 0.56), 12, Math.max(12, arena.w / 2 - 10));
+  const z = clamp(Number(raw.z) || Math.sqrt(Math.max(16, radius * radius - x * x)), 8, radius);
+  return { kind: "diagonal", radius, side, x, z };
+}
+
+function kickoffSpawn(team, i, teamSize, arena, role = "attack", human = false, kickoffVariant = null) {
   const blue = team === "blue";
   const sign = blue ? -1 : 1;
   const yaw = blue ? 0 : Math.PI;
-  if (teamSize <= 1) return { x: 0, z: sign * 40, yaw };
+  if (teamSize <= 1) {
+    const variant = normaliseKickoffVariant(kickoffVariant, arena);
+    const blueX = variant.kind === "diagonal" ? variant.side * variant.x : 0;
+    const blueZ = -variant.z;
+    return blue
+      ? { x: blueX, z: blueZ, yaw }
+      : { x: -blueX, z: -blueZ, yaw };
+  }
   const roleDepth = { goalkeeper: 0.43, defence: 0.33, midfield: 0.24, attack: 0.17 };
   const roles = Array.from({ length: teamSize }, (_, idx) => idx === i ? role : defaultRoleForSlot(idx, teamSize));
   const sameRoleCount = roles.filter(r => r === role).length;
@@ -499,7 +534,7 @@ function makeCar(id, team, role, human, name, x, z, yaw, slotIndex, model = "def
     yawVel: 0,
     grounded: true,
     onGround: true,
-    boost: team === "blue" ? 33 : 60,
+    boost: STARTING_BOOST,
     boosting: false,
     drifting: false,
     boostPickup: 0,
@@ -559,10 +594,10 @@ function aiSkill(meta) {
   // deliberately hesitates and over-commits sometimes; Pro rotates and saves;
   // All-Star anticipates touches and chooses boost/aerials much more reliably.
   return d === "rookie"
-    ? { think: 0.22, aim: 0.70, speed: 0.78, boost: 0.38, jump: 0.34, error: 7.4, read: 0.38, rotation: 0.46, challenge: 0.62, patience: 0.38, aerial: 0.18, save: 0.56, mistake: 0.28 }
+    ? { think: 0.22, aim: 0.70, speed: 0.78, boost: 0.38, jump: 0.34, error: 7.4, read: 0.38, rotation: 0.46, challenge: 0.62, patience: 0.38, aerial: 0.18, save: 0.56, mistake: 0.28, kickoff: 0.42 }
     : d === "allstar"
-      ? { think: 0.040, aim: 1.28, speed: 1.16, boost: 1.08, jump: 0.96, error: 0.72, read: 1.18, rotation: 1.24, challenge: 1.12, patience: 1.05, aerial: 0.92, save: 1.20, mistake: 0.035 }
-      : { think: 0.080, aim: 1.02, speed: 1.02, boost: 0.82, jump: 0.68, error: 2.55, read: 0.78, rotation: 0.88, challenge: 0.90, patience: 0.74, aerial: 0.58, save: 0.88, mistake: 0.12 };
+      ? { think: 0.040, aim: 1.28, speed: 1.16, boost: 1.12, jump: 0.96, error: 0.72, read: 1.18, rotation: 1.24, challenge: 1.12, patience: 1.05, aerial: 0.92, save: 1.20, mistake: 0.035, kickoff: 0.99 }
+      : { think: 0.080, aim: 1.02, speed: 1.02, boost: 0.88, jump: 0.68, error: 2.55, read: 0.78, rotation: 0.88, challenge: 0.90, patience: 0.74, aerial: 0.58, save: 0.88, mistake: 0.12, kickoff: 0.93 };
 }
 
 function styleConfig(meta) {
@@ -734,6 +769,13 @@ function deterministicNoise(car, state, scale = 1) {
   };
 }
 
+function aiRoundRoll(car, state, salt = 0) {
+  const serial = Number(state.sound?.roundSerial || 1);
+  const seed = Number(car.aiNoiseSeed || 0);
+  const v = Math.sin(serial * 12.9898 + seed * 78.233 + salt * 37.719) * 43758.5453123;
+  return v - Math.floor(v);
+}
+
 function setAiDebug(car, intent, tx, tz) {
   car.aiIntent = intent;
   car.aiTargetX = tx;
@@ -757,14 +799,20 @@ function makeDriveInput(car, target, state, skill, intent, opts = {}) {
   if (intent === "recover") throttle = clamp(throttle, 0.34, 0.82);
   if (intent === "boost") throttle = 1;
   const aligned = Math.abs(delta) < (precise ? 0.20 : 0.32);
-  const shouldDrift = speed > 10.5 && Math.abs(delta) > (precise ? 0.72 : 0.58) && Math.abs(delta) < 2.55 && skill.rotation > 0.55;
+  const driftThreshold = intent === "kickoff" ? 0.38 : (precise ? 0.68 : 0.52);
+  const shouldDrift = speed > (intent === "kickoff" ? 8.0 : 9.2)
+    && Math.abs(delta) > driftThreshold
+    && Math.abs(delta) < 2.62
+    && skill.rotation > 0.48;
   const boostIntent = ["challenge", "shot", "save", "kickoff", "boost"].includes(intent);
-  const boost = car.boost > (precise ? 18 : 9)
+  const boostAngle = intent === "kickoff" ? 0.50 : intent === "save" ? 0.38 : 0.34;
+  const boostMinDist = intent === "kickoff" ? 9 : intent === "save" ? 13 : 18;
+  const boost = car.boost > (precise ? 14 : 7)
     && boostIntent
-    && aligned
-    && dist > (intent === "save" ? 14 : 19)
+    && Math.abs(delta) < boostAngle
+    && dist > boostMinDist
     && forwardSpeed > -2
-    && Math.random() < clamp(skill.boost * (opts.boostScale || 1), 0, 1.35);
+    && Math.random() < clamp(skill.boost * (opts.boostScale || 1), 0, 1.45);
   return { throttle, steer, boost, drift: shouldDrift, aligned, dist, delta };
 }
 
@@ -815,9 +863,13 @@ export function makeAIInput(car, state, meta) {
 
   if (kickoffActive && (role === "attack" || rank === 0)) {
     intent = "kickoff";
-    target = { x: 0, z: 0 };
-    aim = { x: 0, z: enemyGoalZ };
+    const kickoffShot = (meta.difficulty || "pro") !== "rookie" && aiRoundRoll(car, state, 2) < (meta.difficulty === "allstar" ? 0.52 : 0.28);
+    aim = kickoffShot ? goalTargetForShot(state, car.team, ball) : { x: 0, z: enemyGoalZ };
+    target = distToBall > 13
+      ? { x: 0, z: 0 }
+      : approachTargetBehindBall(ball, aim, kickoffShot ? 1.4 : 2.4);
     approachDistance = 0;
+    precise = false;
   } else if (role === "goalkeeper") {
     if (danger01 > 0.42 || Math.abs(ball.z - ownGoalZ) < state.arena.l * 0.22) {
       intent = danger01 > 0.72 || distToBall < 15 ? "save" : "guard";
@@ -879,11 +931,16 @@ export function makeAIInput(car, state, meta) {
   }
 
   // Real players rotate for boost when they are not the immediate challenger.
-  const lowBoost = car.boost < (role === "attack" ? 16 : 24) * style.boostDiscipline;
+  // V38: with the same starting boost as humans, bots now value pads more and
+  // take nearby route pads during support/rotation, rather than waiting until
+  // they are completely empty.
+  const lowBoost = car.boost < (role === "attack" ? 20 : 28) * style.boostDiscipline;
+  const routeBoost = ["support", "rotate", "guard"].includes(intent) && car.boost < (skill.rotation > 0.9 ? 62 : 48);
   const urgent = intent === "save" || (intent === "challenge" && danger01 > 0.62) || intent === "kickoff";
-  if (lowBoost && !urgent && !cfg.snooker && car.grounded) {
-    const pad = nearestUsefulBoostPad(car, state, car.boost < 10 || skill.rotation > 0.9);
-    if (pad && Math.hypot(car.x - pad.x, car.z - pad.z) < state.arena.l * (skill.rotation > 0.9 ? 0.55 : 0.38)) {
+  if ((lowBoost || routeBoost) && !urgent && !cfg.snooker && car.grounded) {
+    const pad = nearestUsefulBoostPad(car, state, car.boost < 12 || (routeBoost && skill.rotation > 0.9));
+    const maxPadRange = state.arena.l * (routeBoost ? 0.34 : (skill.rotation > 0.9 ? 0.55 : 0.38));
+    if (pad && Math.hypot(car.x - pad.x, car.z - pad.z) < maxPadRange) {
       intent = "boost";
       target = { x: pad.x, z: pad.z };
       precise = false;
@@ -906,8 +963,15 @@ export function makeAIInput(car, state, meta) {
 
   const drive = makeDriveInput(car, target, state, skill, intent, {
     precise,
-    boostScale: intent === "boost" ? 0.55 : intent === "save" ? 0.85 : 1
+    boostScale: intent === "boost" ? 0.55 : intent === "save" ? 0.85 : intent === "kickoff" ? 1.35 : 1
   });
+
+  if (intent === "kickoff") {
+    drive.throttle = 1;
+    const kickoffFast = (meta.difficulty || "pro") !== "rookie" && aiRoundRoll(car, state, 1) < skill.kickoff;
+    if (kickoffFast && car.boost > 2 && drive.dist > 6 && Math.abs(drive.delta) < 0.72) drive.boost = true;
+    if (kickoffFast && carSpeed2(car) > 9 && Math.abs(drive.delta) > 0.34 && Math.abs(drive.delta) < 1.35) drive.drift = true;
+  }
 
   const ballDist = distance2(car, ball);
   const ballAhead = (() => {
@@ -922,7 +986,7 @@ export function makeAIInput(car, state, meta) {
   let jump = false;
   if ((intent === "shot" || intent === "challenge" || intent === "save" || intent === "kickoff") && ballDist < (intent === "save" ? 9.5 : 7.4) && shotAligned) {
     if (ball.y > 2.35 && ball.y < reachableHeight && car.grounded && Math.random() < clamp(skill.jump * (intent === "save" ? skill.save : 1), 0, 1.15)) jump = true;
-    if (intent === "kickoff" && ballDist < 6.8 && car.grounded && skill.jump > 0.55) jump = true;
+    if (intent === "kickoff" && ballDist < 7.2 && car.grounded && (skill.jump > 0.55 || ((meta.difficulty || "pro") !== "rookie" && aiRoundRoll(car, state, 3) < 0.86))) jump = true;
   }
   if (!car.grounded && !car.doubleJumpUsed && ballDist < 8.6 && ball.y > car.y + 0.8 && shotAligned && skill.aerial > 0.55 && Math.random() < skill.aerial * 0.34) {
     jump = true;
@@ -1524,15 +1588,16 @@ function resetKickoff(state, players, initial = false) {
   state.sound.roundSerial = (state.sound.roundSerial || 0) + 1;
   state.sound.roundTick = state.tick;
   state.kickoffTimer = KICKOFF_COUNTDOWN_SECONDS;
+  state.kickoffVariant = state.teamSize <= 1 ? makeKickoffVariant(state.arena) : null;
   const byTeam = { blue: 0, orange: 0 };
   for (const car of Object.values(state.cars)) {
     const idx = byTeam[car.team]++;
-    const spawn = kickoffSpawn(car.team, idx, state.teamSize, state.arena, car.role, car.human);
+    const spawn = kickoffSpawn(car.team, idx, state.teamSize, state.arena, car.role, car.human, state.kickoffVariant);
     car.x = spawn.x; car.y = CAR_GROUND_Y; car.z = spawn.z;
     car.vx = 0; car.vy = 0; car.vz = 0;
     car.yaw = spawn.yaw; car.yawVel = 0; car.pitch = 0; car.roll = 0;
     car.grounded = true; car.onGround = true;
-    const baseBoost = car.human ? (initial ? 33 : Math.max(car.boost || 0, 33)) : (initial ? 60 : Math.max(car.boost || 0, 45));
+    const baseBoost = initial ? STARTING_BOOST : Math.max(car.boost || 0, STARTING_BOOST);
     car.boost = Math.min(BOOST_MAX, baseBoost);
     car.boosting = false; car.drifting = false; car.boostPickup = 0; car.jumpCooldown = 0; car.jumpLatch = false; car.doubleJumpUsed = false; car.justJumped = false; car.jumpEventTick = 0; car.doubleJumpEventTick = 0;
   }

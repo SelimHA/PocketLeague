@@ -408,11 +408,15 @@ const Music = (() => {
   let recentTracks = [];
   let playedHistory = [];
   let userPaused = false;
+  let launchAutoplayPrimed = false;
 
   function init() {
     if (audio) return audio;
     audio = new Audio();
     audio.preload = "auto";
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.setAttribute("playsinline", "");
     audio.crossOrigin = "anonymous";
     audio.addEventListener("ended", () => next(true));
     audio.addEventListener("error", () => updateNowPlaying("Music file could not be loaded."));
@@ -499,6 +503,12 @@ const Music = (() => {
   function unlockAndMaybePlay() {
     if (unlocked) return;
     unlocked = true;
+    if (audio && launchAutoplayPrimed && !audio.paused && !userPaused) {
+      audio.muted = false;
+      audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
+      updateNowPlaying();
+      return;
+    }
     if (audioSettings.musicEnabled && !userPaused) play();
   }
 
@@ -509,9 +519,14 @@ const Music = (() => {
     const selected = chooseTrack(false);
     if (!selected) return updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
     setSource(selected, { remember: false });
+    audio.muted = false;
     audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
     const promise = audio.play?.();
-    if (promise?.catch) promise.catch(() => updateNowPlaying("Tap Preview music to start music."));
+    if (promise?.catch) promise.catch(() => {
+      // Browsers can still block audible autoplay. Keep the first-tap fallback
+      // ready and make the status actionable instead of silently failing.
+      updateNowPlaying("Autoplay blocked — tap anywhere once to start music.");
+    });
     updateNowPlaying();
   }
 
@@ -591,10 +606,41 @@ const Music = (() => {
     const selected = chooseTrack(false);
     if (!selected) return updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
     setSource(selected, { remember: false });
-    const promise = audio.play?.();
-    if (promise?.then) {
-      promise.then(() => updateNowPlaying()).catch(() => updateNowPlaying("Autoplay blocked — tap any button once to start music."));
-    } else updateNowPlaying();
+
+    // Best-effort audible autoplay first. If the browser blocks it, fall back to
+    // muted autoplay priming: muted autoplay is widely allowed, then we unmute
+    // shortly afterwards. If a browser still blocks audio, the existing global
+    // pointer/key/touch handlers start it on the first user interaction.
+    audio.muted = false;
+    audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
+    const audible = audio.play?.();
+    if (audible?.then) {
+      audible.then(() => {
+        launchAutoplayPrimed = true;
+        updateNowPlaying();
+      }).catch(() => {
+        if (userPaused || !audioSettings.musicEnabled) return;
+        audio.muted = true;
+        audio.volume = 0;
+        const muted = audio.play?.();
+        if (muted?.then) {
+          muted.then(() => {
+            launchAutoplayPrimed = true;
+            window.setTimeout(() => {
+              if (userPaused || !audioSettings.musicEnabled || !audio) return;
+              audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
+              audio.muted = false;
+              updateNowPlaying();
+            }, 350);
+          }).catch(() => updateNowPlaying("Autoplay blocked — tap anywhere once to start music."));
+        } else {
+          updateNowPlaying();
+        }
+      });
+    } else {
+      launchAutoplayPrimed = true;
+      updateNowPlaying();
+    }
   }
 
   return { applySettings, unlockAndMaybePlay, autoplayOnLaunch, play, pause, next, previous, togglePreview, toggleDock, updateNowPlaying };
