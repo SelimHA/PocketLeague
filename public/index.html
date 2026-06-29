@@ -59,7 +59,7 @@
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V36 Audio & Music Upgrade</div>
+      <div class="menu-kicker">V37 Audio & Music Fix</div>
       <h1>RLCSS</h1>
       <p class="menu-subtitle">Rocket-style car football with richer arenas, voice/text chat, leaderboards, custom matches and full desktop controller support, AI music, menu music controls, and audio settings.</p>
       <div class="ai-music-badge" aria-label="AI music notice">♫ AI-generated soundtrack included</div>
@@ -100,7 +100,7 @@
       <div class="panel-head compact-head">
         <div>
           <h2>Account</h2>
-          <p class="muted">Use a username and password for leaderboard stats. Guest play still works.</p>
+          <p id="account-subtitle" class="muted">Create an account for leaderboard stats, or keep playing as guest.</p>
         </div>
         <button id="close-account" type="button" class="secondary">Close</button>
       </div>
@@ -118,8 +118,21 @@
           <button id="sign-in-account" type="button">Sign In</button>
         </div>
       </div>
-      <button id="sign-out-account" type="button" class="secondary full-width hidden">Sign Out</button>
-      <p id="account-message" class="status">Accounts use Firebase Email/Password behind the scenes, with your username converted to a private game-only login.</p>
+      <div id="account-profile-fields" class="account-profile-fields hidden">
+        <div class="profile-chip">
+          <span>Signed in as</span>
+          <strong id="account-profile-name">Player</strong>
+        </div>
+        <label>
+          New password
+          <input id="account-new-password" type="password" maxlength="64" placeholder="new password" autocomplete="new-password" />
+        </label>
+        <div class="row two account-actions">
+          <button id="change-password-account" type="button" class="primary">Change Password</button>
+          <button id="sign-out-account" type="button" class="secondary">Sign Out</button>
+        </div>
+      </div>
+      <p id="account-message" class="status">Guest play still works. Accounts save leaderboard stats and cloud settings.</p>
     </section>
 
     <section id="settings-card" class="panel settings-panel hidden" aria-label="Settings">
@@ -169,7 +182,7 @@
           <h3>Camera</h3>
           <label class="range-label">
             Field of view
-            <input id="fov-range" type="range" min="55" max="85" step="1" />
+            <input id="fov-range" type="range" min="55" max="100" step="1" />
             <span id="fov-value" class="setting-value">65°</span>
           </label>
         </div>
@@ -215,7 +228,7 @@
             <button id="previous-music" type="button" class="secondary small-action">Restart / previous</button>
             <button id="next-music" type="button" class="secondary small-action">Next song</button>
           </div>
-          <p id="music-now-playing" class="hint">Music starts after your first tap/click because browsers block autoplay. All included music is AI-generated.</p>
+          <p id="music-now-playing" class="hint">Music tries to start when the site opens. If your browser blocks autoplay, tap any button once. All included music is AI-generated.</p>
         </div>
       </div>
 
@@ -231,6 +244,10 @@
         <div id="controller-settings-section" class="settings-section controller-settings-section">
           <h3>Controller</h3>
           <p id="controller-status" class="hint">Connect a controller, then use the left stick to drive and the right stick to pan the camera. Use Detect to move a button/axis instead of picking it manually.</p>
+          <div id="controller-wait-card" class="controller-wait-card" aria-live="polite">
+            <strong>No controller detected</strong>
+            <span>Plug in or pair a controller, then press any button on it. This screen will unlock the controller options automatically.</span>
+          </div>
           <div id="controller-options" class="controller-options">
             <label class="toggle-label"><input id="controller-enabled" type="checkbox" /> Enable desktop controller support</label>
             <label class="range-label">

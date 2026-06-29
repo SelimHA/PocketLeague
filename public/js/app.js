@@ -28,8 +28,8 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
-  accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountAuthFields: $("#account-auth-fields"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountSubtitle: $("#account-subtitle"), accountAuthFields: $("#account-auth-fields"), accountProfileFields: $("#account-profile-fields"), accountProfileName: $("#account-profile-name"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), accountNewPassword: $("#account-new-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), changePasswordAccount: $("#change-password-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
@@ -210,7 +210,7 @@ const SFX = (() => {
 })();
 
 const canvas = $("#game");
-let initializeApp, getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp, query, orderByChild, limitToLast, runTransaction;
+let initializeApp, getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged, getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp, query, orderByChild, limitToLast, runTransaction;
 let firebaseBootPromise = null;
 let firebaseBootDone = false;
 let firebaseBootError = null;
@@ -256,7 +256,7 @@ let voicePresenceUnsub = null;
 let voiceRenderKey = "";
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
-const SETTINGS_VERSION = "v36";
+const SETTINGS_VERSION = "v37";
 const KEY_ACTIONS = [
   ["forward", "Drive forward"], ["backward", "Brake / reverse"], ["left", "Steer left"], ["right", "Steer right"],
   ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide"], ["cam", "Ball cam"], ["reset", "Reset"],
@@ -377,7 +377,7 @@ function loadControllerSettings() {
 }
 let gameSettings = loadGameSettings();
 let audioSettings = loadAudioSettings();
-let cameraFov = clamp(Number(localStorage.getItem("rlcss_camera_fov")) || DEFAULT_FOV, 55, 85);
+let cameraFov = clamp(Number(localStorage.getItem("rlcss_camera_fov")) || DEFAULT_FOV, 55, 100);
 let controllerSettings = loadControllerSettings();
 let pendingKeyBind = null;
 const controllerLatches = {};
@@ -407,6 +407,7 @@ const Music = (() => {
   let currentTrack = "";
   let recentTracks = [];
   let playedHistory = [];
+  let userPaused = false;
 
   function init() {
     if (audio) return audio;
@@ -496,11 +497,13 @@ const Music = (() => {
   }
 
   function unlockAndMaybePlay() {
+    if (unlocked) return;
     unlocked = true;
-    if (audioSettings.musicEnabled) play();
+    if (audioSettings.musicEnabled && !userPaused) play();
   }
 
   function play() {
+    userPaused = false;
     init();
     if (!audioSettings.musicEnabled || audioSettings.musicVolume <= 0) return;
     const selected = chooseTrack(false);
@@ -513,6 +516,7 @@ const Music = (() => {
   }
 
   function pause() {
+    userPaused = true;
     if (audio) audio.pause();
     updateNowPlaying("Music paused.");
   }
@@ -581,7 +585,19 @@ const Music = (() => {
     if (ui.menuMusicToggle) ui.menuMusicToggle.setAttribute("aria-expanded", document.body.classList.contains("music-dock-open") ? "true" : "false");
   }
 
-  return { applySettings, unlockAndMaybePlay, play, pause, next, previous, togglePreview, toggleDock, updateNowPlaying };
+  function autoplayOnLaunch() {
+    init();
+    if (!audioSettings.musicEnabled || audioSettings.musicVolume <= 0 || userPaused) return;
+    const selected = chooseTrack(false);
+    if (!selected) return updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
+    setSource(selected, { remember: false });
+    const promise = audio.play?.();
+    if (promise?.then) {
+      promise.then(() => updateNowPlaying()).catch(() => updateNowPlaying("Autoplay blocked — tap any button once to start music."));
+    } else updateNowPlaying();
+  }
+
+  return { applySettings, unlockAndMaybePlay, autoplayOnLaunch, play, pause, next, previous, togglePreview, toggleDock, updateNowPlaying };
 })();
 
 ui.name.value = playerName;
@@ -589,6 +605,7 @@ populateChoiceSelects();
 applyGameSettingsToSelectors({ forceLobbyDefaults: true });
 renderSettingsUi();
 SFX.setVolume(audioSettings.gameVolume);
+Music.autoplayOnLaunch();
 Music.applySettings(false);
 
 function populateChoiceSelects() {
@@ -698,7 +715,7 @@ function applyLoadedSettings(raw = {}) {
     const cloudKeys = sanitiseBindings(raw.keyboard || raw.keyBindings || {});
     Object.keys(bindings).forEach(key => delete bindings[key]);
     Object.assign(bindings, cloudKeys);
-    cameraFov = clamp(Number(raw.camera?.fov ?? raw.cameraFov) || DEFAULT_FOV, 55, 85);
+    cameraFov = clamp(Number(raw.camera?.fov ?? raw.cameraFov) || DEFAULT_FOV, 55, 100);
     controllerSettings = sanitiseControllerSettings(raw.controller || raw.controllerSettings || {});
     gameSettings = sanitiseGameSettings(raw.gameplay || raw.gameSettings || {});
     audioSettings = sanitiseAudioSettings(raw.audio || raw.audioSettings || audioSettings);
@@ -800,6 +817,7 @@ function renderSettingsUi() {
   const pad = pads[0] || null;
   if (ui.controllerSettingsSection) ui.controllerSettingsSection.classList.toggle("no-controller", !pad);
   if (ui.controllerOptions) ui.controllerOptions.hidden = !pad;
+  if (ui.controllerWaitCard) ui.controllerWaitCard.hidden = !!pad;
   if (ui.controllerBindList) {
     if (!pad) {
       ui.controllerBindList.innerHTML = "";
@@ -820,7 +838,7 @@ function renderSettingsUi() {
   if (ui.controllerStatus) {
     ui.controllerStatus.textContent = pad
       ? `Controller detected: ${pad.id || "Gamepad"}. Only this controller's available axes/buttons are shown below.`
-      : "No controller connected. Connect a controller on PC and press any controller button, then reopen or revisit this tab to configure it.";
+      : "No controller connected. Press any button on your controller to wake it up and show the available options.";
   }
   updateControlsHintText();
 }
@@ -911,7 +929,7 @@ async function bootFirebase() {
       import("https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js")
     ]), 12000, "Loading Firebase SDK");
     ({ initializeApp } = appMod);
-    ({ getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } = authMod);
+    ({ getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged } = authMod);
     ({ getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp, query, orderByChild, limitToLast, runTransaction } = dbMod);
     const app = initializeApp(FIREBASE_CONFIG);
     auth = getAuth(app);
@@ -1010,26 +1028,31 @@ function accountName() {
 function updateAccountUi() {
   const signedIn = isAccountUser();
   const anon = !!authUser?.isAnonymous;
+  const name = accountName();
   if (ui.accountStatus) {
     ui.accountStatus.textContent = signedIn
-      ? `Signed in: ${accountName()}`
+      ? `Signed in: ${name}`
       : (anon ? "Playing as guest" : "Offline / guest only");
   }
   if (ui.openAccount) ui.openAccount.textContent = signedIn ? "Profile" : "Create / Sign in";
   if (ui.openAccount) ui.openAccount.classList.toggle("account-cta", !signedIn);
+  if (ui.accountSubtitle) ui.accountSubtitle.textContent = signedIn ? "Profile" : "Create an account for leaderboard stats, or keep playing as guest.";
   if (ui.accountAuthFields) ui.accountAuthFields.classList.toggle("hidden", signedIn);
+  if (ui.accountProfileFields) ui.accountProfileFields.classList.toggle("hidden", !signedIn);
+  if (ui.accountProfileName) ui.accountProfileName.textContent = name;
   if (ui.createAccount) ui.createAccount.classList.toggle("hidden", signedIn);
   if (ui.signInAccount) ui.signInAccount.classList.toggle("hidden", signedIn);
   if (ui.accountUsername) ui.accountUsername.disabled = signedIn;
   if (ui.accountPassword) ui.accountPassword.disabled = signedIn;
   if (ui.signOutAccount) ui.signOutAccount.classList.toggle("hidden", !signedIn);
+  if (ui.changePasswordAccount) ui.changePasswordAccount.classList.toggle("hidden", !signedIn);
   if (ui.accountMessage && !ui.accountMessage.dataset.busy) {
     ui.accountMessage.textContent = signedIn
-      ? `You are signed in as ${accountName()}. Sign-in fields are hidden; settings sync through Firebase.`
-      : (authUser ? "Guest play works. Create or sign in to save leaderboard stats." : "Connect Firebase to create accounts and save leaderboard stats.");
+      ? ""
+      : (authUser ? "Guest play still works. Accounts save leaderboard stats and cloud settings." : "Connect Firebase to create accounts and save leaderboard stats.");
   }
   if (signedIn) {
-    playerName = sanitizeName(accountName());
+    playerName = sanitizeName(name);
     localStorage.setItem("rlcss_online_name", playerName);
     if (ui.name && (!ui.name.value || ui.name.value === "Player" || ui.name.value !== playerName)) ui.name.value = playerName;
   }
@@ -1119,8 +1142,18 @@ async function signInAccount() {
   if (!accountProfile?.username) await saveProfile(username);
   await initialiseOwnLeaderboard(username);
   await loadSettingsFromFirebase();
-  setAccountMessage(`Signed in as ${accountName()}. Settings loaded from Firebase when available.`);
+  setAccountMessage(`Signed in as ${accountName()}.`);
   startLeaderboardListener();
+}
+
+async function changeAccountPassword() {
+  if (!isAccountUser() || !authUser || !updatePassword) return setAccountMessage("Sign in first.");
+  const next = String(ui.accountNewPassword?.value || "");
+  if (next.length < 6) return setAccountMessage("Password must be at least 6 characters.");
+  setAccountMessage("Changing password…", true);
+  await updatePassword(authUser, next);
+  if (ui.accountNewPassword) ui.accountNewPassword.value = "";
+  setAccountMessage("Password changed.");
 }
 
 async function signOutAccount() {
@@ -2534,6 +2567,7 @@ if (ui.openLeaderboard) ui.openLeaderboard.addEventListener("click", () => showM
 if (ui.closeLeaderboard) ui.closeLeaderboard.addEventListener("click", () => showMenuPanel("setup"));
 if (ui.createAccount) ui.createAccount.addEventListener("click", safeUi(createAccount, "Create account"));
 if (ui.signInAccount) ui.signInAccount.addEventListener("click", safeUi(signInAccount, "Sign in account"));
+if (ui.changePasswordAccount) ui.changePasswordAccount.addEventListener("click", safeUi(changeAccountPassword, "Change password"));
 if (ui.signOutAccount) ui.signOutAccount.addEventListener("click", safeUi(signOutAccount, "Sign out account"));
 if (ui.accountUsername) ui.accountUsername.addEventListener("input", () => { ui.accountUsername.value = normalizeUsername(ui.accountUsername.value); });
 if (ui.keybindList) ui.keybindList.addEventListener("click", e => {
@@ -2551,7 +2585,7 @@ if (ui.resetKeybinds) ui.resetKeybinds.addEventListener("click", () => {
   saveBindings();
 });
 if (ui.fovRange) ui.fovRange.addEventListener("input", () => {
-  cameraFov = clamp(Number(ui.fovRange.value) || DEFAULT_FOV, 55, 85);
+  cameraFov = clamp(Number(ui.fovRange.value) || DEFAULT_FOV, 55, 100);
   localStorage.setItem("rlcss_camera_fov", String(cameraFov));
   if (ui.fovValue) ui.fovValue.textContent = `${Math.round(cameraFov)}°`;
   applyCameraSettings();
@@ -2794,8 +2828,8 @@ window.addEventListener("keyup", e => {
   keys[e.code] = false;
   if (e.code === bindings.cam) camKeyLatch = false;
 });
-window.addEventListener("gamepadconnected", () => renderSettingsUi());
-window.addEventListener("gamepaddisconnected", () => renderSettingsUi());
+window.addEventListener("gamepadconnected", () => { renderSettingsUi(); setSettingsSyncStatus("Controller detected."); });
+window.addEventListener("gamepaddisconnected", () => { renderSettingsUi(); setSettingsSyncStatus("Controller disconnected."); });
 ["pointerdown", "touchstart", "click"].forEach(type => window.addEventListener(type, () => { SFX.resume(); Music.unlockAndMaybePlay(); }, { passive: true }));
 
 // Mobile/touch controls
