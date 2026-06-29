@@ -30,9 +30,9 @@
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V24 Arena Polish</div>
+      <div class="menu-kicker">V25 Drift & Vibrant Arenas</div>
       <h1>RLCSS</h1>
-      <p class="menu-subtitle">Sharper phone visuals, richer stadium level design, selectable vehicles, finite boost, double jumps, solo AI, and Firebase lobbies.</p>
+      <p class="menu-subtitle">Smoother drifting, slide-friendly phone actions, vibrant arenas, selectable vehicles, finite boost, double jumps, solo AI, and Firebase lobbies.</p>
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
       </div>
@@ -181,15 +181,17 @@
       </div>
       <div class="mobile-control-zone mobile-action-zone">
         <div class="mobile-action-utility">
-          <button data-action="cam" class="touch-btn utility-touch" type="button">CAM</button>
-          <button data-action="reset" class="touch-btn utility-touch" type="button">RESET</button>
+          <button class="touch-btn utility-touch" data-mobile-tap="cam" type="button">CAM</button>
+          <button class="touch-btn utility-touch" data-mobile-tap="reset" type="button">RESET</button>
         </div>
-        <button data-action="jump" class="touch-btn blue-touch jump-touch" type="button">JUMP</button>
-        <button data-action="drift" class="touch-btn drift-touch" type="button">DRIFT</button>
-        <button data-action="boost" class="touch-btn primary-touch boost-touch" type="button">BOOST</button>
+        <div id="mobile-action-pad" class="mobile-action-pad" role="application" aria-label="Slide between boost, jump and drift">
+          <div data-action="jump" class="touch-btn action-pad-zone blue-touch jump-touch action-jump">JUMP</div>
+          <div data-action="drift" class="touch-btn action-pad-zone drift-touch action-drift">DRIFT</div>
+          <div data-action="boost" class="touch-btn action-pad-zone primary-touch boost-touch action-boost"><span class="boost-btn-title">BOOST</span><span class="boost-btn-value">0</span></div>
+        </div>
       </div>
     </div>
-    <div class="mobile-help">Left thumb drives/steers · right thumb boosts, jumps and taps drift</div>
+    <div class="mobile-help">Left thumb drives/steers · slide across BOOST/JUMP/DRIFT · CAM/RESET stay separate</div>
   </div>
 
   <script type="module" src="./js/app.js"></script>
