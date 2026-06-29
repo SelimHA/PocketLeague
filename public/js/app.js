@@ -24,10 +24,10 @@ const $ = sel => document.querySelector(sel);
 const LOCAL_UID = "LOCAL_PLAYER";
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const ui = {
-  setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), firebaseWarning: $("#firebase-warning"),
+  setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
-  accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountAuthFields: $("#account-auth-fields"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
@@ -248,7 +248,50 @@ let voicePresenceUnsub = null;
 let voiceRenderKey = "";
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
-const bindings = defaultBindings();
+const SETTINGS_VERSION = "v31";
+const KEY_ACTIONS = [
+  ["forward", "Drive forward"], ["backward", "Brake / reverse"], ["left", "Steer left"], ["right", "Steer right"],
+  ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide"], ["cam", "Ball cam"], ["reset", "Reset"],
+  ["pause", "Pause (host)"], ["chat", "Toggle chat"], ["voice", "Toggle voice"], ["mic", "Mute mic"]
+];
+const DEFAULT_FOV = 65;
+function loadBindings() {
+  const base = defaultBindings();
+  try {
+    const saved = JSON.parse(localStorage.getItem("rlcss_key_bindings") || "{}");
+    return { ...base, ...saved };
+  } catch (_) { return { ...base }; }
+}
+const bindings = loadBindings();
+const DEFAULT_CONTROLLER = {
+  enabled: true,
+  deadzone: 0.18,
+  panSensitivity: 1,
+  steerAxis: 0,
+  throttleAxis: 7,
+  brakeAxis: 6,
+  cameraXAxis: 2,
+  cameraYAxis: 3,
+  jumpButton: 0,
+  boostButton: 1,
+  driftButton: 2,
+  camButton: 3,
+  resetButton: 5,
+  pauseButton: 9,
+  chatButton: 8,
+  voiceButton: 10,
+  micButton: 11
+};
+function loadControllerSettings() {
+  try { return { ...DEFAULT_CONTROLLER, ...(JSON.parse(localStorage.getItem("rlcss_controller_settings") || "{}") || {}) }; }
+  catch (_) { return { ...DEFAULT_CONTROLLER }; }
+}
+let cameraFov = clamp(Number(localStorage.getItem("rlcss_camera_fov")) || DEFAULT_FOV, 55, 85);
+let controllerSettings = loadControllerSettings();
+let pendingKeyBind = null;
+const controllerLatches = {};
+let controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
+let controllerLook = { x: 0, y: 0, active: false };
 const mobileInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
 let mobileDriftTimer = 0;
 let mobileDriftCooldownTimer = 0;
@@ -257,6 +300,7 @@ let touchDevice = matchMedia("(pointer: coarse)").matches;
 
 ui.name.value = playerName;
 populateChoiceSelects();
+renderSettingsUi();
 
 function populateChoiceSelects() {
   fillSelect(ui.theme, STADIUM_THEMES, DEFAULT_META.theme);
@@ -270,6 +314,85 @@ function fillSelect(select, configs, fallback) {
     .map(([key, cfg]) => `<option value="${key}">${escapeHtml(cfg.label || key)}</option>`)
     .join("");
   select.value = configs[current] ? current : fallback;
+}
+
+function actionLabel(action) {
+  return (KEY_ACTIONS.find(([key]) => key === action) || [action, action])[1];
+}
+
+function keyLabel(code) {
+  if (!code) return "Unbound";
+  const map = { Space: "Space", ShiftLeft: "Left Shift", ShiftRight: "Right Shift", ControlLeft: "Left Ctrl", ControlRight: "Right Ctrl", AltLeft: "Left Alt", AltRight: "Right Alt", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→" };
+  if (map[code]) return map[code];
+  return code.replace(/^Key/, "").replace(/^Digit/, "").replace(/^Numpad/, "Num ");
+}
+
+function saveBindings() {
+  localStorage.setItem("rlcss_key_bindings", JSON.stringify(bindings));
+  renderSettingsUi();
+}
+
+function saveControllerSettings() {
+  localStorage.setItem("rlcss_controller_settings", JSON.stringify(controllerSettings));
+  renderSettingsUi();
+}
+
+function axisOptions(selected) {
+  return Array.from({ length: 8 }, (_, i) => `<option value="${i}" ${Number(selected) === i ? "selected" : ""}>Axis ${i}</option>`).join("");
+}
+
+function buttonOptions(selected) {
+  return Array.from({ length: 18 }, (_, i) => `<option value="${i}" ${Number(selected) === i ? "selected" : ""}>Button ${i}</option>`).join("");
+}
+
+function renderSettingsUi() {
+  if (ui.fovRange) ui.fovRange.value = String(cameraFov);
+  if (ui.fovValue) ui.fovValue.textContent = `${Math.round(cameraFov)}°`;
+  if (ui.keybindList) {
+    ui.keybindList.innerHTML = KEY_ACTIONS.map(([action, label]) => `
+      <div class="bind-row">
+        <span>${escapeHtml(label)}</span>
+        <button type="button" class="bind-btn" data-bind-action="${action}">${escapeHtml(keyLabel(bindings[action]))}</button>
+      </div>`).join("");
+  }
+  if (ui.controllerEnabled) ui.controllerEnabled.checked = controllerSettings.enabled !== false;
+  if (ui.controllerDeadzone) ui.controllerDeadzone.value = String(controllerSettings.deadzone ?? DEFAULT_CONTROLLER.deadzone);
+  if (ui.controllerDeadzoneValue) ui.controllerDeadzoneValue.textContent = Number(controllerSettings.deadzone ?? DEFAULT_CONTROLLER.deadzone).toFixed(2);
+  if (ui.controllerPanSensitivity) ui.controllerPanSensitivity.value = String(controllerSettings.panSensitivity ?? DEFAULT_CONTROLLER.panSensitivity);
+  if (ui.controllerPanSensitivityValue) ui.controllerPanSensitivityValue.textContent = `${Number(controllerSettings.panSensitivity ?? DEFAULT_CONTROLLER.panSensitivity).toFixed(2)}x`;
+  if (ui.controllerBindList) {
+    const rows = [
+      ["steerAxis", "Left stick steer", "axis"], ["throttleAxis", "Right trigger / drive axis", "axis"], ["brakeAxis", "Left trigger / reverse axis", "axis"],
+      ["cameraXAxis", "Right stick pan X", "axis"], ["cameraYAxis", "Right stick pan Y", "axis"],
+      ["jumpButton", "Jump", "button"], ["boostButton", "Boost", "button"], ["driftButton", "Drift", "button"], ["camButton", "Ball cam", "button"],
+      ["resetButton", "Reset", "button"], ["pauseButton", "Pause", "button"], ["chatButton", "Chat", "button"], ["voiceButton", "Voice", "button"], ["micButton", "Mic mute", "button"]
+    ];
+    ui.controllerBindList.innerHTML = rows.map(([key, label, type]) => `
+      <label class="controller-bind-row">
+        <span>${escapeHtml(label)}</span>
+        <select data-controller-bind="${key}">${type === "axis" ? axisOptions(controllerSettings[key]) : buttonOptions(controllerSettings[key])}</select>
+      </label>`).join("");
+  }
+  const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+  if (ui.controllerStatus) ui.controllerStatus.textContent = pads.length ? `Controller detected: ${pads[0].id}` : "No controller detected yet. Plug one in, press a button, then use the left stick to drive and right stick to pan.";
+  updateControlsHintText();
+}
+
+function applyCameraSettings() {
+  if (typeof camera === "undefined") return;
+  camera.fov = cameraFov;
+  camera.updateProjectionMatrix();
+}
+
+function updateControlsHintText() {
+  if (!ui.controlsHint) return;
+  ui.controlsHint.innerHTML = `
+    <div id="cam-indicator">BALL CAM: <span id="cam-state">${localBallCam ? "ON" : "OFF"}</span></div>
+    <strong>${escapeHtml(keyLabel(bindings.forward))}/${escapeHtml(keyLabel(bindings.backward))}</strong>: DRIVE &amp; REVERSE &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.boost))}</strong>: BOOST<br />
+    <strong>${escapeHtml(keyLabel(bindings.jump))}</strong>: JUMP &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.drift))}</strong>: DRIFT &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.cam))}</strong>: BALL CAM &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.reset))}</strong>: RESET<br />
+    <strong>${escapeHtml(keyLabel(bindings.chat))}</strong>: CHAT &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.voice))}</strong>: VOICE &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.mic))}</strong>: MIC &nbsp;|&nbsp; Controller: left stick drive, right stick pan
+  `;
+  ui.camState = $("#cam-state");
 }
 
 function vehicleLabel(model) {
@@ -407,12 +530,18 @@ function updateAccountUi() {
       ? `Signed in: ${accountName()}`
       : (anon ? "Playing as guest" : "Offline / guest only");
   }
-  if (ui.accountMessage && !signedIn && !ui.accountMessage.dataset.busy) {
-    ui.accountMessage.textContent = authUser
-      ? "Guest play works. Create or sign in to save leaderboard stats."
-      : "Connect Firebase to create accounts and save leaderboard stats.";
-  }
+  if (ui.openAccount) ui.openAccount.textContent = signedIn ? "Profile" : "Account";
+  if (ui.accountAuthFields) ui.accountAuthFields.classList.toggle("hidden", signedIn);
+  if (ui.createAccount) ui.createAccount.classList.toggle("hidden", signedIn);
+  if (ui.signInAccount) ui.signInAccount.classList.toggle("hidden", signedIn);
+  if (ui.accountUsername) ui.accountUsername.disabled = signedIn;
+  if (ui.accountPassword) ui.accountPassword.disabled = signedIn;
   if (ui.signOutAccount) ui.signOutAccount.classList.toggle("hidden", !signedIn);
+  if (ui.accountMessage && !ui.accountMessage.dataset.busy) {
+    ui.accountMessage.textContent = signedIn
+      ? `You are signed in as ${accountName()}. Sign-in fields are hidden; use Sign Out to switch account.`
+      : (authUser ? "Guest play works. Create or sign in to save leaderboard stats." : "Connect Firebase to create accounts and save leaderboard stats.");
+  }
   if (signedIn) {
     playerName = sanitizeName(accountName());
     localStorage.setItem("rlcss_online_name", playerName);
@@ -976,6 +1105,7 @@ function updateGameVisibility() {
   if (running) {
     if (ui.accountCard) ui.accountCard.classList.add("hidden");
     if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
+    if (ui.settingsCard) ui.settingsCard.classList.add("hidden");
   }
   ui.hud.classList.toggle("hidden", !running);
   ui.leaveGame.classList.toggle("hidden", !running);
@@ -1093,16 +1223,94 @@ async function leaveToMenu(message = "") {
   if (message) ui.connection.textContent = message;
 }
 
+function getFirstGamepad() {
+  if (!navigator.getGamepads || controllerSettings.enabled === false) return null;
+  return Array.from(navigator.getGamepads()).find(Boolean) || null;
+}
+
+function axisValue(gamepad, index, deadzone = controllerSettings.deadzone || DEFAULT_CONTROLLER.deadzone) {
+  const raw = gamepad?.axes?.[Number(index)] ?? 0;
+  if (!Number.isFinite(raw) || Math.abs(raw) < deadzone) return 0;
+  const sign = Math.sign(raw);
+  return clamp(sign * ((Math.abs(raw) - deadzone) / Math.max(0.001, 1 - deadzone)), -1, 1);
+}
+
+function triggerValueFromAxis(gamepad, index) {
+  const raw = gamepad?.axes?.[Number(index)] ?? 0;
+  if (!Number.isFinite(raw)) return 0;
+  const v = raw < -0.05 ? (raw + 1) / 2 : raw;
+  return clamp(v, 0, 1);
+}
+
+function buttonValue(gamepad, index) {
+  const btn = gamepad?.buttons?.[Number(index)];
+  if (!btn) return 0;
+  return clamp(Number(btn.value || (btn.pressed ? 1 : 0)) || 0, 0, 1);
+}
+
+function buttonPressed(gamepad, index) {
+  return buttonValue(gamepad, index) > 0.45;
+}
+
+function latchButton(name, pressed, handler) {
+  if (pressed && !controllerLatches[name]) {
+    controllerLatches[name] = true;
+    handler();
+  } else if (!pressed) controllerLatches[name] = false;
+}
+
+function pollController() {
+  const pad = getFirstGamepad();
+  controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
+  controllerLook = { x: 0, y: 0, active: false };
+  if (!pad) return controllerInput;
+
+  const steerAxis = axisValue(pad, controllerSettings.steerAxis);
+  const driveTrigger = Math.max(triggerValueFromAxis(pad, controllerSettings.throttleAxis), buttonValue(pad, controllerSettings.throttleAxis));
+  const brakeTrigger = Math.max(triggerValueFromAxis(pad, controllerSettings.brakeAxis), buttonValue(pad, controllerSettings.brakeAxis));
+  const boostPressed = buttonPressed(pad, controllerSettings.boostButton);
+  const jumpPressed = buttonPressed(pad, controllerSettings.jumpButton);
+  const driftPressed = buttonPressed(pad, controllerSettings.driftButton);
+  const resetPressed = buttonPressed(pad, controllerSettings.resetButton);
+
+  // Gamepad left stick follows the same V10 convention as keyboard: positive steer turns left.
+  controllerInput = {
+    throttle: clamp(driveTrigger - brakeTrigger, -1, 1),
+    steer: clamp(-steerAxis, -1, 1),
+    boost: boostPressed,
+    jump: jumpPressed,
+    drift: driftPressed,
+    reset: resetPressed
+  };
+  const lookX = axisValue(pad, controllerSettings.cameraXAxis, Math.max(0.08, (controllerSettings.deadzone || 0.18) * 0.75));
+  const lookY = axisValue(pad, controllerSettings.cameraYAxis, Math.max(0.08, (controllerSettings.deadzone || 0.18) * 0.75));
+  controllerLook = { x: lookX, y: lookY, active: Math.abs(lookX) > 0.01 || Math.abs(lookY) > 0.01 };
+
+  latchButton("cam", buttonPressed(pad, controllerSettings.camButton), () => {
+    localBallCam = !localBallCam;
+    localStorage.setItem("rlcss_ball_cam", localBallCam ? "1" : "0");
+    if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
+    SFX.ui(localBallCam ? 860 : 520);
+  });
+  latchButton("pause", buttonPressed(pad, controllerSettings.pauseButton), () => togglePause());
+  latchButton("chat", buttonPressed(pad, controllerSettings.chatButton), () => toggleChatOpen());
+  latchButton("voice", buttonPressed(pad, controllerSettings.voiceButton), () => toggleVoice());
+  latchButton("mic", buttonPressed(pad, controllerSettings.micButton), () => toggleVoiceMuted());
+
+  return controllerInput;
+}
+
 function localInput() {
   const k = inputFromKeys(keys, bindings);
+  const c = pollController();
   const combined = {
-    throttle: clamp(k.throttle + mobileInput.throttle, -1, 1),
-    steer: clamp(k.steer + mobileInput.steer, -1, 1),
-    boost: k.boost || mobileInput.boost,
-    jump: k.jump || mobileInput.jump,
-    drift: k.drift || mobileInput.drift,
+    throttle: clamp(k.throttle + mobileInput.throttle + c.throttle, -1, 1),
+    steer: clamp(k.steer + mobileInput.steer + c.steer, -1, 1),
+    boost: k.boost || mobileInput.boost || c.boost,
+    jump: k.jump || mobileInput.jump || c.jump,
+    drift: k.drift || mobileInput.drift || c.drift,
     cam: localBallCam,
-    reset: k.reset || mobileInput.reset
+    reset: k.reset || mobileInput.reset || c.reset
   };
   return combined;
 }
@@ -1533,15 +1741,18 @@ function safeUi(handler, label) {
 function showMenuPanel(which = "setup") {
   const showAccount = which === "account";
   const showLeaderboard = which === "leaderboard";
-  if (ui.setup) ui.setup.classList.toggle("hidden", showAccount || showLeaderboard || !!lobbyCode);
+  const showSettings = which === "settings";
+  if (ui.setup) ui.setup.classList.toggle("hidden", showAccount || showLeaderboard || showSettings || !!lobbyCode);
   if (ui.accountCard) ui.accountCard.classList.toggle("hidden", !showAccount);
   if (ui.leaderboardCard) ui.leaderboardCard.classList.toggle("hidden", !showLeaderboard);
+  if (ui.settingsCard) ui.settingsCard.classList.toggle("hidden", !showSettings);
   if (showLeaderboard) {
     if (!leaderboardLoaded && ui.leaderboardList) ui.leaderboardList.textContent = firebaseReady ? "Loading leaderboard…" : "Connect Firebase to load the leaderboard.";
     startLeaderboardListener();
   }
   if (showAccount && ui.accountUsername && !ui.accountUsername.value) ui.accountUsername.value = normalizeUsername(ui.name?.value || accountProfile?.username || "");
   if (showAccount) updateAccountUi();
+  if (showSettings) renderSettingsUi();
 }
 
 // UI events
@@ -1551,12 +1762,57 @@ ui.join.addEventListener("click", safeUi(joinLobby, "Join lobby"));
 ui.joinCode.addEventListener("input", () => ui.joinCode.value = ui.joinCode.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
 if (ui.openAccount) ui.openAccount.addEventListener("click", () => showMenuPanel("account"));
 if (ui.closeAccount) ui.closeAccount.addEventListener("click", () => showMenuPanel("setup"));
+if (ui.openSettings) ui.openSettings.addEventListener("click", () => showMenuPanel("settings"));
+if (ui.closeSettings) ui.closeSettings.addEventListener("click", () => showMenuPanel("setup"));
 if (ui.openLeaderboard) ui.openLeaderboard.addEventListener("click", () => showMenuPanel("leaderboard"));
 if (ui.closeLeaderboard) ui.closeLeaderboard.addEventListener("click", () => showMenuPanel("setup"));
 if (ui.createAccount) ui.createAccount.addEventListener("click", safeUi(createAccount, "Create account"));
 if (ui.signInAccount) ui.signInAccount.addEventListener("click", safeUi(signInAccount, "Sign in account"));
 if (ui.signOutAccount) ui.signOutAccount.addEventListener("click", safeUi(signOutAccount, "Sign out account"));
 if (ui.accountUsername) ui.accountUsername.addEventListener("input", () => { ui.accountUsername.value = normalizeUsername(ui.accountUsername.value); });
+if (ui.keybindList) ui.keybindList.addEventListener("click", e => {
+  const btn = e.target.closest("[data-bind-action]");
+  if (!btn) return;
+  pendingKeyBind = btn.dataset.bindAction;
+  btn.textContent = "Press a key…";
+  btn.classList.add("listening");
+});
+if (ui.resetKeybinds) ui.resetKeybinds.addEventListener("click", () => {
+  const reset = defaultBindings();
+  Object.keys(bindings).forEach(key => delete bindings[key]);
+  Object.assign(bindings, reset);
+  saveBindings();
+});
+if (ui.fovRange) ui.fovRange.addEventListener("input", () => {
+  cameraFov = clamp(Number(ui.fovRange.value) || DEFAULT_FOV, 55, 85);
+  localStorage.setItem("rlcss_camera_fov", String(cameraFov));
+  if (ui.fovValue) ui.fovValue.textContent = `${Math.round(cameraFov)}°`;
+  applyCameraSettings();
+});
+if (ui.controllerEnabled) ui.controllerEnabled.addEventListener("change", () => {
+  controllerSettings.enabled = !!ui.controllerEnabled.checked;
+  saveControllerSettings();
+});
+if (ui.controllerDeadzone) ui.controllerDeadzone.addEventListener("input", () => {
+  controllerSettings.deadzone = clamp(Number(ui.controllerDeadzone.value) || DEFAULT_CONTROLLER.deadzone, 0.05, 0.35);
+  if (ui.controllerDeadzoneValue) ui.controllerDeadzoneValue.textContent = controllerSettings.deadzone.toFixed(2);
+  localStorage.setItem("rlcss_controller_settings", JSON.stringify(controllerSettings));
+});
+if (ui.controllerPanSensitivity) ui.controllerPanSensitivity.addEventListener("input", () => {
+  controllerSettings.panSensitivity = clamp(Number(ui.controllerPanSensitivity.value) || DEFAULT_CONTROLLER.panSensitivity, 0.5, 1.5);
+  if (ui.controllerPanSensitivityValue) ui.controllerPanSensitivityValue.textContent = `${controllerSettings.panSensitivity.toFixed(2)}x`;
+  localStorage.setItem("rlcss_controller_settings", JSON.stringify(controllerSettings));
+});
+if (ui.controllerBindList) ui.controllerBindList.addEventListener("change", e => {
+  const sel = e.target.closest("[data-controller-bind]");
+  if (!sel) return;
+  controllerSettings[sel.dataset.controllerBind] = Number(sel.value);
+  saveControllerSettings();
+});
+if (ui.resetController) ui.resetController.addEventListener("click", () => {
+  controllerSettings = { ...DEFAULT_CONTROLLER };
+  saveControllerSettings();
+});
 ui.copy.addEventListener("click", () => { if (!isSinglePlayer) navigator.clipboard?.writeText(lobbyCode || ""); });
 ui.leaveLobby.addEventListener("click", safeUi(() => leaveToMenu("Left lobby."), "Leave lobby"));
 ui.leaveGame.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
@@ -1610,22 +1866,30 @@ document.querySelectorAll("[data-chat-channel]").forEach(btn => btn.addEventList
 });
 
 window.addEventListener("keydown", e => {
+  if (pendingKeyBind) {
+    e.preventDefault();
+    bindings[pendingKeyBind] = e.code;
+    pendingKeyBind = null;
+    saveBindings();
+    return;
+  }
   const tag = (e.target?.tagName || "").toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select") return;
   SFX.resume();
-  if (e.code === "KeyP") {
+  if ([bindings.forward, bindings.backward, bindings.left, bindings.right, bindings.boost, bindings.jump, bindings.drift].includes(e.code)) e.preventDefault();
+  if (e.code === bindings.pause) {
     togglePause();
     return;
   }
-  if (e.code === "KeyT") {
+  if (e.code === bindings.chat) {
     toggleChatOpen();
     return;
   }
-  if (e.code === "KeyV") {
+  if (e.code === bindings.voice) {
     toggleVoice();
     return;
   }
-  if (e.code === "KeyM") {
+  if (e.code === bindings.mic) {
     toggleVoiceMuted();
     return;
   }
@@ -1649,6 +1913,8 @@ window.addEventListener("keyup", e => {
   keys[e.code] = false;
   if (e.code === bindings.cam) camKeyLatch = false;
 });
+window.addEventListener("gamepadconnected", () => renderSettingsUi());
+window.addEventListener("gamepaddisconnected", () => renderSettingsUi());
 ["pointerdown", "touchstart", "click"].forEach(type => window.addEventListener(type, () => SFX.resume(), { passive: true }));
 
 // Mobile/touch controls
@@ -1804,7 +2070,7 @@ function setupMobileControls() {
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x070912);
 scene.fog = new THREE.FogExp2(0x070912, 0.0038);
-const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 1200);
+const camera = new THREE.PerspectiveCamera(cameraFov, 1, 0.1, 1200);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
 renderer.setPixelRatio(desiredPixelRatio());
 renderer.shadowMap.enabled = true;
@@ -2747,12 +3013,18 @@ function updateCamera(state) {
     camera.lookAt(0, 0, 0);
     return;
   }
+  // Keep controller camera pan local-only, Rocket League style: right stick looks
+  // around without changing the physics/input sent to the lobby host.
+  if (controllerSettings.enabled !== false) pollController();
   let yaw = localCar.yaw;
   if (localBallCam && state.ball) {
     yaw = Math.atan2(state.ball.x - localCar.x, state.ball.z - localCar.z);
   }
-  const offset = new THREE.Vector3(0, localBallCam ? 8 : 6.8, localBallCam ? -20 : -18);
-  offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const panSensitivity = controllerSettings.panSensitivity || 1;
+  const panYaw = (controllerLook.x || 0) * 0.72 * panSensitivity;
+  const panPitch = (controllerLook.y || 0) * 5.2 * panSensitivity;
+  const offset = new THREE.Vector3(0, (localBallCam ? 8 : 6.8) + panPitch * 0.22, localBallCam ? -20 : -18);
+  offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw + panYaw);
   const desired = new THREE.Vector3(localCar.x, localCar.y + 1.6, localCar.z).add(offset);
 
   camera.position.lerp(desired, 0.16);
@@ -2761,10 +3033,11 @@ function updateCamera(state) {
     const toBall = new THREE.Vector3(state.ball.x - localCar.x, 0, state.ball.z - localCar.z);
     if (toBall.lengthSq() < 0.001) toBall.set(Math.sin(localCar.yaw), 0, Math.cos(localCar.yaw));
     toBall.normalize();
-    look = new THREE.Vector3(localCar.x + toBall.x * 14, localCar.y + 2.4, localCar.z + toBall.z * 14);
+    look = new THREE.Vector3(localCar.x + toBall.x * 14, localCar.y + 2.4 - panPitch * 0.26, localCar.z + toBall.z * 14);
   } else {
-    const fwd = new THREE.Vector3(Math.sin(localCar.yaw), 0, Math.cos(localCar.yaw));
-    look = new THREE.Vector3(localCar.x + fwd.x * 24, localCar.y + 2.2, localCar.z + fwd.z * 24);
+    const fwdYaw = localCar.yaw + panYaw;
+    const fwd = new THREE.Vector3(Math.sin(fwdYaw), 0, Math.cos(fwdYaw));
+    look = new THREE.Vector3(localCar.x + fwd.x * 24, localCar.y + 2.2 - panPitch * 0.26, localCar.z + fwd.z * 24);
   }
   camera.lookAt(look);
 }

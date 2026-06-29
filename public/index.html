@@ -37,9 +37,9 @@
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V30 Accounts, Leaderboard, Chat & Voice</div>
+      <div class="menu-kicker">V31 Settings, Gamepad & Profile Fixes</div>
       <h1>RLCSS</h1>
-      <p class="menu-subtitle">Rocket-style physics, smoother desktop performance, player accounts, lobby chat, push-to-join voice chat, host pause, leaderboard stats, arenas, vehicles, sound effects and Firebase lobbies.</p>
+      <p class="menu-subtitle">Rocket-style physics, desktop gamepad support, custom controls, adjustable camera FOV, optional accounts, lobby chat, voice chat, host pause, leaderboards, arenas, vehicles and Firebase lobbies.</p>
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
       </div>
@@ -50,6 +50,7 @@
       <div class="account-strip" aria-live="polite">
         <span id="account-status">Playing as guest</span>
         <button id="open-account" type="button" class="secondary small-action">Account</button>
+        <button id="open-settings" type="button" class="secondary small-action">Settings</button>
         <button id="open-leaderboard" type="button" class="secondary small-action">Leaderboard</button>
       </div>
       <div class="row two menu-actions">
@@ -76,20 +77,65 @@
         </div>
         <button id="close-account" type="button" class="secondary">Close</button>
       </div>
-      <label>
-        Username
-        <input id="account-username" maxlength="18" placeholder="username" autocomplete="username" />
-      </label>
-      <label>
-        Password
-        <input id="account-password" type="password" maxlength="64" placeholder="password" autocomplete="current-password" />
-      </label>
-      <div class="row two account-actions">
-        <button id="create-account" type="button" class="primary">Create Account</button>
-        <button id="sign-in-account" type="button">Sign In</button>
+      <div id="account-auth-fields" class="account-auth-fields">
+        <label>
+          Username
+          <input id="account-username" maxlength="18" placeholder="username" autocomplete="username" />
+        </label>
+        <label>
+          Password
+          <input id="account-password" type="password" maxlength="64" placeholder="password" autocomplete="current-password" />
+        </label>
+        <div class="row two account-actions">
+          <button id="create-account" type="button" class="primary">Create Account</button>
+          <button id="sign-in-account" type="button">Sign In</button>
+        </div>
       </div>
       <button id="sign-out-account" type="button" class="secondary full-width hidden">Sign Out</button>
       <p id="account-message" class="status">Accounts use Firebase Email/Password behind the scenes, with your username converted to a private game-only login.</p>
+    </section>
+
+    <section id="settings-card" class="panel settings-panel hidden" aria-label="Settings">
+      <div class="panel-head compact-head">
+        <div>
+          <h2>Settings</h2>
+          <p class="muted">Change keyboard bindings, camera field of view and desktop controller mappings. Settings save on this device.</p>
+        </div>
+        <button id="close-settings" type="button" class="secondary">Close</button>
+      </div>
+
+      <div class="settings-section">
+        <h3>Camera</h3>
+        <label class="range-label">
+          Field of view
+          <input id="fov-range" type="range" min="55" max="85" step="1" />
+          <span id="fov-value" class="setting-value">65°</span>
+        </label>
+      </div>
+
+      <div class="settings-section">
+        <h3>Keyboard</h3>
+        <div id="keybind-list" class="bind-list"></div>
+        <button id="reset-keybinds" type="button" class="secondary small-action">Reset keyboard</button>
+      </div>
+
+      <div class="settings-section">
+        <h3>Controller</h3>
+        <label class="toggle-label"><input id="controller-enabled" type="checkbox" /> Enable desktop controller support</label>
+        <label class="range-label">
+          Stick deadzone
+          <input id="controller-deadzone" type="range" min="0.05" max="0.35" step="0.01" />
+          <span id="controller-deadzone-value" class="setting-value">0.18</span>
+        </label>
+        <label class="range-label">
+          Right-stick camera pan sensitivity
+          <input id="controller-pan-sensitivity" type="range" min="0.5" max="1.5" step="0.05" />
+          <span id="controller-pan-sensitivity-value" class="setting-value">1.00x</span>
+        </label>
+        <p id="controller-status" class="hint">Connect a controller, then use the left stick to drive and the right stick to pan the camera.</p>
+        <div id="controller-bind-list" class="controller-bind-list"></div>
+        <button id="reset-controller" type="button" class="secondary small-action">Reset controller</button>
+      </div>
     </section>
 
     <section id="leaderboard-card" class="panel leaderboard-panel hidden" aria-label="Leaderboard">

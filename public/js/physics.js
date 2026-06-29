@@ -501,7 +501,11 @@ export function defaultBindings() {
     jump: "Space",
     drift: "ControlLeft",
     cam: "KeyB",
-    reset: "KeyR"
+    reset: "KeyR",
+    pause: "KeyP",
+    chat: "KeyT",
+    voice: "KeyV",
+    mic: "KeyM"
   };
 }
 
