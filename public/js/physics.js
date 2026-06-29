@@ -213,6 +213,13 @@ const CAR_RADIUS = 2.35;
 const CAR_GROUND_Y = CAR_HALF_Y + 0.08;
 const GRAVITY = 44;
 const BOOST_MAX = 100;
+// V23: boost now drains a bit faster so boost-pad control matters more,
+// but the acceleration impulse stays close to V22 so balance is preserved.
+const BOOST_DRAIN_GROUND = 42;
+const BOOST_DRAIN_AIR = 34;
+const BOOST_DRAIN_FLYING = 36;
+const DOUBLE_JUMP_VELOCITY = 16.8;
+const DOUBLE_JUMP_FORWARD_KICK = 5.8;
 const MATCH_TICKS_PER_WRITE = 4;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -387,6 +394,7 @@ function makeCar(id, team, role, human, name, x, z, yaw, slotIndex, model = "def
     boostPickup: 0,
     jumpCooldown: 0,
     jumpLatch: false,
+    doubleJumpUsed: false,
     justJumped: false,
     cueCooldown: 0,
     bumpCooldown: 0,
@@ -645,7 +653,7 @@ function updateCar(car, input, state, cfg, dt) {
 
     if (wantsBoost) {
       car.boosting = true;
-      car.boost = Math.max(0, car.boost - (state.mode === "flying" ? 26 : 33) * dt);
+      car.boost = Math.max(0, car.boost - (state.mode === "flying" ? BOOST_DRAIN_FLYING : BOOST_DRAIN_GROUND) * dt);
       car.vx += fwd.x * 62 * cfg.drive * vehicle.boost * dt;
       car.vz += fwd.z * 62 * cfg.drive * vehicle.boost * dt;
     }
@@ -692,11 +700,21 @@ function updateCar(car, input, state, cfg, dt) {
     if (jump && !car.jumpLatch && car.jumpCooldown <= 0) {
       car.grounded = false;
       car.onGround = false;
+      car.doubleJumpUsed = false;
       car.vy = (state.mode === "ice" ? 17.4 : 18.5) * cfg.jump * vehicle.jump;
-      car.jumpCooldown = 0.22;
+      car.jumpCooldown = 0.20;
       car.justJumped = true;
     }
   } else {
+    if (jump && !car.jumpLatch && car.jumpCooldown <= 0 && !car.doubleJumpUsed) {
+      car.doubleJumpUsed = true;
+      car.justJumped = true;
+      car.vy = Math.max(car.vy + 4.5 * cfg.jump * vehicle.jump, DOUBLE_JUMP_VELOCITY * cfg.jump * vehicle.jump);
+      car.vx += fwd.x * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
+      car.vz += fwd.z * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
+      car.pitch = -0.22;
+      car.jumpCooldown = 0.28;
+    }
     car.yaw += steer * 1.55 * cfg.steer * dt;
     if (Math.abs(throttle) > 0.001) {
       car.vx += fwd.x * throttle * 11 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
@@ -704,7 +722,7 @@ function updateCar(car, input, state, cfg, dt) {
     }
     if (wantsBoost) {
       car.boosting = true;
-      car.boost = Math.max(0, car.boost - 26 * dt);
+      car.boost = Math.max(0, car.boost - (state.mode === "flying" ? BOOST_DRAIN_FLYING : BOOST_DRAIN_AIR) * dt);
       car.vx += fwd.x * 48 * cfg.drive * vehicle.boost * dt;
       car.vz += fwd.z * 48 * cfg.drive * vehicle.boost * dt;
     }
@@ -722,6 +740,7 @@ function updateCar(car, input, state, cfg, dt) {
     car.vy = 0;
     car.grounded = true;
     car.onGround = true;
+    car.doubleJumpUsed = false;
     car.justJumped = false;
   } else {
     car.grounded = false;
@@ -1037,7 +1056,7 @@ function resetKickoff(state, players, initial = false) {
     car.grounded = true; car.onGround = true;
     const baseBoost = car.human ? (initial ? 33 : Math.max(car.boost || 0, 33)) : (initial ? 60 : Math.max(car.boost || 0, 45));
     car.boost = Math.min(BOOST_MAX, baseBoost);
-    car.boosting = false; car.drifting = false; car.boostPickup = 0; car.jumpCooldown = 0; car.jumpLatch = false; car.justJumped = false;
+    car.boosting = false; car.drifting = false; car.boostPickup = 0; car.jumpCooldown = 0; car.jumpLatch = false; car.doubleJumpUsed = false; car.justJumped = false;
   }
   for (const pad of state.boostPads || []) {
     pad.active = true;
@@ -1053,7 +1072,7 @@ export function compactState(state) {
       id: c.id, team: c.team, role: c.role, human: c.human, name: c.name, model: sanitiseVehicleModel(c.model),
       x: round(c.x), y: round(c.y), z: round(c.z),
       vx: round(c.vx), vy: round(c.vy), vz: round(c.vz),
-      yaw: round(c.yaw), yawVel: round(c.yawVel), pitch: round(c.pitch || 0), roll: round(c.roll || 0), grounded: !!c.grounded,
+      yaw: round(c.yaw), yawVel: round(c.yawVel), pitch: round(c.pitch || 0), roll: round(c.roll || 0), grounded: !!c.grounded, doubleJumpUsed: !!c.doubleJumpUsed,
       boost: Math.round(c.boost), boosting: !!c.boosting, drifting: !!c.drifting,
       boostPickup: round(c.boostPickup || 0), cueCooldown: round(c.cueCooldown || 0), bumpCooldown: round(c.bumpCooldown || 0), slotIndex: c.slotIndex
     };

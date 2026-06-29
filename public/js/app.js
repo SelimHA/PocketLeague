@@ -32,7 +32,8 @@ const ui = {
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
-  mobileBoostButton: document.querySelector('[data-action="boost"]')
+  mobileBoostButton: document.querySelector('[data-action="boost"]'),
+  vehiclePreview: $("#vehicle-preview"), vehiclePreviewName: $("#vehicle-preview-name"), vehiclePreviewDesc: $("#vehicle-preview-desc")
 };
 
 const canvas = $("#game");
@@ -413,6 +414,7 @@ function renderLobby() {
   ui.team.value = local.team || "blue";
   ui.role.value = local.role || "midfield";
   if (ui.vehicle) ui.vehicle.value = (VEHICLE_CONFIGS[local.model] ? local.model : "default");
+  updateVehiclePreview(false);
   ui.ready.classList.toggle("not-ready", !isSinglePlayer && !!local.ready);
   ui.ready.textContent = isSinglePlayer ? "Start Match" : (local.ready ? "Unready" : "Ready");
   ui.mode.disabled = ui.teamSize.disabled = ui.difficulty.disabled = ui.playstyle.disabled = !isHost || currentMeta.status !== "waiting";
@@ -531,6 +533,7 @@ function updateGameVisibility() {
     ui.lobby.classList.toggle("hidden", running || !lobbyCode);
   }
   ui.mobile.classList.toggle("hidden", !running || !isPhonePortrait());
+  applyRenderPerformanceMode();
   if (ui.camState) ui.camState.textContent = localBallCam ? "ON" : "OFF";
   if (running && (isSinglePlayer || currentMeta?.hostId === activePlayerId()) && !hostSim) {
     hostSim = new PhysicsHost(currentMeta, currentPlayers);
@@ -551,14 +554,18 @@ function startHostLoop() {
     last = now;
     acc += dt;
     let shouldWrite = false;
-    while (acc >= fixed) {
+    let steps = 0;
+    const maxSteps = isPhonePortrait() ? 5 : 8;
+    while (acc >= fixed && steps < maxSteps) {
       hostSim.syncMeta(currentMeta, currentPlayers);
       const localId = activePlayerId();
       if (isSinglePlayer && localId) latestInputs = { [localId]: localInput() };
       hostSim.setInputs(latestInputs);
       shouldWrite = hostSim.step(fixed, currentPlayers) || shouldWrite;
       acc -= fixed;
+      steps++;
     }
+    if (steps >= maxSteps) acc = Math.min(acc, fixed);
     latestState = compactState(hostSim.state);
     if (shouldWrite && !isSinglePlayer) set(lobbyRef(lobbyCode, "state"), latestState);
     if (hostSim.state.ended) {
@@ -654,7 +661,7 @@ ui.ready.addEventListener("click", () => {
 });
 ui.team.addEventListener("change", () => updateLocalPlayer({ team: ui.team.value, ready: false }));
 ui.role.addEventListener("change", () => updateLocalPlayer({ role: ui.role.value, ready: false }));
-if (ui.vehicle) ui.vehicle.addEventListener("change", () => updateLocalPlayer({ model: ui.vehicle.value, ready: false }));
+if (ui.vehicle) ui.vehicle.addEventListener("change", () => { updateVehiclePreview(true); updateLocalPlayer({ model: ui.vehicle.value, ready: false }); });
 ui.mode.addEventListener("change", () => updateMetaPatch({ mode: ui.mode.value }));
 if (ui.theme) ui.theme.addEventListener("change", () => updateMetaPatch({ theme: ui.theme.value }));
 ui.teamSize.addEventListener("change", () => updateMetaPatch({ teamSize: Number(ui.teamSize.value) }));
@@ -784,8 +791,8 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x070912);
 scene.fog = new THREE.FogExp2(0x070912, 0.0038);
 const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 1200);
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isPhonePortrait(), alpha: false, powerPreference: "high-performance" });
+renderer.setPixelRatio(desiredPixelRatio());
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -797,6 +804,20 @@ sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 scene.add(sun);
 
+function desiredPixelRatio() {
+  const dpr = window.devicePixelRatio || 1;
+  // V23 phone smoothness: keep desktop crisp, but avoid huge mobile back-buffers.
+  return isPhonePortrait() ? Math.min(dpr, 1.15) : Math.min(dpr, 2);
+}
+
+function applyRenderPerformanceMode() {
+  const mobile = isPhonePortrait();
+  renderer.setPixelRatio(desiredPixelRatio());
+  renderer.shadowMap.enabled = !mobile;
+  sun.castShadow = !mobile;
+  document.body.classList.toggle("mobile-performance", mobile);
+}
+
 const world = new THREE.Group();
 scene.add(world);
 let arenaSignature = "";
@@ -807,6 +828,7 @@ const nameSprites = new Map();
 
 function resizeRenderer() {
   const rect = canvas.parentElement.getBoundingClientRect();
+  applyRenderPerformanceMode();
   renderer.setSize(rect.width, rect.height, false);
   camera.aspect = rect.width / Math.max(1, rect.height);
   camera.updateProjectionMatrix();
@@ -838,15 +860,16 @@ function applySceneTheme(theme) {
 
 function makeFieldTexture(mode, arena, theme) {
   const cnv = document.createElement("canvas");
-  cnv.width = 1024; cnv.height = 1024;
+  const texSize = isPhonePortrait() ? 512 : 1024;
+  cnv.width = texSize; cnv.height = texSize;
   const ctx = cnv.getContext("2d");
   const base = modeFieldColor(mode, theme);
   ctx.fillStyle = `rgb(${base[0]},${base[1]},${base[2]})`;
-  ctx.fillRect(0, 0, 1024, 1024);
+  ctx.fillRect(0, 0, texSize, texSize);
   for (let i = 0; i < 18; i++) {
     const alpha = i % 2 ? (theme.stripeAlpha ?? 0.045) : Math.max(0.018, (theme.stripeAlpha ?? 0.045) * 0.45);
     ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-    ctx.fillRect(0, i * 60, 1024, 30);
+    ctx.fillRect(0, i * (texSize / 17), texSize, Math.max(12, texSize / 34));
   }
   if (mode === "ice") {
     ctx.strokeStyle = "rgba(255,255,255,0.78)";
@@ -854,17 +877,19 @@ function makeFieldTexture(mode, arena, theme) {
     ctx.strokeStyle = `rgba(255,255,255,${theme.lineAlpha ?? 0.56})`;
   }
   ctx.lineWidth = 7;
-  ctx.strokeRect(68, 68, 888, 888);
-  ctx.beginPath(); ctx.moveTo(68, 512); ctx.lineTo(956, 512); ctx.stroke();
-  ctx.beginPath(); ctx.arc(512, 512, 90, 0, Math.PI * 2); ctx.stroke();
+  const m = texSize * 0.066;
+  const mid = texSize / 2;
+  ctx.strokeRect(m, m, texSize - m * 2, texSize - m * 2);
+  ctx.beginPath(); ctx.moveTo(m, mid); ctx.lineTo(texSize - m, mid); ctx.stroke();
+  ctx.beginPath(); ctx.arc(mid, mid, texSize * 0.088, 0, Math.PI * 2); ctx.stroke();
 
   // Subtle deterministic turf/ice grain. This avoids the field looking flat
   // while keeping the selected lobby theme stable for every client.
   let seed = (arena.w * 31 + arena.l * 17 + (base[0] << 8) + base[1]) >>> 0;
   const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
   ctx.globalAlpha = mode === "ice" ? 0.12 : 0.18;
-  for (let i = 0; i < 2200; i++) {
-    const x = rand() * 1024, y = rand() * 1024;
+  for (let i = 0; i < (isPhonePortrait() ? 650 : 2200); i++) {
+    const x = rand() * texSize, y = rand() * texSize;
     ctx.fillStyle = rand() > 0.5 ? "#ffffff" : "#000000";
     ctx.fillRect(x, y, 1, 1);
   }
@@ -876,7 +901,8 @@ function makeFieldTexture(mode, arena, theme) {
 
 function buildArena(state) {
   const theme = themeForState(state);
-  const sig = `${state.mode}:${state.theme || "v10"}:${state.arena.w}:${state.arena.l}:${state.arena.goalW}`;
+  const mobilePerf = isPhonePortrait();
+  const sig = `${state.mode}:${state.theme || "v10"}:${state.arena.w}:${state.arena.l}:${state.arena.goalW}:${mobilePerf ? "mobile" : "desktop"}`;
   if (sig === arenaSignature) return;
   arenaSignature = sig;
   while (world.children.length) world.remove(world.children[0]);
@@ -949,6 +975,97 @@ function buildArena(state) {
     world.add(roof);
   }
 
+  function addExteriorProps() {
+    const propShadow = !mobilePerf;
+    const trim = theme.trim ?? 0xffffff;
+    const blueLight = theme.lightBlue ?? 0x12b9ff;
+    const orangeLight = theme.lightOrange ?? 0xff8a1f;
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x263247, roughness: 0.58, metalness: 0.18 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: theme.stands ?? 0x111827, roughness: 0.86 });
+    const glowBlue = new THREE.MeshStandardMaterial({ color: blueLight, emissive: blueLight, emissiveIntensity: 0.55, roughness: 0.34 });
+    const glowOrange = new THREE.MeshStandardMaterial({ color: orangeLight, emissive: orangeLight, emissiveIntensity: 0.55, roughness: 0.34 });
+    const adWhite = new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0x111827, emissiveIntensity: 0.08, roughness: 0.42 });
+
+    function propBox(w, h, d, x, y, z, mat, rotY = 0) {
+      const m = box(w, h, d, x, y, z, mat);
+      m.rotation.y = rotY;
+      m.castShadow = propShadow;
+      m.receiveShadow = propShadow;
+      return m;
+    }
+    function cyl(r, h, x, y, z, mat, seg = mobilePerf ? 8 : 12) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, seg), mat);
+      m.position.set(x, y, z);
+      m.castShadow = propShadow;
+      m.receiveShadow = propShadow;
+      world.add(m);
+      return m;
+    }
+
+    const adCount = mobilePerf ? 6 : 12;
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < adCount; i++) {
+        const x = -arena.w / 2 + (i + 0.5) * (arena.w / adCount);
+        const mat = i % 3 === 0 ? glowBlue : i % 3 === 1 ? glowOrange : adWhite;
+        propBox(Math.max(4.6, arena.w / adCount - 1.2), 1.35, 0.28, x, 1.0, side * (arena.l / 2 + 2.2), mat);
+      }
+    }
+    const endCount = mobilePerf ? 3 : 6;
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < endCount; i++) {
+        const x = (i - (endCount - 1) / 2) * (arena.goalW / Math.max(1, endCount - 1));
+        const mat = side < 0 ? glowBlue : glowOrange;
+        propBox(4.2, 1.25, 0.28, x, 1.0, side * (arena.l / 2 + arena.goalD + 1.4), mat);
+      }
+    }
+
+    // Goal-end stands and entry tunnels make the arena feel enclosed without affecting collisions.
+    for (const side of [-1, 1]) {
+      propBox((arena.w - arena.goalW) * 0.46, 3.0, 8.0, -arena.w * 0.34, 2.1, side * (arena.l / 2 + arena.goalD + 6), darkMat);
+      propBox((arena.w - arena.goalW) * 0.46, 3.0, 8.0,  arena.w * 0.34, 2.1, side * (arena.l / 2 + arena.goalD + 6), darkMat);
+      propBox(arena.goalW * 0.62, 3.2, 5.2, 0, 2.2, side * (arena.l / 2 + arena.goalD + 7.5), steelMat);
+      propBox(arena.goalW * 0.45, 2.0, 0.42, 0, 3.15, side * (arena.l / 2 + arena.goalD + 4.8), side < 0 ? glowBlue : glowOrange);
+    }
+
+    const cornerXs = [-arena.w / 2 - 16, arena.w / 2 + 16];
+    const cornerZs = [-arena.l / 2 - 16, arena.l / 2 + 16];
+    for (const x of cornerXs) {
+      for (const z of cornerZs) {
+        cyl(0.38, 19, x, 9.5, z, steelMat, mobilePerf ? 8 : 14);
+        const bank = propBox(5.8, 1.1, 1.0, x, 19.4, z, adWhite, Math.atan2(-x, -z));
+        bank.castShadow = false;
+        if (!mobilePerf) {
+          const lamp = new THREE.PointLight(trim, 0.75, Math.max(arena.w, arena.l) * 0.8);
+          lamp.position.set(x, 18.4, z);
+          world.add(lamp);
+        }
+      }
+    }
+
+    // Roof trusses / flags along the long sides. Very low geometry, high stadium payoff.
+    const trussCount = mobilePerf ? 4 : 8;
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < trussCount; i++) {
+        const x = -arena.w / 2 + (i + 0.5) * (arena.w / trussCount);
+        propBox(0.45, 0.45, 11.5, x, 16.2, side * (arena.l / 2 + 18), steelMat);
+        if (!mobilePerf || i % 2 === 0) {
+          const flagMat = new THREE.MeshBasicMaterial({ color: i % 2 ? orangeLight : blueLight, side: THREE.DoubleSide });
+          const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 1.1), flagMat);
+          flag.position.set(x + 0.7, 18.0, side * (arena.l / 2 + 19.4));
+          flag.rotation.y = side < 0 ? 0 : Math.PI;
+          world.add(flag);
+        }
+      }
+    }
+
+    if (!mobilePerf) {
+      const boardMat = new THREE.MeshStandardMaterial({ color: 0x050814, emissive: 0x0ea5e9, emissiveIntensity: 0.26, roughness: 0.32 });
+      propBox(15.0, 5.2, 0.7, 0, 15.6, -arena.l / 2 - 22.5, boardMat);
+      propBox(5.2, 0.65, 0.9, -5.0, 15.6, -arena.l / 2 - 22.0, glowBlue);
+      propBox(5.2, 0.65, 0.9,  5.0, 15.6, -arena.l / 2 - 22.0, glowOrange);
+    }
+  }
+
   box(1.2, 13, arena.l, -arena.w / 2, 6.5, 0);
   box(1.2, 13, arena.l, arena.w / 2, 6.5, 0);
   const sideW = (arena.w - arena.goalW) / 2;
@@ -978,15 +1095,21 @@ function buildArena(state) {
         world.add(ribbon);
       }
     }
-    const light = new THREE.PointLight(side < 0 ? blueLight : orangeLight, 1.25, arena.w * 1.4);
-    light.position.set(0, 18, side * (arena.l / 2 + 8));
-    world.add(light);
+    if (!mobilePerf) {
+      const light = new THREE.PointLight(side < 0 ? blueLight : orangeLight, 1.25, arena.w * 1.4);
+      light.position.set(0, 18, side * (arena.l / 2 + 8));
+      world.add(light);
+    }
   }
   for (const x of [-arena.w / 2 - 13, arena.w / 2 + 13]) {
-    const light = new THREE.PointLight(theme.trim ?? 0xffffff, 0.82, arena.l * 0.9);
-    light.position.set(x, 24, 0);
-    world.add(light);
+    if (!mobilePerf) {
+      const light = new THREE.PointLight(theme.trim ?? 0xffffff, 0.82, arena.l * 0.9);
+      light.position.set(x, 24, 0);
+      world.add(light);
+    }
   }
+
+  addExteriorProps();
 
   ballMesh = new THREE.Mesh(
     new THREE.IcosahedronGeometry(VISUAL_CONSTANTS.BALL_RADIUS, 3),
@@ -1015,8 +1138,9 @@ function createBoostPadMesh(pad) {
   ring.position.y = 0.26;
   const orb = new THREE.Mesh(new THREE.SphereGeometry(0.62, 18, 12), new THREE.MeshBasicMaterial({ color: 0xffd55a }));
   orb.position.y = 1.02;
-  const halo = new THREE.PointLight(0xffa000, 0.55, 9);
+  const halo = isPhonePortrait() ? new THREE.Object3D() : new THREE.PointLight(0xffa000, 0.55, 9);
   halo.position.y = 1.2;
+  if (isPhonePortrait()) halo.intensity = 0;
   g.add(disk, ring, orb, halo);
   g.position.set(pad.x, 0, pad.z);
   g.userData = { orb, ring, disk, halo };
@@ -1136,6 +1260,103 @@ function createCarMesh(car, state) {
   return g;
 }
 
+let previewRenderer = null;
+let previewScene = null;
+let previewCamera = null;
+let previewVehicle = null;
+let previewVehicleModel = "";
+
+function initVehiclePreview() {
+  if (!ui.vehiclePreview || previewRenderer) return;
+  previewScene = new THREE.Scene();
+  previewCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 80);
+  previewCamera.position.set(0, 2.4, 7.4);
+  previewCamera.lookAt(0, 0.85, 0);
+  previewRenderer = new THREE.WebGLRenderer({ canvas: ui.vehiclePreview, antialias: true, alpha: true, powerPreference: "low-power" });
+  previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhonePortrait() ? 1.1 : 1.6));
+  previewRenderer.shadowMap.enabled = false;
+  previewScene.add(new THREE.AmbientLight(0xffffff, 0.78));
+  const key = new THREE.DirectionalLight(0xffffff, 0.95);
+  key.position.set(4, 6, 6);
+  previewScene.add(key);
+  const rim = new THREE.PointLight(0x12b9ff, 0.75, 12);
+  rim.position.set(-3, 3, -4);
+  previewScene.add(rim);
+  const pad = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.0, 3.0, 0.14, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.10 })
+  );
+  pad.position.y = -0.08;
+  previewScene.add(pad);
+}
+
+function createPreviewVehicleMesh(modelKey) {
+  const vehicle = VEHICLE_CONFIGS[modelKey] || VEHICLE_CONFIGS.default;
+  const g = new THREE.Group();
+  const [bodyW, bodyH, bodyD] = vehicle.body || VEHICLE_CONFIGS.default.body;
+  const [cabinW, cabinH, cabinD] = vehicle.cabin || VEHICLE_CONFIGS.default.cabin;
+  const [cabinX, cabinY, cabinZ] = vehicle.cabinOffset || VEHICLE_CONFIGS.default.cabinOffset;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, bodyD), carMaterial("blue", true, modelKey));
+  body.position.y = bodyH / 2;
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(cabinW, cabinH, cabinD), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.22, metalness: 0.38 }));
+  cabin.position.set(cabinX, cabinY, cabinZ);
+  const accent = new THREE.Mesh(new THREE.BoxGeometry(Math.max(1.45, bodyW * 0.72), 0.30, 0.26), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x0a91ff, emissiveIntensity: 0.35 }));
+  accent.position.set(0, bodyH * 0.76, bodyD / 2 + 0.10);
+  const wheelScale = vehicle.wheelScale || 1;
+  const wheelX = bodyW / 2 + 0.04;
+  const wheelZ = bodyD * 0.34;
+  g.add(body, cabin, accent,
+    createWheelMesh(-wheelX, -wheelZ, wheelScale),
+    createWheelMesh(wheelX, -wheelZ, wheelScale),
+    createWheelMesh(-wheelX, wheelZ, wheelScale),
+    createWheelMesh(wheelX, wheelZ, wheelScale)
+  );
+  if (modelKey === "rally") {
+    const rollBar = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.055, 8, 18, Math.PI), new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.36, metalness: 0.5 }));
+    rollBar.rotation.z = Math.PI;
+    rollBar.position.set(0, 1.44, -0.26);
+    g.add(rollBar);
+  }
+  if (modelKey === "truck") {
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.84, 0.30, bodyD * 0.34), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.48, metalness: 0.16 }));
+    bed.position.set(0, bodyH + 0.18, -bodyD * 0.22);
+    g.add(bed);
+  }
+  g.position.y = 0.05;
+  g.rotation.y = Math.PI * 0.18;
+  g.scale.setScalar(0.86);
+  return g;
+}
+
+function updateVehiclePreview(force = false) {
+  const modelKey = VEHICLE_CONFIGS[ui.vehicle?.value] ? ui.vehicle.value : "default";
+  const cfg = VEHICLE_CONFIGS[modelKey] || VEHICLE_CONFIGS.default;
+  if (ui.vehiclePreviewName) ui.vehiclePreviewName.textContent = cfg.label || "Vehicle";
+  if (ui.vehiclePreviewDesc) ui.vehiclePreviewDesc.textContent = cfg.description || "Selectable body with tiny handling differences.";
+  if (!ui.vehiclePreview) return;
+  initVehiclePreview();
+  if (!previewScene || (!force && previewVehicleModel === modelKey && previewVehicle)) return;
+  if (previewVehicle) previewScene.remove(previewVehicle);
+  previewVehicle = createPreviewVehicleMesh(modelKey);
+  previewVehicleModel = modelKey;
+  previewScene.add(previewVehicle);
+}
+
+function renderVehiclePreview(now) {
+  if (!ui.vehiclePreview || document.body.classList.contains("game-running") || ui.lobby.classList.contains("hidden")) return;
+  initVehiclePreview();
+  updateVehiclePreview(false);
+  if (!previewRenderer || !previewVehicle || !previewCamera) return;
+  const rect = ui.vehiclePreview.getBoundingClientRect();
+  if (rect.width < 8 || rect.height < 8) return;
+  previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhonePortrait() ? 1.1 : 1.6));
+  previewRenderer.setSize(rect.width, rect.height, false);
+  previewCamera.aspect = rect.width / Math.max(1, rect.height);
+  previewCamera.updateProjectionMatrix();
+  previewVehicle.rotation.y = now * 0.00135;
+  previewRenderer.render(previewScene, previewCamera);
+}
+
 function updateVisuals(state) {
   if (!state) return;
   buildArena(state);
@@ -1227,6 +1448,7 @@ function renderLoop() {
   if (latestState) updateVisuals(latestState);
   resizeRenderer();
   renderer.render(scene, camera);
+  renderVehiclePreview(performance.now());
 }
 
 setupMobileControls();
