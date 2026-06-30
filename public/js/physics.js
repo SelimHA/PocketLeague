@@ -243,10 +243,12 @@ export const PITCH_SIZE_CONFIGS = {
 };
 
 export const MATCH_LENGTH_OPTIONS = {
+  60: { label: "1 minute", seconds: 60 },
   180: { label: "3 minutes", seconds: 180 },
   300: { label: "5 minutes", seconds: 300 },
   420: { label: "7 minutes", seconds: 420 },
-  600: { label: "10 minutes", seconds: 600 }
+  600: { label: "10 minutes", seconds: 600 },
+  900: { label: "15 minutes", seconds: 900 }
 };
 
 export const DEFAULT_META = {
@@ -261,7 +263,12 @@ export const DEFAULT_META = {
   voiceScope: "team",
   paused: false,
   status: "waiting",
-  matchLength: 300
+  matchLength: 300,
+  halfTimeEnabled: false,
+  hydrationEnabled: false,
+  overtimeEnabled: false,
+  goldenGoal: true,
+  overtimeDuration: 180
 };
 
 const BASE_FIELD_W = 72;
@@ -401,7 +408,7 @@ export function serialiseMeta(meta = {}) {
   const out = { ...DEFAULT_META, ...meta };
   out.teamSize = clamp(Number(out.teamSize) || 1, 1, 5);
   if (!PITCH_SIZE_CONFIGS[out.pitchSize]) out.pitchSize = "standard";
-  out.matchLength = clamp(Math.round(Number(out.matchLength) || DEFAULT_META.matchLength), 60, 900);
+  out.matchLength = clamp(Math.round(Number(out.matchLength) || DEFAULT_META.matchLength), 60, 1800);
   if (!MODE_CONFIGS[out.mode]) out.mode = "standard";
   if (!["rookie", "pro", "allstar"].includes(out.difficulty)) out.difficulty = "pro";
   if (!["balanced", "defensive", "aggressive", "chaotic"].includes(out.playstyle)) out.playstyle = "balanced";
@@ -412,6 +419,11 @@ export function serialiseMeta(meta = {}) {
   if (!["all", "team"].includes(out.chatScope)) out.chatScope = "all";
   if (!["all", "team", "off"].includes(out.voiceScope)) out.voiceScope = "team";
   out.paused = !!out.paused;
+  out.halfTimeEnabled = !!out.halfTimeEnabled && out.matchLength >= 120;
+  out.hydrationEnabled = !!out.hydrationEnabled && out.matchLength >= 180;
+  out.overtimeEnabled = !!out.overtimeEnabled;
+  out.goldenGoal = out.goldenGoal !== false;
+  out.overtimeDuration = out.overtimeDuration === "unlimited" ? "unlimited" : clamp(Math.round(Number(out.overtimeDuration) || 180), 60, 300);
   return out;
 }
 
@@ -472,6 +484,11 @@ export function makeInitialState(meta, players = {}) {
     goalFlash: null,
     sound: { roundSerial: 1, roundTick: 0, goalTick: 0, goalTeam: null, ballHitTick: 0, ballHitImpulse: 0, wallHitTick: 0, wallHitSpeed: 0, bounceTick: 0, bounceSpeed: 0, boostPadTick: 0, boostPadBig: false, boostPadCar: null, carBumpTick: 0, carBumpImpulse: 0 },
     kickoffTimer: KICKOFF_COUNTDOWN_SECONDS,
+    break: null,
+    halfTimeTriggered: false,
+    hydrationTriggered: false,
+    overtime: null,
+    demoSerial: 0,
     ended: false
   };
 }
@@ -551,10 +568,15 @@ function makeCar(id, team, role, human, name, x, z, yaw, slotIndex, model = "def
     pitch: 0,
     roll: 0,
     yawVel: 0,
+    pitchVel: 0,
+    rollVel: 0,
     grounded: true,
     onGround: true,
     boost: STARTING_BOOST,
     boosting: false,
+    boostHeld: 0,
+    demoed: false,
+    demoTimer: 0,
     drifting: false,
     boostPickup: 0,
     jumpCooldown: 0,
@@ -582,6 +604,13 @@ export function inputFromKeys(keys, bind) {
     boost: pressed("boost"),
     jump: pressed("jump"),
     drift: pressed("drift"),
+    airRollLeft: pressed("airRollLeft"),
+    airRollRight: pressed("airRollRight"),
+    airRoll: pressed("airRoll"),
+    pitchUp: pressed("pitchUp"),
+    pitchDown: pressed("pitchDown"),
+    yawLeft: pressed("yawLeft"),
+    yawRight: pressed("yawRight"),
     cam: pressed("cam"),
     reset: pressed("reset")
   };
@@ -596,6 +625,13 @@ export function defaultBindings() {
     boost: "ShiftLeft",
     jump: "Space",
     drift: "ControlLeft",
+    airRollLeft: "KeyQ",
+    airRollRight: "KeyE",
+    airRoll: "ControlLeft",
+    pitchUp: "KeyS",
+    pitchDown: "KeyW",
+    yawLeft: "KeyA",
+    yawRight: "KeyD",
     cam: "KeyB",
     reset: "KeyR",
     pause: "KeyP",
@@ -1167,7 +1203,8 @@ export function makeAIInput(car, state, meta) {
   // Avoid boosting through badly angled recoveries; better bots feather boost when
   // they need to rotate instead of wasting it.
   if (Math.abs(drive.delta) > 0.58 && intent !== "kickoff" && intent !== "save") drive.boost = false;
-  if (drive.boost && !(drive.throttle >= 0 && car.boost > 0.1 && (car.grounded || state.mode === "flying"))) drive.boost = false;
+  if (drive.boost && !(drive.throttle >= 0 && car.boost > 0.1)) drive.boost = false;
+  const aiAirRoll = !car.grounded && skill.aerial > 0.5 && Math.abs(car.roll || 0) > 0.18;
   if (!car.grounded) drive.drift = false;
   if (cfg.snooker) drive.boost = false;
 
@@ -1178,6 +1215,12 @@ export function makeAIInput(car, state, meta) {
     boost: drive.boost,
     jump,
     drift: drive.drift,
+    airRollLeft: aiAirRoll && (car.roll || 0) > 0,
+    airRollRight: aiAirRoll && (car.roll || 0) < 0,
+    pitchUp: !car.grounded && ball.y > car.y + 0.4 ? clamp(skill.aerial, 0, 1) : 0,
+    pitchDown: !car.grounded && ball.y < car.y - 0.2 ? clamp(skill.aerial * 0.6, 0, 1) : 0,
+    yawLeft: !car.grounded && drive.steer > 0 ? Math.abs(drive.steer) : 0,
+    yawRight: !car.grounded && drive.steer < 0 ? Math.abs(drive.steer) : 0,
     cam: false,
     reset: false
   };
@@ -1212,15 +1255,32 @@ export class PhysicsHost {
     state.tick++;
     state.goalFlash = null;
 
-    if (state.kickoffTimer > 0) {
+    const resetRequested = Object.keys(players || {}).some(id => normaliseInput(this.inputs[id]).reset);
+    if (state.break) {
+      const humanIds = Object.keys(players || {});
+      state.break.timer = Math.max(0, (state.break.timer || 0) - dt);
+      state.break.skipVotes = humanIds.filter(id => normaliseInput(this.inputs[id]).reset).length;
+      state.break.humans = humanIds.length || 1;
+      if (state.break.timer <= 0 || (humanIds.length && state.break.skipVotes >= humanIds.length)) state.break = null;
+    } else if (state.kickoffTimer > 0) {
       state.kickoffTimer = Math.max(0, state.kickoffTimer - dt);
     } else {
+      const prev = state.timeLeft;
       state.timeLeft = Math.max(0, state.timeLeft - dt);
-      if (state.timeLeft <= 0) state.ended = true;
+      const halfPoint = (this.meta.matchLength || DEFAULT_META.matchLength) / 2;
+      if (this.meta.halfTimeEnabled && !state.halfTimeTriggered && prev > halfPoint && state.timeLeft <= halfPoint) {
+        state.halfTimeTriggered = true;
+        state.break = { type: "half", timer: 60, duration: 60, skipVotes: 0, humans: Object.keys(players || {}).length || 1 };
+      }
+      if (state.timeLeft <= 0) {
+        if (this.meta.overtimeEnabled && state.score.blue === state.score.orange && !state.overtime) {
+          state.overtime = { timer: this.meta.overtimeDuration === "unlimited" ? -1 : this.meta.overtimeDuration };
+          state.timeLeft = state.overtime.timer > 0 ? state.overtime.timer : 0;
+        } else state.ended = true;
+      }
     }
 
-    const resetRequested = Object.keys(players || {}).some(id => normaliseInput(this.inputs[id]).reset);
-    if (resetRequested && !this.resetLatch) resetKickoff(state, players, false);
+    if (!state.break && resetRequested && !this.resetLatch) resetKickoff(state, players, false);
     this.resetLatch = resetRequested;
 
     const humanIds = new Set(Object.keys(players));
@@ -1233,14 +1293,21 @@ export class PhysicsHost {
         car.model = sanitiseVehicleModel(players[car.id].model || players[car.id].vehicle || car.model);
       }
       const input = car.human ? normaliseInput(this.inputs[car.id]) : makeAIInput(car, state, this.meta);
-      updateCar(car, state.kickoffTimer > 0 ? { throttle: 0, steer: 0, boost: false, jump: false, drift: false } : input, state, cfg, dt);
+      if ((car.demoTimer || 0) > 0) {
+        car.demoTimer = Math.max(0, car.demoTimer - dt);
+        if (car.demoTimer <= 0) respawnDemoCar(car, state);
+        continue;
+      }
+      updateCar(car, (state.kickoffTimer > 0 || state.break) ? { throttle: 0, steer: 0, boost: false, jump: false, drift: false } : input, state, cfg, dt);
     }
 
-    updateBoostPads(state, dt);
-    resolveCarCar(state);
-    updateBall(state, cfg, dt);
-    resolveBallHits(state, cfg, dt, this.meta.mode);
-    resolveGoals(state, players);
+    if (!state.break) {
+      updateBoostPads(state, dt);
+      resolveCarCar(state);
+      updateBall(state, cfg, dt);
+      resolveBallHits(state, cfg, dt, this.meta.mode);
+      resolveGoals(state, players, this.meta);
+    }
     this.writeCounter = (this.writeCounter + 1) % MATCH_TICKS_PER_WRITE;
     return this.writeCounter === 0;
   }
@@ -1254,8 +1321,36 @@ function normaliseInput(input = {}) {
     jump: !!input.jump,
     drift: !!input.drift,
     cam: !!input.cam,
-    reset: !!input.reset
+    reset: !!input.reset,
+    airRollLeft: !!input.airRollLeft,
+    airRollRight: !!input.airRollRight,
+    airRoll: !!input.airRoll,
+    pitchUp: clamp(Number(input.pitchUp) || 0, 0, 1),
+    pitchDown: clamp(Number(input.pitchDown) || 0, 0, 1),
+    yawLeft: clamp(Number(input.yawLeft) || 0, 0, 1),
+    yawRight: clamp(Number(input.yawRight) || 0, 0, 1),
+    airRollScale: clamp(Number(input.airRollScale) || 1, 0.5, 1.7)
   };
+}
+
+function carAxes(car) {
+  const yaw = car.yaw || 0;
+  const pitch = car.pitch || 0;
+  const roll = car.roll || 0;
+  const sy = Math.sin(yaw), cy = Math.cos(yaw);
+  const sp = Math.sin(pitch), cp = Math.cos(pitch);
+  const sr = Math.sin(roll), cr = Math.cos(roll);
+  const fwd = { x: sy * cp, y: -sp, z: cy * cp };
+  const right = { x: cy * cr + sy * sp * sr, y: cp * sr, z: -sy * cr + cy * sp * sr };
+  const up = { x: -cy * sr + sy * sp * cr, y: cp * cr, z: sy * sr + cy * sp * cr };
+  return { fwd, right, up };
+}
+
+function aerialAxisInput(input, steer, throttle) {
+  const pitchInput = clamp((input.pitchUp || 0) - (input.pitchDown || 0) || throttle, -1, 1);
+  const yawInput = clamp((input.yawLeft || 0) - (input.yawRight || 0) || steer, -1, 1);
+  const rollInput = clamp(((input.airRollLeft ? 1 : 0) - (input.airRollRight ? 1 : 0) + (input.airRoll ? steer : 0)) * (input.airRollScale || 1), -1.7, 1.7);
+  return { pitchInput, yawInput, rollInput };
 }
 
 function updateCar(car, input, state, cfg, dt) {
@@ -1269,12 +1364,13 @@ function updateCar(car, input, state, cfg, dt) {
   const throttle = clamp(input.throttle || 0, -1, 1);
   const steer = clamp(input.steer || 0, -1, 1);
   const handbrake = !!input.drift;
-  const wantsBoost = !!input.boost && throttle >= 0 && car.boost > 0.1 && (car.grounded || state.mode === "flying");
+  const wantsBoost = !!input.boost && car.boost > 0.1;
   const jump = !!input.jump;
   const vehicle = VEHICLE_CONFIGS[car.model] || VEHICLE_CONFIGS.default;
 
   car.boosting = false;
   car.drifting = false;
+  car.boostHeld = input.boost ? (car.boostHeld || 0) + dt : 0;
 
   if (car.grounded) {
     let driveAcc = 0;
@@ -1354,31 +1450,50 @@ function updateCar(car, input, state, cfg, dt) {
       car.jumpEventTick = state.tick;
     }
   } else {
+    const axes = carAxes(car);
+    const { fwd: airFwd, right: airRight, up: airUp } = axes;
+    const { pitchInput, yawInput, rollInput } = aerialAxisInput(input, steer, throttle);
     if (jump && !car.jumpLatch && car.jumpCooldown <= 0 && !car.doubleJumpUsed) {
       car.doubleJumpUsed = true;
       car.justJumped = true;
-      car.vy = Math.max(car.vy + 4.5 * cfg.jump * vehicle.jump, DOUBLE_JUMP_VELOCITY * cfg.jump * vehicle.jump);
-      car.vx += fwd.x * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
-      car.vz += fwd.z * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
-      car.pitch = -0.22;
+      const directional = Math.hypot(pitchInput, yawInput) > 0.20;
+      car.vy = Math.max(car.vy + 4.2 * cfg.jump * vehicle.jump, DOUBLE_JUMP_VELOCITY * cfg.jump * vehicle.jump);
+      car.vx += (directional ? airFwd.x * pitchInput + airRight.x * yawInput : airFwd.x) * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
+      car.vz += (directional ? airFwd.z * pitchInput + airRight.z * yawInput : airFwd.z) * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
+      car.pitchVel += directional ? -pitchInput * 5.8 : -2.0;
+      car.rollVel += yawInput * 3.6;
       car.jumpCooldown = 0.28;
       car.jumpEventTick = state.tick;
       car.doubleJumpEventTick = state.tick;
     }
-    car.yaw += steer * 2.05 * cfg.steer * vehicle.aerial * dt;
-    if (Math.abs(throttle) > 0.001) {
-      car.vx += fwd.x * throttle * 14.0 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
-      car.vz += fwd.z * throttle * 14.0 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
-    }
+
+    const aerialTune = vehicle.aerial * cfg.aerialDrive;
+    car.pitchVel = (car.pitchVel || 0) + (-pitchInput * 5.2 * aerialTune) * dt;
+    car.yawVel = (car.yawVel || 0) + (yawInput * 4.2 * aerialTune) * dt;
+    car.rollVel = (car.rollVel || 0) + (rollInput * 7.2 * aerialTune) * dt;
+    car.pitchVel *= Math.pow(0.975, dt * 120);
+    car.yawVel *= Math.pow(0.982, dt * 120);
+    car.rollVel *= Math.pow(0.978, dt * 120);
+    car.pitch = clamp((car.pitch || 0) + car.pitchVel * dt, -1.35, 1.35);
+    car.yaw += car.yawVel * dt;
+    car.roll = angleNorm((car.roll || 0) + car.rollVel * dt);
+
     if (wantsBoost) {
       car.boosting = true;
       car.boost = Math.max(0, car.boost - (state.mode === "flying" ? BOOST_DRAIN_FLYING : BOOST_DRAIN_AIR) * dt);
-      car.vx += fwd.x * 57 * cfg.drive * vehicle.boost * dt;
-      car.vz += fwd.z * 57 * cfg.drive * vehicle.boost * dt;
+      const boostPower = 62 * cfg.drive * vehicle.boost;
+      car.vx += airFwd.x * boostPower * dt;
+      car.vy += airFwd.y * boostPower * dt;
+      car.vz += airFwd.z * boostPower * dt;
     }
+    const feather = 8.5 * cfg.drive * aerialTune;
+    car.vx += (airFwd.x * Math.abs(throttle) * Math.sign(throttle) + airRight.x * steer * 0.45) * feather * dt;
+    car.vy += (airFwd.y * throttle + airUp.y * 0.08) * feather * dt;
+    car.vz += (airFwd.z * throttle + airRight.z * steer * 0.45) * feather * dt;
+    const airDrag = Math.pow(0.995, dt * 120);
+    car.vx *= airDrag; car.vz *= airDrag; car.vy *= Math.pow(0.998, dt * 120);
     car.vy -= GRAVITY * cfg.gravity * dt;
   }
-
   car.jumpLatch = !!jump;
   car.jumpCooldown = Math.max(0, (car.jumpCooldown || 0) - dt);
   car.x += car.vx * dt;
@@ -1386,12 +1501,20 @@ function updateCar(car, input, state, cfg, dt) {
   car.z += car.vz * dt;
 
   if (car.y <= CAR_GROUND_Y) {
+    const landingVy = car.vy || 0;
     car.y = CAR_GROUND_Y;
-    car.vy = 0;
-    car.grounded = true;
-    car.onGround = true;
+    car.vy = landingVy < -18 && Math.abs(car.roll || 0) > 1.15 ? Math.min(6, -landingVy * 0.18) : 0;
+    car.grounded = car.vy <= 0.05;
+    car.onGround = car.grounded;
     car.doubleJumpUsed = false;
     car.justJumped = false;
+    if (car.grounded) {
+      const uprightAssist = !input.airRollLeft && !input.airRollRight && !input.airRoll;
+      const rollToZero = angleNorm(car.roll || 0);
+      if (uprightAssist && Math.abs(rollToZero) < 1.25) car.roll = smooth(rollToZero, 0, 8, dt);
+      car.pitch = smooth(car.pitch || 0, 0, 10, dt);
+      car.pitchVel = 0; car.rollVel = (car.rollVel || 0) * 0.35;
+    }
   } else {
     car.grounded = false;
     car.onGround = false;
@@ -1411,9 +1534,11 @@ function updateCar(car, input, state, cfg, dt) {
   }
 
   const visualSpeed = Math.hypot(car.vx, car.vz);
-  const driftLean = car.drifting ? 0.12 * Math.sign(steer || car.yawVel || 1) : 0;
-  car.roll = smooth(car.roll || 0, -steer * clamp(visualSpeed / 42, 0, 1) * 0.16 + driftLean, 10, dt);
-  car.pitch = smooth(car.pitch || 0, -clamp(forwardSpeed / 55, -1, 1) * 0.08 + (car.grounded ? 0 : 0.12), 7, dt);
+  if (car.grounded) {
+    const driftLean = car.drifting ? 0.12 * Math.sign(steer || car.yawVel || 1) : 0;
+    car.roll = smooth(car.roll || 0, -steer * clamp(visualSpeed / 42, 0, 1) * 0.16 + driftLean, 10, dt);
+    car.pitch = smooth(car.pitch || 0, -clamp(forwardSpeed / 55, -1, 1) * 0.08, 7, dt);
+  }
 
   car.boostPickup = Math.max(0, (car.boostPickup || 0) - dt);
   car.cueCooldown = Math.max(0, (car.cueCooldown || 0) - dt);
@@ -1454,8 +1579,31 @@ function updateBoostPads(state, dt) {
   }
 }
 
+function respawnDemoCar(car, state) {
+  const idx = Number(car.slotIndex || 0);
+  const spawn = kickoffSpawn(car.team, idx % Math.max(1, state.teamSize || 1), state.teamSize || 1, state.arena, car.role, car.human, state.kickoffVariant);
+  car.x = spawn.x; car.y = CAR_GROUND_Y; car.z = spawn.z;
+  car.vx = 0; car.vy = 0; car.vz = 0;
+  car.yaw = spawn.yaw; car.yawVel = 0; car.pitch = 0; car.roll = 0; car.pitchVel = 0; car.rollVel = 0;
+  car.grounded = true; car.onGround = true; car.demoed = false; car.demoTimer = 0; car.boosting = false;
+}
+
+function maybeDemo(attacker, victim, nx, nz, closing, state) {
+  if (!attacker.boosting || (attacker.boostHeld || 0) < 3.2 || (victim.demoTimer || 0) > 0) return false;
+  const speed = horizontalSpeed(attacker);
+  const fwd = fwdFromYaw(attacker.yaw || 0);
+  const angle = Math.abs(fwd.x * -nx + fwd.z * -nz);
+  if (speed < 34 || closing < 18 || angle < 0.42) return false;
+  victim.demoed = true; victim.demoTimer = 5;
+  victim.vx = 0; victim.vy = 0; victim.vz = 0; victim.boosting = false;
+  state.demoSerial = (state.demoSerial || 0) + 1;
+  if (!state.sound) state.sound = {};
+  state.sound.demoTick = state.tick; state.sound.demoCar = victim.id; state.sound.demoBy = attacker.id;
+  return true;
+}
+
 function resolveCarCar(state) {
-  const cars = Object.values(state.cars);
+  const cars = Object.values(state.cars).filter(c => !(c.demoTimer > 0));
   for (let i = 0; i < cars.length; i++) {
     for (let j = i + 1; j < cars.length; j++) {
       const a = cars[i], b = cars[j];
@@ -1472,6 +1620,7 @@ function resolveCarCar(state) {
       const relZ = a.vz - b.vz;
       const closing = -(relX * nx + relZ * nz);
       if (closing > 0) {
+        if (maybeDemo(b, a, nx, nz, closing, state) || maybeDemo(a, b, -nx, -nz, closing, state)) continue;
         const impulse = closing * 0.42;
         const massA = (VEHICLE_CONFIGS[a.model] || VEHICLE_CONFIGS.default).mass;
         const massB = (VEHICLE_CONFIGS[b.model] || VEHICLE_CONFIGS.default).mass;
@@ -1598,6 +1747,7 @@ function updateBall(state, cfg, dt) {
 function resolveBallHits(state, cfg, dt, mode) {
   const b = state.ball;
   for (const car of Object.values(state.cars)) {
+    if ((car.demoTimer || 0) > 0) continue;
     if (cfg.snooker || mode === "snooker") {
       resolveCueHit(car, b, state, cfg);
       continue;
@@ -1739,7 +1889,7 @@ function resolveCarBallOBB(car, b, state, cfg) {
   state.sound.ballHitImpulse = impulse;
 }
 
-function resolveGoals(state, players) {
+function resolveGoals(state, players, meta = DEFAULT_META) {
   const b = state.ball;
   const arena = state.arena;
   const mouthX = Math.abs(b.x) < arena.goalW / 2 - BALL_RADIUS * 0.45;
@@ -1749,6 +1899,11 @@ function resolveGoals(state, players) {
   const team = scoredBlue ? "blue" : "orange";
   state.score[team] += 1;
   state.goalFlash = { team, tick: state.tick };
+  if (meta.hydrationEnabled && !state.hydrationTriggered && state.timeLeft < (meta.matchLength || DEFAULT_META.matchLength) * 0.62 && state.timeLeft > (meta.matchLength || DEFAULT_META.matchLength) * 0.25) {
+    state.hydrationTriggered = true;
+    state.break = { type: "hydration", timer: 30, duration: 30, skipVotes: 0, humans: Object.keys(players || {}).length || 1 };
+  }
+  if (state.overtime && meta.goldenGoal) state.ended = true;
   if (!state.sound) state.sound = {};
   state.sound.goalTick = state.tick;
   state.sound.goalTeam = team;
@@ -1771,7 +1926,7 @@ function resetKickoff(state, players, initial = false) {
     car.x = spawn.x; car.y = CAR_GROUND_Y; car.z = spawn.z;
     car.vx = 0; car.vy = 0; car.vz = 0;
     car.yaw = spawn.yaw; car.yawVel = 0; car.pitch = 0; car.roll = 0;
-    car.grounded = true; car.onGround = true;
+    car.grounded = true; car.onGround = true; car.demoed = false; car.demoTimer = 0; car.boostHeld = 0;
     const baseBoost = initial ? STARTING_BOOST : Math.max(car.boost || 0, STARTING_BOOST);
     car.boost = Math.min(BOOST_MAX, baseBoost);
     car.boosting = false; car.drifting = false; car.boostPickup = 0; car.jumpCooldown = 0; car.jumpLatch = false; car.doubleJumpUsed = false; car.justJumped = false; car.jumpEventTick = 0; car.doubleJumpEventTick = 0;
@@ -1790,8 +1945,8 @@ export function compactState(state) {
       id: c.id, team: c.team, role: c.role, human: c.human, name: c.name, model: sanitiseVehicleModel(c.model),
       x: round(c.x), y: round(c.y), z: round(c.z),
       vx: round(c.vx), vy: round(c.vy), vz: round(c.vz),
-      yaw: round(c.yaw), yawVel: round(c.yawVel), pitch: round(c.pitch || 0), roll: round(c.roll || 0), grounded: !!c.grounded, doubleJumpUsed: !!c.doubleJumpUsed,
-      boost: Math.round(c.boost), boosting: !!c.boosting, drifting: !!c.drifting,
+      yaw: round(c.yaw), yawVel: round(c.yawVel), pitchVel: round(c.pitchVel || 0), rollVel: round(c.rollVel || 0), pitch: round(c.pitch || 0), roll: round(c.roll || 0), grounded: !!c.grounded, doubleJumpUsed: !!c.doubleJumpUsed,
+      boost: Math.round(c.boost), boosting: !!c.boosting, boostHeld: round(c.boostHeld || 0), drifting: !!c.drifting, demoed: !!c.demoed, demoTimer: round(c.demoTimer || 0),
       boostPickup: round(c.boostPickup || 0), cueCooldown: round(c.cueCooldown || 0), bumpCooldown: round(c.bumpCooldown || 0),
       lastTouch: c.lastTouch || 0, justJumped: !!c.justJumped, jumpEventTick: c.jumpEventTick || 0, doubleJumpEventTick: c.doubleJumpEventTick || 0, slotIndex: c.slotIndex
     };
@@ -1822,6 +1977,9 @@ export function compactState(state) {
     goalFlash: state.goalFlash,
     sound: { ...(state.sound || {}) },
     kickoffTimer: round(state.kickoffTimer),
+    break: state.break ? { type: state.break.type, timer: round(state.break.timer || 0), duration: state.break.duration || 0, skipVotes: state.break.skipVotes || 0, humans: state.break.humans || 1 } : null,
+    overtime: state.overtime ? { timer: state.overtime.timer } : null,
+    demoSerial: state.demoSerial || 0,
     ended: state.ended
   };
 }

@@ -26,15 +26,15 @@ const $ = sel => document.querySelector(sel);
 const LOCAL_UID = "LOCAL_PLAYER";
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const ui = {
-  setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
-  name: $("#player-name"), nameLabel: $("#player-name-label"), signedPlayerName: $("#signed-player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
+  setup: $("#setup-card"), gameMode: $("#game-mode-card"), tournamentCard: $("#tournament-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
+  name: $("#player-name"), nameLabel: $("#player-name-label"), signedPlayerName: $("#signed-player-name"), openModeMenu: $("#open-mode-menu"), modeMenuBack: $("#mode-menu-back"), quickMatch: $("#quick-match"), single: $("#single-player"), tournamentMode: $("#tournament-mode"), tournamentContinue: $("#tournament-continue"), tournamentExit: $("#tournament-exit"), tournamentTitle: $("#tournament-title"), tournamentSubtitle: $("#tournament-subtitle"), tournamentStandings: $("#tournament-standings"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountSubtitle: $("#account-subtitle"), accountAuthFields: $("#account-auth-fields"), accountProfileFields: $("#account-profile-fields"), accountProfileName: $("#account-profile-name"), accountDisplayName: $("#account-display-name"), saveDisplayNameAccount: $("#save-display-name-account"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), accountNewPassword: $("#account-new-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), changePasswordAccount: $("#change-password-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), voiceTestPlayback: $("#voice-test-playback"), voiceTestStatus: $("#voice-test-status"), voiceSpeakerMode: $("#voice-speaker-mode"), voiceActivationMode: $("#voice-activation-mode"), voiceVolume: $("#voice-volume"), voiceVolumeValue: $("#voice-volume-value"), voiceMicSensitivity: $("#voice-mic-sensitivity"), voiceMicSensitivityValue: $("#voice-mic-sensitivity-value"), voiceInputDevice: $("#voice-input-device"), voiceOutputDevice: $("#voice-output-device"), refreshAudioDevices: $("#refresh-audio-devices"), audioDeviceStatus: $("#audio-device-status"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), voiceTestPlayback: $("#voice-test-playback"), voiceTestStatus: $("#voice-test-status"), voiceSpeakerMode: $("#voice-speaker-mode"), voiceActivationMode: $("#voice-activation-mode"), voiceVolume: $("#voice-volume"), voiceVolumeValue: $("#voice-volume-value"), voiceMicSensitivity: $("#voice-mic-sensitivity"), voiceMicSensitivityValue: $("#voice-mic-sensitivity-value"), voiceInputDevice: $("#voice-input-device"), voiceOutputDevice: $("#voice-output-device"), refreshAudioDevices: $("#refresh-audio-devices"), audioDeviceStatus: $("#audio-device-status"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), settingsAerialSensitivity: $("#settings-aerial-sensitivity"), settingsAirControl: $("#settings-air-control"), settingsAirRollSensitivity: $("#settings-air-roll-sensitivity"), settingsMobileAerialControls: $("#settings-mobile-aerial-controls"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
-  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
+  mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), customMatchMinutes: $("#custom-match-minutes"), halfTimeEnabled: $("#half-time-enabled"), hydrationEnabled: $("#hydration-enabled"), overtimeEnabled: $("#overtime-enabled"), goldenGoalEnabled: $("#golden-goal-enabled"), overtimeDuration: $("#overtime-duration-select"), tournamentOptions: $("#tournament-options"), tournamentMatchCount: $("#tournament-match-count"), tournamentIndividualLengths: $("#tournament-individual-lengths"), tournamentFinalLonger: $("#tournament-final-longer"), tournamentFinalLength: $("#tournament-final-length"), tournamentLengthList: $("#tournament-length-list"), tournamentScheduleSummary: $("#tournament-schedule-summary"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
-  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), toggleVoice: $("#toggle-voice"), muteVoice: $("#mute-voice"), activeSpeakers: $("#active-speakers"), pauseOverlay: $("#pause-overlay"), pauseOpenSettings: $("#pause-open-settings"), pauseResume: $("#pause-resume"), pauseLeave: $("#pause-leave"),
+  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), breakOverlay: $("#break-overlay"), breakTitle: $("#break-title"), breakTimer: $("#break-timer"), breakCopy: $("#break-copy"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), toggleVoice: $("#toggle-voice"), muteVoice: $("#mute-voice"), activeSpeakers: $("#active-speakers"), pauseOverlay: $("#pause-overlay"), pauseOpenSettings: $("#pause-open-settings"), pauseResume: $("#pause-resume"), pauseLeave: $("#pause-leave"),
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
@@ -265,16 +265,24 @@ let voicePttTouchHeld = false;
 let audioDeviceRefreshBusy = false;
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
-const SETTINGS_VERSION = "v40";
+const SETTINGS_VERSION = "v44-modes";
 const KEY_ACTIONS = [
   ["forward", "Drive forward"], ["backward", "Brake / reverse"], ["left", "Steer left"], ["right", "Steer right"],
-  ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide"], ["cam", "Ball cam"], ["reset", "Reset"],
+  ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide / free air roll"],
+  ["airRollLeft", "Air Roll Left"], ["airRollRight", "Air Roll Right"], ["airRoll", "General Air Roll"],
+  ["pitchUp", "Air pitch up"], ["pitchDown", "Air pitch down"], ["yawLeft", "Air yaw left"], ["yawRight", "Air yaw right"],
+  ["cam", "Ball cam"], ["reset", "Reset"],
   ["pause", "Pause (host)"], ["chat", "Toggle chat"], ["voice", "Toggle voice"], ["mic", "Mic / push-to-talk"]
 ];
 const DEFAULT_FOV = 65;
 const DEFAULT_GAME_SETTINGS = {
   pitchSize: DEFAULT_META.pitchSize || "standard",
-  matchLength: DEFAULT_META.matchLength || 300
+  matchLength: DEFAULT_META.matchLength || 300,
+  halfTimeEnabled: false, hydrationEnabled: false, overtimeEnabled: false, goldenGoal: true, overtimeDuration: 180,
+  aerialSensitivity: 1,
+  airControlStrength: 1,
+  airRollSensitivity: 1,
+  mobileAerialControls: true
 };
 const MUSIC_TRACKS = {
   nitro: { label: "Nitro Boost Dreams", src: "./songs/nitro-boost-dreams.mp3" },
@@ -321,7 +329,7 @@ function sanitiseGameSettings(raw = {}) {
   const matchLength = MATCH_LENGTH_OPTIONS[String(raw.matchLength)]
     ? Number(raw.matchLength)
     : clamp(Math.round(Number(raw.matchLength) || DEFAULT_GAME_SETTINGS.matchLength), 60, 900);
-  return { pitchSize, matchLength };
+  return { pitchSize, matchLength, halfTimeEnabled: !!raw.halfTimeEnabled, hydrationEnabled: !!raw.hydrationEnabled, overtimeEnabled: !!raw.overtimeEnabled, goldenGoal: raw.goldenGoal !== false, overtimeDuration: raw.overtimeDuration === "unlimited" ? "unlimited" : clamp(Number(raw.overtimeDuration) || 180, 60, 300), aerialSensitivity: clamp(Number(raw.aerialSensitivity ?? 1), 0.55, 1.45), airControlStrength: clamp(Number(raw.airControlStrength ?? 1), 0.55, 1.45), airRollSensitivity: clamp(Number(raw.airRollSensitivity ?? 1), 0.55, 1.55), mobileAerialControls: raw.mobileAerialControls !== false };
 }
 function loadGameSettings() {
   try { return sanitiseGameSettings(JSON.parse(localStorage.getItem("rlcss_gameplay_settings") || "{}") || {}); }
@@ -377,6 +385,8 @@ const DEFAULT_CONTROLLER = {
   enabled: true,
   deadzone: 0.18,
   panSensitivity: 1,
+  aerialSensitivity: 1,
+  airRollSensitivity: 1,
   steerAxis: 0,
   throttleAxis: 7,
   brakeAxis: 6,
@@ -385,26 +395,30 @@ const DEFAULT_CONTROLLER = {
   jumpButton: 0,
   boostButton: 1,
   driftButton: 2,
+  airRollLeftButton: 4,
+  airRollRightButton: 5,
   camButton: 3,
-  resetButton: 5,
+  resetButton: 8,
   pauseButton: 9,
-  chatButton: 8,
-  voiceButton: 10,
-  micButton: 11
+  chatButton: 10,
+  voiceButton: 11,
+  micButton: 12
 };
 function sanitiseControllerSettings(raw = {}) {
   const merged = { ...DEFAULT_CONTROLLER, ...(raw || {}) };
   merged.enabled = merged.enabled !== false;
   merged.deadzone = clamp(Number(merged.deadzone) || DEFAULT_CONTROLLER.deadzone, 0.05, 0.35);
   merged.panSensitivity = clamp(Number(merged.panSensitivity) || DEFAULT_CONTROLLER.panSensitivity, 0.5, 1.5);
+  merged.aerialSensitivity = clamp(Number(merged.aerialSensitivity) || DEFAULT_CONTROLLER.aerialSensitivity, 0.55, 1.45);
+  merged.airRollSensitivity = clamp(Number(merged.airRollSensitivity) || DEFAULT_CONTROLLER.airRollSensitivity, 0.55, 1.55);
   for (const key of ["steerAxis", "throttleAxis", "brakeAxis", "cameraXAxis", "cameraYAxis"]) merged[key] = clamp(Math.round(Number(merged[key]) || 0), 0, 7);
-  for (const key of ["jumpButton", "boostButton", "driftButton", "camButton", "resetButton", "pauseButton", "chatButton", "voiceButton", "micButton"]) merged[key] = clamp(Math.round(Number(merged[key]) || 0), 0, 17);
+  for (const key of ["jumpButton", "boostButton", "driftButton", "airRollLeftButton", "airRollRightButton", "camButton", "resetButton", "pauseButton", "chatButton", "voiceButton", "micButton"]) merged[key] = clamp(Math.round(Number(merged[key]) || 0), 0, 17);
   return merged;
 }
 const CONTROLLER_BIND_ROWS = [
   ["steerAxis", "Left stick steer", "axis"], ["throttleAxis", "Right trigger / drive", "axis"], ["brakeAxis", "Left trigger / reverse", "axis"],
   ["cameraXAxis", "Right stick pan X", "axis"], ["cameraYAxis", "Right stick pan Y", "axis"],
-  ["jumpButton", "Jump", "button"], ["boostButton", "Boost", "button"], ["driftButton", "Drift", "button"], ["camButton", "Ball cam", "button"],
+  ["jumpButton", "Jump", "button"], ["boostButton", "Boost", "button"], ["driftButton", "Drift / free air roll", "button"], ["airRollLeftButton", "Air Roll Left (LB)", "button"], ["airRollRightButton", "Air Roll Right (RB)", "button"], ["camButton", "Ball cam", "button"],
   ["resetButton", "Reset", "button"], ["pauseButton", "Pause", "button"], ["chatButton", "Chat", "button"], ["voiceButton", "Voice", "button"], ["micButton", "Mic mute", "button"]
 ];
 function loadControllerSettings() {
@@ -417,7 +431,7 @@ let cameraFov = clamp(Number(localStorage.getItem("rlcss_camera_fov")) || DEFAUL
 let controllerSettings = loadControllerSettings();
 let pendingKeyBind = null;
 const controllerLatches = {};
-let controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
+let controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, airRollLeft: false, airRollRight: false, airRoll: false, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, reset: false };
 let controllerLook = { x: 0, y: 0, active: false };
 let cloudSettingsLoadedForUid = null;
 let settingsSaveTimer = 0;
@@ -431,11 +445,13 @@ const controllerNavLatches = {};
 let controllerNavLastMove = 0;
 let controllerNavSuppressUntil = 0;
 let controllerUiLastFocusAt = 0;
-const mobileInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
+const mobileInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, airRollLeft: false, airRollRight: false, airRoll: false, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, reset: false };
 let mobileDriftTimer = 0;
 let mobileDriftCooldownTimer = 0;
 let camKeyLatch = false;
 let touchDevice = matchMedia("(pointer: coarse)").matches;
+let selectedGameMode = "single";
+let tournamentState = null;
 
 const Music = (() => {
   let audio = null;
@@ -739,6 +755,7 @@ function populateChoiceSelects() {
   fillSelect(ui.settingsPitchSize, PITCH_SIZE_CONFIGS, gameSettings.pitchSize);
   fillSelect(ui.matchLength, MATCH_LENGTH_OPTIONS, String(gameSettings.matchLength));
   fillSelect(ui.settingsMatchLength, MATCH_LENGTH_OPTIONS, String(gameSettings.matchLength));
+  renderTournamentScheduleOptions();
   fillSelect(ui.vehicle, VEHICLE_CONFIGS, "default");
 }
 
@@ -880,6 +897,11 @@ function applyGameSettingsToSelectors({ forceLobbyDefaults = false } = {}) {
   const length = MATCH_LENGTH_OPTIONS[String(gameSettings.matchLength)] ? String(gameSettings.matchLength) : String(DEFAULT_META.matchLength);
   if (ui.settingsPitchSize) ui.settingsPitchSize.value = pitch;
   if (ui.settingsMatchLength) ui.settingsMatchLength.value = length;
+  if (ui.halfTimeEnabled) ui.halfTimeEnabled.checked = !!gameSettings.halfTimeEnabled;
+  if (ui.hydrationEnabled) ui.hydrationEnabled.checked = !!gameSettings.hydrationEnabled;
+  if (ui.overtimeEnabled) ui.overtimeEnabled.checked = !!gameSettings.overtimeEnabled;
+  if (ui.goldenGoalEnabled) ui.goldenGoalEnabled.checked = gameSettings.goldenGoal !== false;
+  if (ui.overtimeDuration) ui.overtimeDuration.value = String(gameSettings.overtimeDuration || 180);
   if (forceLobbyDefaults || !lobbyCode) {
     if (ui.pitchSize) ui.pitchSize.value = pitch;
     if (ui.matchLength) ui.matchLength.value = length;
@@ -936,6 +958,11 @@ function renderSettingsUi() {
   }
   Music.updateNowPlaying();
   applyGameSettingsToSelectors({ forceLobbyDefaults: false });
+  if (ui.settingsAerialSensitivity) ui.settingsAerialSensitivity.value = String(gameSettings.aerialSensitivity ?? 1);
+  if (ui.settingsAirControl) ui.settingsAirControl.value = String(gameSettings.airControlStrength ?? 1);
+  if (ui.settingsAirRollSensitivity) ui.settingsAirRollSensitivity.value = String(gameSettings.airRollSensitivity ?? 1);
+  if (ui.settingsMobileAerialControls) ui.settingsMobileAerialControls.checked = gameSettings.mobileAerialControls !== false;
+  document.body.classList.toggle("mobile-aerial-disabled", gameSettings.mobileAerialControls === false);
   if (ui.keybindList) {
     ui.keybindList.innerHTML = KEY_ACTIONS.map(([action, label]) => `
       <div class="bind-row">
@@ -982,7 +1009,7 @@ function renderSettingsUi() {
 }
 
 function setSettingsTab(tab = "gameplay") {
-  const safe = ["gameplay", "camera", "audio", "songs", "keyboard", "controller"].includes(tab) ? tab : "gameplay";
+  const safe = ["gameplay", "camera", "audio", "songs", "keyboard", "controller", "mobile"].includes(tab) ? tab : "gameplay";
   activeSettingsTab = safe;
   localStorage.setItem("rlcss_settings_tab", safe);
   document.querySelectorAll("[data-settings-tab]").forEach(btn => {
@@ -1451,18 +1478,151 @@ function withTimeout(promise, ms, label) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+
+function selectedMatchLengthSeconds() {
+  const custom = clamp(Math.round(Number(ui.customMatchMinutes?.value || 0)), 0, 30);
+  if (custom >= 1) return custom * 60;
+  return Number(ui.matchLength?.value || gameSettings.matchLength || DEFAULT_META.matchLength);
+}
+
+function saveRuleSettingsFromSetup() {
+  gameSettings.matchLength = selectedMatchLengthSeconds();
+  gameSettings.halfTimeEnabled = !!ui.halfTimeEnabled?.checked;
+  gameSettings.hydrationEnabled = !!ui.hydrationEnabled?.checked;
+  gameSettings.overtimeEnabled = !!ui.overtimeEnabled?.checked;
+  gameSettings.goldenGoal = ui.goldenGoalEnabled?.checked !== false;
+  gameSettings.overtimeDuration = ui.overtimeDuration?.value || 180;
+  saveGameSettingsLocal();
+  queueSettingsSave();
+}
+
+function tournamentOptionsFromUi() {
+  const count = clamp(Number(ui.tournamentMatchCount?.value || 5), 3, 7);
+  const defaultLength = selectedMatchLengthSeconds();
+  const individual = !!ui.tournamentIndividualLengths?.checked;
+  const finalLonger = !!ui.tournamentFinalLonger?.checked;
+  const finalLength = Number(ui.tournamentFinalLength?.value || 600);
+  const lengths = [];
+  for (let i = 0; i < count; i++) {
+    const sel = document.querySelector(`[data-tournament-length="${i}"]`);
+    lengths.push(individual && sel ? Number(sel.value || defaultLength) : (finalLonger && i === count - 1 ? finalLength : defaultLength));
+  }
+  return { count, defaultLength, individual, finalLonger, finalLength, lengths };
+}
+
+function renderTournamentScheduleOptions() {
+  if (!ui.tournamentOptions) return;
+  ui.tournamentOptions.classList.toggle("hidden", selectedGameMode !== "tournament");
+  const opts = tournamentOptionsFromUi();
+  if (ui.tournamentScheduleSummary) ui.tournamentScheduleSummary.textContent = `${opts.count} matches · default ${Math.round(opts.defaultLength / 60)} min${opts.finalLonger ? ` · final ${Math.round(opts.finalLength / 60)} min` : ""}`;
+  if (!ui.tournamentLengthList) return;
+  ui.tournamentLengthList.innerHTML = opts.individual ? opts.lengths.map((len, i) => `<label>Match ${i + 1}${i === opts.count - 1 ? " / Final" : ""}<select data-tournament-length="${i}">${Object.values(MATCH_LENGTH_OPTIONS).map(o => `<option value="${o.seconds}" ${o.seconds === len ? "selected" : ""}>${o.label}</option>`).join("")}</select></label>`).join("") : "";
+}
+
+function openGameModeMenu() { showMenuPanel("mode"); }
+
+function openSingleSetup(mode = "single") {
+  selectedGameMode = mode;
+  renderTournamentScheduleOptions();
+  startSinglePlayer();
+}
+
+function startQuickMatch() {
+  selectedGameMode = "quick";
+  if (ui.teamSize) ui.teamSize.value = "1";
+  if (ui.matchLength) ui.matchLength.value = String(gameSettings.matchLength || DEFAULT_META.matchLength || 300);
+  if (ui.customMatchMinutes) ui.customMatchMinutes.value = "";
+  startSinglePlayer();
+  setTimeout(() => startSoloMatch(), 60);
+}
+
+function beginTournamentSetup() {
+  selectedGameMode = "tournament";
+  renderTournamentScheduleOptions();
+  startSinglePlayer();
+  setStatus("Tournament setup opened. Configure schedule, then start Match 1.");
+}
+
+function resetTournamentState() {
+  const opts = tournamentOptionsFromUi();
+  tournamentState = {
+    options: opts,
+    index: 0,
+    complete: false,
+    teams: {
+      blue: { w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 },
+      orange: { w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 }
+    },
+    last: null
+  };
+}
+
+function applyTournamentMatchLength() {
+  if (!tournamentState) return;
+  const len = tournamentState.options.lengths[tournamentState.index] || tournamentState.options.defaultLength;
+  if (ui.matchLength && MATCH_LENGTH_OPTIONS[String(len)]) ui.matchLength.value = String(len);
+  if (ui.customMatchMinutes && !MATCH_LENGTH_OPTIONS[String(len)]) ui.customMatchMinutes.value = String(Math.round(len / 60));
+  currentMeta = serialiseMeta({ ...currentMeta, matchLength: len });
+}
+
+function recordTournamentMatch(state) {
+  if (!tournamentState || tournamentState.last?.tick === state.tick) return;
+  const blue = Number(state.score?.blue || 0), orange = Number(state.score?.orange || 0);
+  const b = tournamentState.teams.blue, o = tournamentState.teams.orange;
+  b.gf += blue; b.ga += orange; o.gf += orange; o.ga += blue;
+  if (blue > orange) { b.w++; o.l++; b.pts += 3; }
+  else if (orange > blue) { o.w++; b.l++; o.pts += 3; }
+  else { b.d++; o.d++; b.pts++; o.pts++; }
+  tournamentState.last = { tick: state.tick, blue, orange, match: tournamentState.index + 1 };
+  tournamentState.index++;
+  tournamentState.complete = tournamentState.index >= tournamentState.options.count;
+}
+
+function renderTournamentCard() {
+  if (!tournamentState || !ui.tournamentCard) return;
+  const last = tournamentState.last;
+  if (ui.tournamentTitle) ui.tournamentTitle.textContent = tournamentState.complete ? "Final Tournament Results" : `Match ${tournamentState.index + 1} Ready`;
+  if (ui.tournamentSubtitle) ui.tournamentSubtitle.textContent = last ? `Last match: Blue ${last.blue} - ${last.orange} Orange` : "Local points: win 3, draw 1, loss 0.";
+  const rows = Object.entries(tournamentState.teams).sort((a,b)=>b[1].pts-a[1].pts || (b[1].gf-b[1].ga)-(a[1].gf-a[1].ga));
+  if (ui.tournamentStandings) ui.tournamentStandings.innerHTML = rows.map(([team,r]) => `<div class="tournament-row ${team}"><strong>${team.toUpperCase()}</strong><span>${r.w}W ${r.d}D ${r.l}L</span><span>GF ${r.gf} / GA ${r.ga}</span><b>${r.pts} pts</b></div>`).join("");
+  if (ui.tournamentContinue) ui.tournamentContinue.textContent = tournamentState.complete ? "Back to Menu" : `Start Match ${tournamentState.index + 1}`;
+  currentMeta = serialiseMeta({ ...(currentMeta || DEFAULT_META), status: "waiting", paused: false });
+  document.body.classList.remove("game-running");
+  showMenuPanel("tournament");
+}
+
+function continueTournament() {
+  if (!tournamentState || tournamentState.complete) return endTournament();
+  applyTournamentMatchLength();
+  showMenuPanel("setup");
+  startSoloMatch();
+}
+
+function endTournament() {
+  tournamentState = null;
+  selectedGameMode = "single";
+  lobbyCode = null;
+  currentMeta = null;
+  showMenuPanel("setup");
+}
+
 function currentSoloMetaPatch() {
   return {
     mode: ui.mode?.value || DEFAULT_META.mode,
     theme: ui.theme?.value || DEFAULT_META.theme,
     teamSize: Number(ui.teamSize?.value || DEFAULT_META.teamSize),
     pitchSize: ui.pitchSize?.value || gameSettings.pitchSize || DEFAULT_META.pitchSize,
-    matchLength: Number(ui.matchLength?.value || gameSettings.matchLength || DEFAULT_META.matchLength),
+    matchLength: selectedMatchLengthSeconds(),
     difficulty: ui.difficulty?.value || DEFAULT_META.difficulty,
     playstyle: ui.playstyle?.value || DEFAULT_META.playstyle,
     aiStrategy: ui.playstyle?.value || DEFAULT_META.aiStrategy || DEFAULT_META.playstyle,
     chatScope: ui.chatScope?.value || DEFAULT_META.chatScope,
-    voiceScope: ui.voiceScope?.value || DEFAULT_META.voiceScope
+    voiceScope: ui.voiceScope?.value || DEFAULT_META.voiceScope,
+    halfTimeEnabled: !!ui.halfTimeEnabled?.checked,
+    hydrationEnabled: !!ui.hydrationEnabled?.checked,
+    overtimeEnabled: !!ui.overtimeEnabled?.checked,
+    goldenGoal: ui.goldenGoalEnabled?.checked !== false,
+    overtimeDuration: ui.overtimeDuration?.value || 180
   };
 }
 
@@ -1593,6 +1753,9 @@ function startSinglePlayer() {
 
 function startSoloMatch() {
   if (!isSinglePlayer || !currentMeta || !currentPlayers) return;
+  saveRuleSettingsFromSetup();
+  if (selectedGameMode === "tournament" && !tournamentState) resetTournamentState();
+  if (selectedGameMode === "tournament") applyTournamentMatchLength();
   const localId = activePlayerId();
   currentPlayers[localId] = {
     ...(currentPlayers[localId] || {}),
@@ -1864,6 +2027,8 @@ function updateGameVisibility() {
   if (running) {
     if (ui.accountCard) ui.accountCard.classList.add("hidden");
     if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
+    if (ui.gameMode) ui.gameMode.classList.add("hidden");
+    if (ui.tournamentCard) ui.tournamentCard.classList.add("hidden");
     if (ui.settingsCard && (!currentMeta?.paused || !settingsOpenedFromPause)) {
       ui.settingsCard.classList.add("hidden");
       document.body.classList.remove("settings-open");
@@ -1984,6 +2149,7 @@ async function leaveToMenu(message = "") {
   ui.leaveGame.classList.add("hidden");
   if (ui.pauseGame) ui.pauseGame.classList.add("hidden");
   if (ui.pauseOverlay) ui.pauseOverlay.classList.add("hidden");
+  if (ui.breakOverlay) ui.breakOverlay.classList.add("hidden");
   if (ui.chatPanel) ui.chatPanel.classList.add("hidden");
   document.body.classList.remove("lobby-chat-enabled");
   if (ui.toggleChat) ui.toggleChat.classList.add("hidden");
@@ -2177,7 +2343,7 @@ function navButtonEdge(name, pressed) {
 function settingsTabDelta(delta) {
   if (pendingControllerBind || pendingKeyBind) return false;
   if (!ui.settingsCard || ui.settingsCard.classList.contains("hidden")) return false;
-  const tabs = ["gameplay", "camera", "audio", "songs", "keyboard", "controller"];
+  const tabs = ["gameplay", "camera", "audio", "songs", "keyboard", "controller", "mobile"];
   const idx = Math.max(0, tabs.indexOf(activeSettingsTab));
   setSettingsTab(tabs[(idx + delta + tabs.length) % tabs.length]);
   return true;
@@ -2219,7 +2385,7 @@ function pollControllerMenuNavigation() {
 
 function pollController() {
   const pad = getFirstGamepad();
-  controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
+  controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, airRollLeft: false, airRollRight: false, airRoll: false, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, reset: false };
   controllerLook = { x: 0, y: 0, active: false };
   if (!pad) { setVoicePttHeld("controller", false); return controllerInput; }
   if (pendingControllerBind || pendingKeyBind) return controllerInput;
@@ -2231,14 +2397,23 @@ function pollController() {
   const jumpPressed = buttonPressed(pad, controllerSettings.jumpButton);
   const driftPressed = buttonPressed(pad, controllerSettings.driftButton);
   const resetPressed = buttonPressed(pad, controllerSettings.resetButton);
+  const airRollLeftPressed = buttonPressed(pad, controllerSettings.airRollLeftButton);
+  const airRollRightPressed = buttonPressed(pad, controllerSettings.airRollRightButton);
 
   // Gamepad left stick follows the same V10 convention as keyboard: positive steer turns left.
   controllerInput = {
     throttle: clamp(driveTrigger - brakeTrigger, -1, 1),
     steer: clamp(-steerAxis, -1, 1),
+    pitchUp: Math.max(0, axisValue(pad, 1) * (controllerSettings.aerialSensitivity || 1)),
+    pitchDown: Math.max(0, -axisValue(pad, 1) * (controllerSettings.aerialSensitivity || 1)),
+    yawLeft: Math.max(0, -steerAxis * (controllerSettings.aerialSensitivity || 1)),
+    yawRight: Math.max(0, steerAxis * (controllerSettings.aerialSensitivity || 1)),
     boost: boostPressed,
     jump: jumpPressed,
     drift: driftPressed,
+    airRoll: driftPressed,
+    airRollLeft: airRollLeftPressed,
+    airRollRight: airRollRightPressed,
     reset: resetPressed
   };
   const lookX = axisValue(pad, controllerSettings.cameraXAxis, Math.max(0.08, (controllerSettings.deadzone || 0.18) * 0.75));
@@ -2274,7 +2449,15 @@ function localInput() {
     jump: k.jump || mobileInput.jump || c.jump,
     drift: k.drift || mobileInput.drift || c.drift,
     cam: localBallCam,
-    reset: k.reset || mobileInput.reset || c.reset
+    reset: k.reset || mobileInput.reset || c.reset,
+    airRollLeft: k.airRollLeft || mobileInput.airRollLeft || c.airRollLeft,
+    airRollRight: k.airRollRight || mobileInput.airRollRight || c.airRollRight,
+    airRoll: k.airRoll || mobileInput.airRoll || c.airRoll,
+    pitchUp: clamp(((k.pitchUp || 0) + (mobileInput.pitchUp || 0) + (c.pitchUp || 0)) * (gameSettings.aerialSensitivity || 1), 0, 1.5),
+    pitchDown: clamp(((k.pitchDown || 0) + (mobileInput.pitchDown || 0) + (c.pitchDown || 0)) * (gameSettings.aerialSensitivity || 1), 0, 1.5),
+    yawLeft: clamp(((k.yawLeft || 0) + (mobileInput.yawLeft || 0) + (c.yawLeft || 0)) * (gameSettings.airControlStrength || 1), 0, 1.5),
+    yawRight: clamp(((k.yawRight || 0) + (mobileInput.yawRight || 0) + (c.yawRight || 0)) * (gameSettings.airControlStrength || 1), 0, 1.5),
+    airRollScale: gameSettings.airRollSensitivity || 1
   };
   return combined;
 }
@@ -3030,12 +3213,16 @@ function safeUi(handler, label) {
 function showMenuPanel(which = "setup") {
   const running = currentMeta?.status === "running";
   const showAccount = which === "account";
+  const showMode = which === "mode";
+  const showTournament = which === "tournament";
   const showLeaderboard = which === "leaderboard";
   const showSettings = which === "settings";
   if (running) {
     document.body.classList.toggle("settings-open", showSettings && !!currentMeta?.paused);
     if (ui.setup) ui.setup.classList.add("hidden");
     if (ui.lobby) ui.lobby.classList.add("hidden");
+    if (ui.gameMode) ui.gameMode.classList.add("hidden");
+    if (ui.tournamentCard) ui.tournamentCard.classList.add("hidden");
     if (ui.accountCard) ui.accountCard.classList.add("hidden");
     if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
     if (ui.settingsCard) ui.settingsCard.classList.toggle("hidden", !showSettings || !currentMeta?.paused);
@@ -3045,7 +3232,9 @@ function showMenuPanel(which = "setup") {
   }
   settingsOpenedFromPause = false;
   document.body.classList.toggle("settings-open", showSettings);
-  if (ui.setup) ui.setup.classList.toggle("hidden", showAccount || showLeaderboard || showSettings || !!lobbyCode);
+  if (ui.setup) ui.setup.classList.toggle("hidden", showAccount || showMode || showTournament || showLeaderboard || showSettings || !!lobbyCode);
+  if (ui.gameMode) ui.gameMode.classList.toggle("hidden", !showMode);
+  if (ui.tournamentCard) ui.tournamentCard.classList.toggle("hidden", !showTournament);
   if (ui.accountCard) ui.accountCard.classList.toggle("hidden", !showAccount);
   if (ui.leaderboardCard) ui.leaderboardCard.classList.toggle("hidden", !showLeaderboard);
   if (ui.settingsCard) ui.settingsCard.classList.toggle("hidden", !showSettings);
@@ -3061,7 +3250,7 @@ function showMenuPanel(which = "setup") {
 }
 
 // UI events
-ui.single.addEventListener("click", safeUi(startSinglePlayer, "Single player setup"));
+ui.single.addEventListener("click", safeUi(() => openSingleSetup("single"), "Single player setup"));
 ui.create.addEventListener("click", safeUi(createLobby, "Create lobby"));
 ui.join.addEventListener("click", safeUi(joinLobby, "Join lobby"));
 ui.joinCode.addEventListener("input", () => ui.joinCode.value = ui.joinCode.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
@@ -3079,6 +3268,12 @@ if (ui.openSettings) ui.openSettings.addEventListener("click", () => openSetting
 if (ui.closeSettings) ui.closeSettings.addEventListener("click", closeSettingsPanel);
 document.querySelectorAll("[data-settings-tab]").forEach(btn => btn.addEventListener("click", () => setSettingsTab(btn.dataset.settingsTab)));
 if (ui.openLeaderboard) ui.openLeaderboard.addEventListener("click", () => showMenuPanel("leaderboard"));
+if (ui.openModeMenu) ui.openModeMenu.addEventListener("click", safeUi(openGameModeMenu, "Open game mode menu"));
+if (ui.modeMenuBack) ui.modeMenuBack.addEventListener("click", () => showMenuPanel("setup"));
+if (ui.quickMatch) ui.quickMatch.addEventListener("click", safeUi(startQuickMatch, "Quick match"));
+if (ui.tournamentMode) ui.tournamentMode.addEventListener("click", safeUi(beginTournamentSetup, "Tournament mode"));
+if (ui.tournamentContinue) ui.tournamentContinue.addEventListener("click", safeUi(continueTournament, "Continue tournament"));
+if (ui.tournamentExit) ui.tournamentExit.addEventListener("click", safeUi(endTournament, "End tournament"));
 if (ui.closeLeaderboard) ui.closeLeaderboard.addEventListener("click", () => showMenuPanel("setup"));
 if (ui.createAccount) ui.createAccount.addEventListener("click", safeUi(createAccount, "Create account"));
 if (ui.signInAccount) ui.signInAccount.addEventListener("click", safeUi(signInAccount, "Sign in account"));
@@ -3285,6 +3480,7 @@ if (ui.pitchSize) ui.pitchSize.addEventListener("change", () => {
   updateMetaPatch({ pitchSize: ui.pitchSize.value });
 });
 if (ui.matchLength) ui.matchLength.addEventListener("change", () => {
+  if (ui.customMatchMinutes) ui.customMatchMinutes.value = "";
   gameSettings.matchLength = Number(ui.matchLength.value) || DEFAULT_META.matchLength;
   saveGameSettingsLocal();
   queueSettingsSave();
@@ -3295,6 +3491,11 @@ ui.playstyle.addEventListener("change", () => updateMetaPatch({ playstyle: ui.pl
 if (ui.aiStrategy) ui.aiStrategy.addEventListener("change", () => updateMetaPatch({ aiStrategy: ui.aiStrategy.value }));
 if (ui.chatScope) ui.chatScope.addEventListener("change", () => updateMetaPatch({ chatScope: ui.chatScope.value }));
 if (ui.voiceScope) ui.voiceScope.addEventListener("change", () => updateMetaPatch({ voiceScope: ui.voiceScope.value }));
+for (const el of [ui.customMatchMinutes, ui.halfTimeEnabled, ui.hydrationEnabled, ui.overtimeEnabled, ui.goldenGoalEnabled, ui.overtimeDuration, ui.tournamentMatchCount, ui.tournamentIndividualLengths, ui.tournamentFinalLonger, ui.tournamentFinalLength]) {
+  if (el) el.addEventListener("change", () => { saveRuleSettingsFromSetup(); renderTournamentScheduleOptions(); updateMetaPatch(currentSoloMetaPatch()); });
+}
+if (ui.tournamentLengthList) ui.tournamentLengthList.addEventListener("change", renderTournamentScheduleOptions);
+
 if (ui.chatForm) ui.chatForm.addEventListener("submit", safeUi(async e => {
   e.preventDefault();
   const text = ui.chatInput?.value || "";
@@ -3435,6 +3636,8 @@ function setupMobileControls() {
     // Physics yaw uses the opposite sign from the DOM X-axis, so invert here only.
     mobileInput.steer = clamp(-nx, -1, 1);
     mobileInput.throttle = clamp(-ny, -1, 1);
+    mobileInput.yawLeft = Math.max(0, -nx); mobileInput.yawRight = Math.max(0, nx);
+    mobileInput.pitchUp = Math.max(0, ny); mobileInput.pitchDown = Math.max(0, -ny);
     knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
     zone.classList.add("active");
   }
@@ -3442,6 +3645,7 @@ function setupMobileControls() {
     activeId = null;
     mobileInput.steer = 0;
     mobileInput.throttle = 0;
+    mobileInput.pitchUp = 0; mobileInput.pitchDown = 0; mobileInput.yawLeft = 0; mobileInput.yawRight = 0;
     knob.style.transform = "translate(-50%, -50%)";
     zone.classList.remove("active");
   }
@@ -3501,6 +3705,7 @@ function setupMobileControls() {
   function clearHeldAction() {
     mobileInput.boost = false;
     mobileInput.drift = false;
+    mobileInput.airRollLeft = false; mobileInput.airRollRight = false;
     activeAction = null;
     actionZones.forEach(el => el.classList.remove("active"));
   }
@@ -3512,11 +3717,14 @@ function setupMobileControls() {
 
     mobileInput.boost = false;
     mobileInput.drift = false;
+    mobileInput.airRollLeft = false; mobileInput.airRollRight = false;
     actionZones.forEach(el => el.classList.toggle("active", el === zoneEl));
     activeAction = next;
 
     if (next === "boost") mobileInput.boost = true;
     else if (next === "drift") mobileInput.drift = true;
+    else if (next === "airRollLeft") mobileInput.airRollLeft = true;
+    else if (next === "airRollRight") mobileInput.airRollRight = true;
     else if (next === "jump") pulseMobileAction("jump");
     else if (next === "reset") pulseMobileAction("reset", 95);
     else if (next === "cam") toggleBallCamFromTouch();
@@ -4829,6 +5037,7 @@ function handleSoundEvents(state) {
   if ((snd.bounceTick || 0) > lastSound.bounceTick) { lastSound.bounceTick = snd.bounceTick; SFX.bounce(snd.bounceSpeed || 8); }
   if ((snd.boostPadTick || 0) > lastSound.boostPadTick) { lastSound.boostPadTick = snd.boostPadTick; SFX.boostPad(!!snd.boostPadBig); }
   if ((snd.carBumpTick || 0) > lastSound.carBumpTick) { lastSound.carBumpTick = snd.carBumpTick; SFX.carBump(snd.carBumpImpulse || 8); }
+  if ((snd.demoTick || 0) > (lastSound.demoTick || 0)) { lastSound.demoTick = snd.demoTick; SFX.carBump(32); SFX.wallHit(30); }
 
   for (const car of Object.values(state.cars || {})) {
     const jt = Number(car.jumpEventTick || 0);
@@ -4865,7 +5074,8 @@ function updateVisuals(state) {
       mesh = null;
     }
     mesh = mesh || createCarMesh(car, state);
-    mesh.position.set(car.x, car.y, car.z);
+    mesh.visible = !(car.demoTimer > 0);
+    mesh.position.set(car.x, car.y + (car.demoTimer > 0 ? -100 : 0), car.z);
     mesh.rotation.set(car.pitch || 0, car.yaw, car.roll || 0, "YXZ");
     const scale = car.cueCooldown > 0 ? 1 + car.cueCooldown * 0.45 : 1;
     mesh.scale.set(1, 1, scale);
@@ -4880,6 +5090,7 @@ function updateVisuals(state) {
   }
   handleSoundEvents(state);
   updateHud(state);
+  if (state.ended && selectedGameMode === "tournament" && tournamentState && tournamentState.last?.tick !== state.tick) { recordTournamentMatch(state); renderTournamentCard(); }
   recordLeaderboardResult(state).catch(err => console.warn("Leaderboard result save failed", err));
   updateCamera(state);
 }
@@ -4903,6 +5114,15 @@ function updateHud(state) {
     ui.mobileBoostButton.style.setProperty("--boost-pct", `${boostPct}%`);
     ui.mobileBoostButton.innerHTML = `<span class="boost-btn-title">BOOST</span><span class="boost-btn-value">${boostPct}</span>`;
     ui.mobileBoostButton.classList.toggle("boost-empty", boostPct <= 0);
+  }
+  if (ui.breakOverlay) {
+    const br = state.break;
+    ui.breakOverlay.classList.toggle("hidden", !br);
+    if (br) {
+      ui.breakTitle.textContent = br.type === "hydration" ? "Hydration Break" : "Half-time";
+      ui.breakTimer.textContent = String(Math.ceil(br.timer || 0));
+      ui.breakCopy.textContent = `Press Reset to vote skip · ${br.skipVotes || 0}/${br.humans || 1}`;
+    }
   }
   if (ui.countdown) {
     const k = Math.max(0, Number(state.kickoffTimer || 0));

@@ -88,7 +88,7 @@
         <button id="open-leaderboard" type="button" class="secondary small-action">Leaderboard</button>
       </div>
       <div class="row two menu-actions">
-        <button id="single-player" type="button" class="primary">Single Player Setup</button>
+        <button id="open-mode-menu" type="button" class="primary">Play</button>
         <button id="create-lobby" type="button">Create Online Lobby</button>
       </div>
       <div class="join-row full menu-join">
@@ -101,6 +101,27 @@
         <div><strong>Online</strong><span>Lobby, chat &amp; voice</span></div>
       </div>
       <p id="connection-status" class="status">Connecting to Firebase…</p>
+    </section>
+
+    <section id="game-mode-card" class="panel menu-panel hidden" aria-label="Choose game mode">
+      <div class="panel-head compact-head">
+        <div><h2>Choose Game Mode</h2><p class="muted">Pick a quick default match, full single match setup, or a local tournament.</p></div>
+        <button id="mode-menu-back" type="button" class="secondary">Back</button>
+      </div>
+      <div class="mode-choice-grid">
+        <button id="quick-match" type="button" class="mode-choice primary"><strong>Quick Match</strong><span>5 minute 1v1 with defaults.</span></button>
+        <button id="single-player" type="button" class="mode-choice"><strong>Single Match</strong><span>Full setup for one match.</span></button>
+        <button id="tournament-mode" type="button" class="mode-choice"><strong>Tournament Mode</strong><span>Local multi-match points series.</span></button>
+      </div>
+    </section>
+
+    <section id="tournament-card" class="panel menu-panel hidden" aria-label="Tournament standings">
+      <div class="panel-head compact-head">
+        <div><h2 id="tournament-title">Tournament</h2><p id="tournament-subtitle" class="muted">Local session standings.</p></div>
+        <button id="tournament-continue" type="button" class="primary">Continue</button>
+      </div>
+      <div id="tournament-standings" class="tournament-standings"></div>
+      <button id="tournament-exit" type="button" class="secondary">End Tournament</button>
     </section>
 
     <section id="account-card" class="panel account-panel hidden" aria-label="Account sign in">
@@ -163,6 +184,7 @@
         <button type="button" class="settings-tab" data-settings-tab="songs" role="tab" aria-selected="false">Songs</button>
         <button type="button" class="settings-tab" data-settings-tab="keyboard" role="tab" aria-selected="false">Keyboard</button>
         <button type="button" class="settings-tab" data-settings-tab="controller" role="tab" aria-selected="false">Controller</button>
+        <button type="button" class="settings-tab" data-settings-tab="mobile" role="tab" aria-selected="false">Mobile</button>
       </div>
 
       <div class="settings-pane active" data-settings-pane="gameplay" role="tabpanel">
@@ -180,12 +202,24 @@
           <label>
             Default match length
             <select id="settings-match-length">
+              <option value="60">1 minute</option>
               <option value="180">3 minutes</option>
               <option value="300" selected>5 minutes</option>
               <option value="420">7 minutes</option>
               <option value="600">10 minutes</option>
+              <option value="900">15 minutes</option>
+              <option value="900">15 minutes</option>
             </select>
           </label>
+          <label>Aerial sensitivity
+              <input id="settings-aerial-sensitivity" type="range" min="0.55" max="1.45" step="0.05" />
+            </label>
+            <label>Air control strength
+              <input id="settings-air-control" type="range" min="0.55" max="1.45" step="0.05" />
+            </label>
+            <label>Air roll sensitivity
+              <input id="settings-air-roll-sensitivity" type="range" min="0.55" max="1.55" step="0.05" />
+            </label>
           <p id="settings-sync-status" class="hint">Settings save automatically.</p>
         </div>
       </div>
@@ -350,9 +384,18 @@
               <input id="controller-pan-sensitivity" type="range" min="0.5" max="1.5" step="0.05" />
               <span id="controller-pan-sensitivity-value" class="setting-value">1.00x</span>
             </label>
+            <p class="hint">LB/RB default to Air Roll Left/Right. X/Square remains Drift/Powerslide and free air roll.</p>
             <div id="controller-bind-list" class="controller-bind-list"></div>
             <button id="reset-controller" type="button" class="secondary small-action">Reset controller</button>
           </div>
+        </div>
+      </div>
+
+      <div class="settings-pane" data-settings-pane="mobile" role="tabpanel" hidden>
+        <div class="settings-section">
+          <h3>Mobile aerial controls</h3>
+          <label class="toggle-label"><input id="settings-mobile-aerial-controls" type="checkbox" /> Show Air Roll Left / Right buttons</label>
+          <p class="hint">When enabled in portrait, compact AIR L/R zones are added to the action pad without covering chat, voice, music, boost, jump, drift, or the boost meter.</p>
         </div>
       </div>
     </section>
@@ -421,6 +464,7 @@
           <label>
             Match length
             <select id="match-length-select">
+              <option value="60">1 minute</option>
               <option value="180">3 minutes</option>
               <option value="300" selected>5 minutes</option>
               <option value="420">7 minutes</option>
@@ -459,6 +503,36 @@
               <option value="off">Voice disabled</option>
             </select>
           </label>
+          <label>Custom minutes
+            <input id="custom-match-minutes" type="number" min="1" max="30" step="1" placeholder="Optional" />
+          </label>
+          <details class="subpanel compact-rules-panel">
+            <summary>Match rules</summary>
+            <label class="toggle-label"><input id="half-time-enabled" type="checkbox" /> Enable half-time</label>
+            <label class="toggle-label"><input id="hydration-enabled" type="checkbox" /> Enable hydration break</label>
+            <label class="toggle-label"><input id="overtime-enabled" type="checkbox" /> Enable overtime on draws</label>
+            <label class="toggle-label"><input id="golden-goal-enabled" type="checkbox" checked /> Golden goal overtime</label>
+            <label>Overtime duration
+              <select id="overtime-duration-select">
+                <option value="60">1 minute</option>
+                <option value="180" selected>3 minutes</option>
+                <option value="300">5 minutes</option>
+                <option value="unlimited">Unlimited golden goal</option>
+              </select>
+            </label>
+          </details>
+          <details id="tournament-options" class="subpanel compact-rules-panel hidden">
+            <summary id="tournament-schedule-summary">Tournament schedule</summary>
+            <label>Number of matches
+              <select id="tournament-match-count"><option value="3">3</option><option value="5" selected>5</option><option value="7">7</option></select>
+            </label>
+            <label class="toggle-label"><input id="tournament-individual-lengths" type="checkbox" /> Customise each match length</label>
+            <label class="toggle-label"><input id="tournament-final-longer" type="checkbox" /> Final match is longer</label>
+            <label>Final match length
+              <select id="tournament-final-length"><option value="180">3 minutes</option><option value="300">5 minutes</option><option value="420">7 minutes</option><option value="600" selected>10 minutes</option><option value="900">15 minutes</option></select>
+            </label>
+            <div id="tournament-length-list" class="tournament-length-list"></div>
+          </details>
           <p id="max-humans-label" class="hint">Max humans: 2</p>
         </div>
 
@@ -551,13 +625,15 @@
           <button class="touch-btn utility-touch" data-mobile-tap="reset" type="button">RESET</button>
         </div>
         <div id="mobile-action-pad" class="mobile-action-pad" role="application" aria-label="Slide between boost, jump and drift">
+          <div data-action="airRollLeft" class="touch-btn action-pad-zone air-roll-touch action-air-left">AIR L</div>
           <div data-action="jump" class="touch-btn action-pad-zone blue-touch jump-touch action-jump">JUMP</div>
           <div data-action="drift" class="touch-btn action-pad-zone drift-touch action-drift">DRIFT</div>
           <div data-action="boost" class="touch-btn action-pad-zone primary-touch boost-touch action-boost"><span class="boost-btn-title">BOOST</span><span class="boost-btn-value">0</span></div>
+          <div data-action="airRollRight" class="touch-btn action-pad-zone air-roll-touch action-air-right">AIR R</div>
         </div>
       </div>
     </div>
-    <div class="mobile-help">Left thumb drives/steers · slide across BOOST/JUMP/DRIFT · tiny top buttons open chat/voice</div>
+    <div class="mobile-help">Left thumb drives/pitches/yaws · slide BOOST/JUMP/DRIFT/AIR ROLL · tiny top buttons open chat/voice</div>
   </div>
 
   <script type="module" src="./js/app.js"></script>
