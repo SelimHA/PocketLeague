@@ -2461,3 +2461,39 @@ body.lobby-chat-enabled:not(.game-running) #mute-voice {
 .help-card h2, .help-card h3 { margin-top: .3rem; }
 .mobile-ai-command { position: fixed; right: .75rem; bottom: 8.7rem; z-index: 48; padding: .55rem .7rem; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(20,190,220,.9); color: white; font-weight: 900; }
 @media (max-width: 760px) { .ai-command-wheel { right: .75rem; left: .75rem; bottom: 13rem; width: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); } .ai-command-toggle { bottom: 12rem; } }
+
+/* AI command settings/menu consistency fixes */
+.ai-command-settings {
+  display: grid;
+  gap: 12px;
+}
+.ai-command-settings label:not(.toggle-label) {
+  display: grid;
+  gap: 8px;
+  color: rgba(255,255,255,.82);
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+.ai-command-settings input[type="text"],
+.ai-command-settings input:not([type]),
+.ai-command-settings select {
+  width: 100%;
+}
+.ai-command-wheel.hidden,
+.ai-command-overlay.hidden,
+.mobile-ai-command.hidden {
+  display: none !important;
+}
+body:not(.game-running) .ai-command-toggle,
+body:not(.game-running) .ai-command-wheel,
+body:not(.game-running) .ai-command-overlay,
+body:not(.game-running) .mobile-ai-command,
+body.game-paused:not(.settings-open) .ai-command-wheel,
+body.game-paused:not(.settings-open) .ai-command-overlay {
+  display: none !important;
+}
+@media (min-width: 840px) {
+  .settings-tabs { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
