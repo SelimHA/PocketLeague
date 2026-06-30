@@ -4037,7 +4037,7 @@ function makeFieldTexture(mode, arena, theme) {
   cnv.width = texSize; cnv.height = texSize;
   const ctx = cnv.getContext("2d");
   const base = modeFieldColor(mode, theme);
-  const pitchShade = mode === "ice" ? 0.72 : mode === "snooker" ? 0.68 : 0.66;
+  const pitchShade = mode === "ice" ? 0.69 : mode === "snooker" ? 0.64 : 0.61;
   const shadedBase = base.map(v => Math.max(0, Math.round(v * pitchShade)));
   ctx.fillStyle = `rgb(${shadedBase[0]},${shadedBase[1]},${shadedBase[2]})`;
   ctx.fillRect(0, 0, texSize, texSize);
@@ -4824,16 +4824,19 @@ function updateBoostPadVisuals(state) {
   }
 }
 
-function carMaterial(team, human, model = "default") {
-  const base = team === "blue" ? 0x0a91ff : 0xff6a00;
-  const metalness = model === "truck" ? 0.08 : human ? 0.18 : 0.06;
-  const roughness = model === "sport" ? 0.28 : human ? 0.35 : 0.55;
+function carMaterial(team, human, model = "default", isLocal = false) {
+  const teamBase = team === "blue" ? 0x0a91ff : 0xff6a00;
+  const base = isLocal
+    ? new THREE.Color(teamBase).lerp(new THREE.Color(0xffffff), team === "blue" ? 0.24 : 0.18).getHex()
+    : teamBase;
+  const metalness = model === "truck" ? 0.08 : human ? 0.20 : 0.06;
+  const roughness = model === "sport" ? 0.26 : human ? 0.32 : 0.55;
   return new THREE.MeshStandardMaterial({
     color: base,
-    roughness,
-    metalness,
-    emissive: base,
-    emissiveIntensity: human ? 0.045 : 0.025
+    roughness: isLocal ? Math.max(0.22, roughness - 0.05) : roughness,
+    metalness: isLocal ? Math.min(0.34, metalness + 0.08) : metalness,
+    emissive: teamBase,
+    emissiveIntensity: isLocal ? 0.11 : human ? 0.045 : 0.025
   });
 }
 
@@ -4858,8 +4861,8 @@ function createRoundedBoxMesh(w, h, d, radius, material, segments = 4) {
   return mesh;
 }
 
-function addAeroKit(g, bodyW, bodyH, bodyD, team, modelKey) {
-  const accent = team === "blue" ? 0x32d7ff : 0xff9a2b;
+function addAeroKit(g, bodyW, bodyH, bodyD, team, modelKey, isLocal = false) {
+  const accent = isLocal ? 0xffffff : team === "blue" ? 0x32d7ff : 0xff9a2b;
   const carbon = new THREE.MeshStandardMaterial({ color: 0x070a10, roughness: 0.42, metalness: 0.34 });
   const accentMat = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.42, roughness: 0.24, metalness: 0.18 });
   const glassMat = new THREE.MeshStandardMaterial({ color: 0x07111e, emissive: accent, emissiveIntensity: 0.08, roughness: 0.12, metalness: 0.52, transparent: true, opacity: 0.88 });
@@ -4908,12 +4911,12 @@ function createWheelMesh(x, z, scale = 1) {
   return wheel;
 }
 
-function addVehicleLighting(g, bodyW, bodyH, bodyD, team, modelKey) {
-  const accent = team === "blue" ? 0x33d6ff : 0xff9a2b;
+function addVehicleLighting(g, bodyW, bodyH, bodyD, team, modelKey, isLocal = false) {
+  const accent = isLocal ? 0xffffff : team === "blue" ? 0x33d6ff : 0xff9a2b;
   const accentMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.82 });
   const headMat = new THREE.MeshBasicMaterial({ color: 0xf8fbff, transparent: true, opacity: 0.86 });
   const tailMat = new THREE.MeshBasicMaterial({ color: 0xff2d2d, transparent: true, opacity: 0.78 });
-  const underMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: modelKey === "sport" ? 0.18 : 0.13, depthWrite: false, side: THREE.DoubleSide });
+  const underMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: isLocal ? 0.24 : modelKey === "sport" ? 0.18 : 0.13, depthWrite: false, side: THREE.DoubleSide });
   const under = new THREE.Mesh(new THREE.PlaneGeometry(bodyW * 1.15, bodyD * 0.80), underMat);
   under.rotation.x = -Math.PI / 2;
   under.position.set(0, 0.08, -bodyD * 0.03);
@@ -4936,16 +4939,18 @@ function addVehicleLighting(g, bodyW, bodyH, bodyD, team, modelKey) {
 
 function createCarMesh(car, state) {
   const modelKey = VEHICLE_CONFIGS[car.model] ? car.model : "default";
+  const isLocal = car.id === activePlayerId();
   const vehicle = VEHICLE_CONFIGS[modelKey];
   const g = new THREE.Group();
   g.userData.model = modelKey;
   g.userData.team = car.team;
+  g.userData.isLocal = isLocal;
 
   const [bodyW, bodyH, bodyD] = vehicle.body || VEHICLE_CONFIGS.default.body;
   const [cabinW, cabinH, cabinD] = vehicle.cabin || VEHICLE_CONFIGS.default.cabin;
   const [cabinX, cabinY, cabinZ] = vehicle.cabinOffset || VEHICLE_CONFIGS.default.cabinOffset;
 
-  const body = createRoundedBoxMesh(bodyW, bodyH, bodyD, 0.22, carMaterial(car.team, car.human, modelKey), isPhonePortrait() ? 3 : 5);
+  const body = createRoundedBoxMesh(bodyW, bodyH, bodyD, 0.22, carMaterial(car.team, car.human, modelKey, isLocal), isPhonePortrait() ? 3 : 5);
   body.position.y = bodyH / 2;
   body.castShadow = true;
 
@@ -5014,9 +5019,28 @@ function createCarMesh(car, state) {
   flame.position.set(0, Math.max(0.44, bodyH * 0.52), -bodyD / 2 - 0.58);
   flame.visible = false;
   g.userData.flame = flame;
+  const localBeacon = isLocal ? new THREE.Mesh(
+    new THREE.RingGeometry(Math.max(bodyW, bodyD) * 0.50, Math.max(bodyW, bodyD) * 0.64, 40),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide })
+  ) : null;
+  if (localBeacon) {
+    localBeacon.rotation.x = -Math.PI / 2;
+    localBeacon.position.y = 0.075;
+    g.add(localBeacon);
+  }
+
+  const detailMat = new THREE.MeshStandardMaterial({ color: 0x05070d, roughness: 0.50, metalness: 0.26 });
+  for (const sx of [-1, 1]) {
+    const mirror = createRoundedBoxMesh(0.14, 0.16, 0.28, 0.04, detailMat, 3);
+    mirror.position.set(sx * (bodyW / 2 + 0.14), bodyH * 0.86, bodyD * 0.22);
+    const doorCut = new THREE.Mesh(new THREE.BoxGeometry(0.035, bodyH * 0.48, bodyD * 0.36), detailMat);
+    doorCut.position.set(sx * (bodyW / 2 + 0.018), bodyH * 0.62, -bodyD * 0.02);
+    g.add(mirror, doorCut);
+  }
+
   g.add(body, cabin, nose, flame);
-  addVehicleLighting(g, bodyW, bodyH, bodyD, car.team, modelKey);
-  addAeroKit(g, bodyW, bodyH, bodyD, car.team, modelKey);
+  addVehicleLighting(g, bodyW, bodyH, bodyD, car.team, modelKey, isLocal);
+  addAeroKit(g, bodyW, bodyH, bodyD, car.team, modelKey, isLocal);
 
   if (state.mode === "snooker") {
     const cueMat = new THREE.MeshStandardMaterial({ color: 0xd8b47a, roughness: 0.4 });
@@ -5302,7 +5326,8 @@ function updateVisuals(state) {
   for (const car of Object.values(state.cars || {})) {
     let mesh = carMeshes.get(car.id);
     const modelKey = VEHICLE_CONFIGS[car.model] ? car.model : "default";
-    if (mesh && (mesh.userData.model !== modelKey || mesh.userData.team !== car.team)) {
+    const isLocal = car.id === activePlayerId();
+    if (mesh && (mesh.userData.model !== modelKey || mesh.userData.team !== car.team || mesh.userData.isLocal !== isLocal)) {
       world.remove(mesh);
       carMeshes.delete(car.id);
       mesh = null;
