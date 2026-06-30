@@ -2290,3 +2290,26 @@ body.lobby-chat-enabled:not(.game-running) #mute-voice {
     display: none !important;
   }
 }
+
+/* V41: compact mobile aerial controls for skill-based air roll. */
+.mobile-action-pad .air-roll-touch {
+  min-width: 54px;
+  min-height: 42px;
+  font-size: clamp(10px, 2.8vw, 13px);
+  letter-spacing: .08em;
+  background: linear-gradient(180deg, rgba(125, 211, 252, .92), rgba(37, 99, 235, .82));
+  border-color: rgba(191, 219, 254, .75);
+}
+.mobile-aerial-disabled .mobile-action-pad .air-roll-touch { display: none !important; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .mobile-action-pad {
+    grid-template-columns: .72fr 1fr 1fr;
+    grid-template-rows: .64fr 1fr;
+    gap: 8px;
+  }
+  .mobile-action-pad .action-air-left { grid-column: 1; grid-row: 1; }
+  .mobile-action-pad .action-jump { grid-column: 2; grid-row: 1; }
+  .mobile-action-pad .action-drift { grid-column: 3; grid-row: 1; }
+  .mobile-action-pad .action-boost { grid-column: 1 / span 2; grid-row: 2; }
+  .mobile-action-pad .action-air-right { grid-column: 3; grid-row: 2; }
+}
