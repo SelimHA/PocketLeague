@@ -61,13 +61,13 @@
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V43 Pause Music Polish</div>
+      <div class="menu-kicker">New streamlined menus</div>
       <h1>RLCSS</h1>
-      <p class="menu-subtitle">Rocket-style car football with richer arenas, voice/text chat, leaderboards, custom matches and full desktop controller support, AI music, menu music controls, and audio settings.</p>
+      <p class="menu-subtitle">Fast car football with quick play, custom lobbies, chat, voice, leaderboards, music, and controller support.</p>
       <div class="ai-music-badge" aria-label="AI music notice">♫ AI-generated soundtrack included</div>
       <div class="controller-hero" aria-label="Controller recommendation">
         <strong>Best with controller on PC</strong>
-        <span>Left stick drives, triggers accelerate/brake, right stick pans the camera. Keyboard and phone touch controls still work.</span>
+        <span>Gamepad is recommended. Keyboard and phone controls work too.</span>
       </div>
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
@@ -105,13 +105,13 @@
 
     <section id="game-mode-card" class="panel menu-panel hidden" aria-label="Choose game mode">
       <div class="panel-head compact-head">
-        <div><h2>Choose Game Mode</h2><p class="muted">Pick a quick default match, full single match setup, or a local tournament.</p></div>
+        <div><h2>Play</h2><p class="muted">Start fast, customize one match, or run a tournament.</p></div>
         <button id="mode-menu-back" type="button" class="secondary">Back</button>
       </div>
       <div class="mode-choice-grid">
-        <button id="quick-match" type="button" class="mode-choice primary"><strong>Quick Match</strong><span>5 minute 1v1 with defaults.</span></button>
-        <button id="single-player" type="button" class="mode-choice"><strong>Single Match</strong><span>Full setup for one match.</span></button>
-        <button id="tournament-mode" type="button" class="mode-choice"><strong>Tournament Mode</strong><span>Local multi-match points series.</span></button>
+        <button id="quick-match" type="button" class="mode-choice primary"><strong>Quick Match</strong><span>Instant 5 min 1v1.</span></button>
+        <button id="single-player" type="button" class="mode-choice"><strong>Custom Match</strong><span>Teams, arena, bots.</span></button>
+        <button id="tournament-mode" type="button" class="mode-choice"><strong>Tournament</strong><span>Multi-match points.</span></button>
       </div>
     </section>
 
@@ -424,8 +424,11 @@
       <div class="grid two-col">
         <div class="subpanel">
           <h3>Match setup</h3>
+          <div class="setup-summary-strip" aria-label="Setup steps"><span>1 Mode</span><span>2 Teams</span><span>3 Play</span></div>
+          <details class="setup-collapse setup-core" open>
+            <summary>Core match</summary>
           <label>
-            Game mode
+            Mode
             <select id="mode-select">
               <option value="standard">Standard</option>
               <option value="ice">Ice Rink</option>
@@ -434,7 +437,7 @@
             </select>
           </label>
           <label>
-            Stadium theme
+            Arena
             <select id="theme-select">
               <option value="v10" selected>V10 Classic Stadium</option>
               <option value="neon">Neon Bowl</option>
@@ -443,7 +446,7 @@
             </select>
           </label>
           <label>
-            Team size
+            Teams
             <select id="team-size-select">
               <option value="1">1v1</option>
               <option value="2">2v2</option>
@@ -453,7 +456,7 @@
             </select>
           </label>
           <label>
-            Pitch size
+            Pitch
             <select id="pitch-size-select">
               <option value="compact">Compact</option>
               <option value="standard" selected>Standard</option>
@@ -462,7 +465,7 @@
             </select>
           </label>
           <label>
-            Match length
+            Length
             <select id="match-length-select">
               <option value="60">1 minute</option>
               <option value="180">3 minutes</option>
@@ -471,8 +474,11 @@
               <option value="600">10 minutes</option>
             </select>
           </label>
+          </details>
+          <details class="setup-collapse">
+            <summary>Bots & chat</summary>
           <label>
-            AI difficulty
+            Bot difficulty
             <select id="difficulty-select">
               <option value="rookie">Rookie</option>
               <option value="pro" selected>Pro</option>
@@ -480,7 +486,7 @@
             </select>
           </label>
           <label>
-            AI playstyle
+            Bot style
             <select id="playstyle-select">
               <option value="balanced" selected>Balanced</option>
               <option value="defensive">Defensive</option>
@@ -489,23 +495,24 @@
             </select>
           </label>
           <label>
-            Game chat visibility
+            Text chat
             <select id="chat-scope-select">
-              <option value="all" selected>Everyone can read game chat</option>
+              <option value="all" selected>All players</option>
               <option value="team">Same team only</option>
             </select>
           </label>
           <label>
-            Voice chat channel
+            Voice
             <select id="voice-scope-select">
-              <option value="team" selected>Same team only</option>
-              <option value="all">Everyone in lobby</option>
+              <option value="team" selected>Team only</option>
+              <option value="all">All players</option>
               <option value="off">Voice disabled</option>
             </select>
           </label>
           <label>Custom minutes
             <input id="custom-match-minutes" type="number" min="1" max="30" step="1" placeholder="Optional" />
           </label>
+          </details>
           <details class="subpanel compact-rules-panel">
             <summary>Match rules</summary>
             <label class="toggle-label"><input id="half-time-enabled" type="checkbox" /> Enable half-time</label>
@@ -537,7 +544,7 @@
         </div>
 
         <div class="subpanel">
-          <h3>Your player</h3>
+          <h3>Your car</h3>
           <label>
             Team
             <select id="team-select">
@@ -551,7 +558,7 @@
               <option value="balanced" selected>Balanced</option>
               <option value="attack">Attack</option>
               <option value="midfield">Midfield</option>
-              <option value="defence">Back / Defence</option>
+              <option value="defence">Defence</option>
               <option value="goalkeeper">Goalkeeper</option>
             </select>
           </label>
@@ -570,7 +577,7 @@
             <canvas id="vehicle-preview" width="420" height="220"></canvas>
             <div class="vehicle-preview-copy">
               <strong id="vehicle-preview-name">Default Car</strong>
-              <span id="vehicle-preview-desc">Balanced original RLCSS car</span>
+              <span id="vehicle-preview-desc">Balanced starter car</span>
             </div>
           </div>
           <button id="ready-btn" type="button" class="ready">Ready</button>
