@@ -3,7 +3,35 @@
     "lobbies": {
       "$code": {
         ".read": "auth != null",
-        ".write": "auth != null"
+        ".write": "auth != null",
+        "teamCommands": {
+          "$team": {
+            ".read": "auth != null && root.child('lobbies/'+$code+'/players/'+auth.uid).exists()",
+            "$cmd": {
+              ".write": "auth != null && root.child('lobbies/'+$code+'/players/'+auth.uid).exists() && root.child('lobbies/'+$code+'/players/'+auth.uid+'/team').val() === $team && newData.child('issuedBy').val() === auth.uid && newData.child('team').val() === $team",
+              ".validate": "$team.matches(/^(blue|orange)$/) && newData.hasChildren(['intent','target','team','issuedBy','issuedByName','source','confidence','strength','createdAt','expiresAt']) && newData.child('intent').isString() && newData.child('intent').val().matches(/^(ATTACK_BALL|TAKE_SHOT|DEFEND_GOAL|ROTATE_BACK|CLEAR_BALL|PASS_LEFT|PASS_RIGHT|GET_BOOST|GOALKEEPER_HOLD|TEAM_PRESS|MARK_OPPONENT|SPREAD_OUT|CENTER_BALL|HOLD_POSITION|SUPPORT_ME)$/) && newData.child('target').isString() && newData.child('target').val().length <= 24 && newData.child('issuedByName').isString() && newData.child('issuedByName').val().length <= 18 && newData.child('source').isString() && newData.child('source').val().matches(/^(quick|voice|text|server)$/) && newData.child('confidence').isNumber() && newData.child('confidence').val() >= 0 && newData.child('confidence').val() <= 1 && newData.child('strength').isNumber() && newData.child('strength').val() >= 0.1 && newData.child('strength').val() <= 1 && newData.child('createdAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() <= newData.child('createdAt').val() + 12000"
+            }
+          }
+        },
+        "commandSettings": {
+          ".read": "auth != null && root.child('lobbies/'+$code+'/players/'+auth.uid).exists()",
+          ".write": "auth != null && root.child('lobbies/'+$code+'/players/'+auth.uid+'/isHost').val() === true",
+          "enabled": {
+            ".validate": "newData.isBoolean()"
+          },
+          "serverAiEnabled": {
+            ".validate": "newData.isBoolean()"
+          },
+          "voiceEnabled": {
+            ".validate": "newData.isBoolean()"
+          },
+          "sameTeamOnly": {
+            ".validate": "newData.isBoolean()"
+          },
+          "$other": {
+            ".validate": true
+          }
+        }
       }
     },
     "profiles": {

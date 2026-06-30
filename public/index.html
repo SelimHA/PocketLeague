@@ -25,6 +25,9 @@
   <button id="toggle-voice" class="floating-btn voice-toggle hidden" type="button" aria-pressed="false" aria-label="Toggle voice chat" title="Join/leave voice chat (V)">🎙</button>
   <button id="mute-voice" class="floating-btn voice-mute hidden" type="button" aria-pressed="false" aria-label="Microphone mute / push-to-talk" title="Mute/unmute microphone (M)">🎤</button>
   <div id="active-speakers" class="active-speakers hidden" aria-live="polite" aria-label="Active voice speakers"></div>
+  <button id="ai-command-button" class="floating-btn ai-command-toggle hidden" type="button" aria-expanded="false" aria-controls="ai-command-wheel" aria-label="AI team commands" title="AI team commands (C)">⌾</button>
+  <div id="ai-command-wheel" class="ai-command-wheel hidden" role="menu" aria-label="AI team command wheel"></div>
+  <div id="ai-command-overlay" class="ai-command-overlay hidden" aria-live="polite"></div>
   <div id="pause-overlay" class="pause-overlay hidden" role="dialog" aria-live="polite" aria-label="Paused">
     <div class="pause-card">
       <div class="pause-title">PAUSED</div>
@@ -185,6 +188,7 @@
         <button type="button" class="settings-tab" data-settings-tab="keyboard" role="tab" aria-selected="false">Keyboard</button>
         <button type="button" class="settings-tab" data-settings-tab="controller" role="tab" aria-selected="false">Controller</button>
         <button type="button" class="settings-tab" data-settings-tab="mobile" role="tab" aria-selected="false">Mobile</button>
+        <button type="button" class="settings-tab" data-settings-tab="aiCommands" role="tab" aria-selected="false">AI Commands</button>
       </div>
 
       <div class="settings-pane active" data-settings-pane="gameplay" role="tabpanel">
@@ -400,6 +404,30 @@
       </div>
     </section>
 
+
+      <div class="settings-pane" data-settings-pane="aiCommands" role="tabpanel" hidden>
+        <div class="settings-section ai-command-settings">
+          <h3>AI Team Commands</h3>
+          <label class="toggle-label"><input id="ai-commands-enabled" type="checkbox" /> Enable AI Team Commands</label>
+          <label>Input mode
+            <select id="ai-command-input-mode"><option value="quick">Quick commands only</option><option value="push">Push-to-talk voice</option><option value="alwaysMatch">Always listening in match</option><option value="alwaysLobbyMatch">Always listening in lobby and match</option></select>
+          </label>
+          <label class="toggle-label"><input id="ai-command-server-ai" type="checkbox" /> Use server AI parser for ambiguous commands</label>
+          <label class="toggle-label"><input id="ai-command-server-stt" type="checkbox" /> Use server speech-to-text</label>
+          <label>Command language <input id="ai-command-language" maxlength="24" placeholder="browser default / English" /></label>
+          <label class="toggle-label"><input id="ai-command-transcript" type="checkbox" /> Show transcript</label>
+          <label class="toggle-label"><input id="ai-command-acks" type="checkbox" /> Show teammate acknowledgements</label>
+          <label>Wheel timeout <select id="ai-command-timeout"><option value="short">Short</option><option value="medium">Medium</option><option value="long">Long</option></select></label>
+          <label>Command strength <select id="ai-command-strength"><option value="subtle">Subtle</option><option value="normal">Normal</option><option value="strong">Strong</option></select></label>
+          <label class="toggle-label"><input id="ai-command-store-history" type="checkbox" /> Store command history</label>
+          <label class="toggle-label"><input id="ai-command-send-ambiguous" type="checkbox" /> Send ambiguous commands to server AI</label>
+          <label class="toggle-label"><input id="ai-command-send-voice" type="checkbox" /> Send voice clips to server STT</label>
+          <label class="toggle-label"><input id="ai-command-smarter-opponents" type="checkbox" /> Smarter AI opponents when commands are enabled</label>
+          <button id="ai-command-help-open" type="button" class="secondary small-action">AI Team Commands Help</button>
+          <p class="hint">Raw audio is never written to Realtime Database. Server AI/STT is optional and uses backend function secrets.</p>
+        </div>
+      </div>
+
     <section id="leaderboard-card" class="panel leaderboard-panel hidden" aria-label="Leaderboard">
       <div class="panel-head compact-head">
         <div>
@@ -598,6 +626,8 @@
     </section>
   </main>
 
+  <div id="ai-command-help" class="modal hidden" role="dialog" aria-modal="true" aria-label="AI Team Commands Help"><div class="modal-card help-card"><button id="ai-command-help-close" class="secondary small-action" type="button">Close</button><h2>AI Team Commands Help</h2><p>AI Team Commands let you tell AI teammates what to do, such as defend, rotate, take the shot, clear the ball, pass, or get boost.</p><h3>Basic commands</h3><p>Try: “Defend goal”, “Take the shot”, “Rotate back”, “Clear it”, “Get boost”, “Pass left”, “Pass right”, “Goalkeeper stay back”, “All push”, “Mark attacker”.</p><h3>How it works</h3><p>The game converts your quick button, transcript, or text into a structured tactical instruction. AI teammates treat it as a temporary tactical bias, not a permanent hard override.</p><h3>Voice privacy</h3><p>Your browser asks for microphone permission. Push-to-talk records only while held. Raw audio should not be stored. Server AI/STT is optional and can be disabled. Private API keys are stored server-side only.</p><h3>Gameplay note</h3><p>If AI command support is enabled and you play only against AI opponents, opponent AI becomes smarter and more adaptive to keep the match challenging.</p></div></div>
+
 
   <aside id="chat-panel" class="chat-panel hidden" aria-label="Lobby chat">
     <div class="chat-head">
@@ -640,6 +670,7 @@
         </div>
       </div>
     </div>
+    <button id="mobile-ai-command" class="mobile-ai-command hidden" type="button">AI CMD</button>
     <div class="mobile-help">Left thumb drives/pitches/yaws · slide BOOST/JUMP/DRIFT/AIR ROLL · tiny top buttons open chat/voice</div>
   </div>
 
