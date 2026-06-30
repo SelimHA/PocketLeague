@@ -163,6 +163,7 @@
         <button type="button" class="settings-tab" data-settings-tab="songs" role="tab" aria-selected="false">Songs</button>
         <button type="button" class="settings-tab" data-settings-tab="keyboard" role="tab" aria-selected="false">Keyboard</button>
         <button type="button" class="settings-tab" data-settings-tab="controller" role="tab" aria-selected="false">Controller</button>
+        <button type="button" class="settings-tab" data-settings-tab="mobile" role="tab" aria-selected="false">Mobile</button>
       </div>
 
       <div class="settings-pane active" data-settings-pane="gameplay" role="tabpanel">
@@ -186,6 +187,15 @@
               <option value="600">10 minutes</option>
             </select>
           </label>
+          <label>Aerial sensitivity
+              <input id="settings-aerial-sensitivity" type="range" min="0.55" max="1.45" step="0.05" />
+            </label>
+            <label>Air control strength
+              <input id="settings-air-control" type="range" min="0.55" max="1.45" step="0.05" />
+            </label>
+            <label>Air roll sensitivity
+              <input id="settings-air-roll-sensitivity" type="range" min="0.55" max="1.55" step="0.05" />
+            </label>
           <p id="settings-sync-status" class="hint">Settings save automatically.</p>
         </div>
       </div>
@@ -350,9 +360,18 @@
               <input id="controller-pan-sensitivity" type="range" min="0.5" max="1.5" step="0.05" />
               <span id="controller-pan-sensitivity-value" class="setting-value">1.00x</span>
             </label>
+            <p class="hint">LB/RB default to Air Roll Left/Right. X/Square remains Drift/Powerslide and free air roll.</p>
             <div id="controller-bind-list" class="controller-bind-list"></div>
             <button id="reset-controller" type="button" class="secondary small-action">Reset controller</button>
           </div>
+        </div>
+      </div>
+
+      <div class="settings-pane" data-settings-pane="mobile" role="tabpanel" hidden>
+        <div class="settings-section">
+          <h3>Mobile aerial controls</h3>
+          <label class="toggle-label"><input id="settings-mobile-aerial-controls" type="checkbox" /> Show Air Roll Left / Right buttons</label>
+          <p class="hint">When enabled in portrait, compact AIR L/R zones are added to the action pad without covering chat, voice, music, boost, jump, drift, or the boost meter.</p>
         </div>
       </div>
     </section>
@@ -551,13 +570,15 @@
           <button class="touch-btn utility-touch" data-mobile-tap="reset" type="button">RESET</button>
         </div>
         <div id="mobile-action-pad" class="mobile-action-pad" role="application" aria-label="Slide between boost, jump and drift">
+          <div data-action="airRollLeft" class="touch-btn action-pad-zone air-roll-touch action-air-left">AIR L</div>
           <div data-action="jump" class="touch-btn action-pad-zone blue-touch jump-touch action-jump">JUMP</div>
           <div data-action="drift" class="touch-btn action-pad-zone drift-touch action-drift">DRIFT</div>
           <div data-action="boost" class="touch-btn action-pad-zone primary-touch boost-touch action-boost"><span class="boost-btn-title">BOOST</span><span class="boost-btn-value">0</span></div>
+          <div data-action="airRollRight" class="touch-btn action-pad-zone air-roll-touch action-air-right">AIR R</div>
         </div>
       </div>
     </div>
-    <div class="mobile-help">Left thumb drives/steers · slide across BOOST/JUMP/DRIFT · tiny top buttons open chat/voice</div>
+    <div class="mobile-help">Left thumb drives/pitches/yaws · slide BOOST/JUMP/DRIFT/AIR ROLL · tiny top buttons open chat/voice</div>
   </div>
 
   <script type="module" src="./js/app.js"></script>

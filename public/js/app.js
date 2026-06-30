@@ -29,7 +29,7 @@ const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), nameLabel: $("#player-name-label"), signedPlayerName: $("#signed-player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountSubtitle: $("#account-subtitle"), accountAuthFields: $("#account-auth-fields"), accountProfileFields: $("#account-profile-fields"), accountProfileName: $("#account-profile-name"), accountDisplayName: $("#account-display-name"), saveDisplayNameAccount: $("#save-display-name-account"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), accountNewPassword: $("#account-new-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), changePasswordAccount: $("#change-password-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), voiceTestPlayback: $("#voice-test-playback"), voiceTestStatus: $("#voice-test-status"), voiceSpeakerMode: $("#voice-speaker-mode"), voiceActivationMode: $("#voice-activation-mode"), voiceVolume: $("#voice-volume"), voiceVolumeValue: $("#voice-volume-value"), voiceMicSensitivity: $("#voice-mic-sensitivity"), voiceMicSensitivityValue: $("#voice-mic-sensitivity-value"), voiceInputDevice: $("#voice-input-device"), voiceOutputDevice: $("#voice-output-device"), refreshAudioDevices: $("#refresh-audio-devices"), audioDeviceStatus: $("#audio-device-status"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), voiceTestPlayback: $("#voice-test-playback"), voiceTestStatus: $("#voice-test-status"), voiceSpeakerMode: $("#voice-speaker-mode"), voiceActivationMode: $("#voice-activation-mode"), voiceVolume: $("#voice-volume"), voiceVolumeValue: $("#voice-volume-value"), voiceMicSensitivity: $("#voice-mic-sensitivity"), voiceMicSensitivityValue: $("#voice-mic-sensitivity-value"), voiceInputDevice: $("#voice-input-device"), voiceOutputDevice: $("#voice-output-device"), refreshAudioDevices: $("#refresh-audio-devices"), audioDeviceStatus: $("#audio-device-status"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), settingsAerialSensitivity: $("#settings-aerial-sensitivity"), settingsAirControl: $("#settings-air-control"), settingsAirRollSensitivity: $("#settings-air-roll-sensitivity"), settingsMobileAerialControls: $("#settings-mobile-aerial-controls"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
@@ -265,16 +265,23 @@ let voicePttTouchHeld = false;
 let audioDeviceRefreshBusy = false;
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
-const SETTINGS_VERSION = "v40";
+const SETTINGS_VERSION = "v41-aerial";
 const KEY_ACTIONS = [
   ["forward", "Drive forward"], ["backward", "Brake / reverse"], ["left", "Steer left"], ["right", "Steer right"],
-  ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide"], ["cam", "Ball cam"], ["reset", "Reset"],
+  ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide / free air roll"],
+  ["airRollLeft", "Air Roll Left"], ["airRollRight", "Air Roll Right"], ["airRoll", "General Air Roll"],
+  ["pitchUp", "Air pitch up"], ["pitchDown", "Air pitch down"], ["yawLeft", "Air yaw left"], ["yawRight", "Air yaw right"],
+  ["cam", "Ball cam"], ["reset", "Reset"],
   ["pause", "Pause (host)"], ["chat", "Toggle chat"], ["voice", "Toggle voice"], ["mic", "Mic / push-to-talk"]
 ];
 const DEFAULT_FOV = 65;
 const DEFAULT_GAME_SETTINGS = {
   pitchSize: DEFAULT_META.pitchSize || "standard",
-  matchLength: DEFAULT_META.matchLength || 300
+  matchLength: DEFAULT_META.matchLength || 300,
+  aerialSensitivity: 1,
+  airControlStrength: 1,
+  airRollSensitivity: 1,
+  mobileAerialControls: true
 };
 const MUSIC_TRACKS = {
   nitro: { label: "Nitro Boost Dreams", src: "./songs/nitro-boost-dreams.mp3" },
@@ -321,7 +328,7 @@ function sanitiseGameSettings(raw = {}) {
   const matchLength = MATCH_LENGTH_OPTIONS[String(raw.matchLength)]
     ? Number(raw.matchLength)
     : clamp(Math.round(Number(raw.matchLength) || DEFAULT_GAME_SETTINGS.matchLength), 60, 900);
-  return { pitchSize, matchLength };
+  return { pitchSize, matchLength, aerialSensitivity: clamp(Number(raw.aerialSensitivity ?? 1), 0.55, 1.45), airControlStrength: clamp(Number(raw.airControlStrength ?? 1), 0.55, 1.45), airRollSensitivity: clamp(Number(raw.airRollSensitivity ?? 1), 0.55, 1.55), mobileAerialControls: raw.mobileAerialControls !== false };
 }
 function loadGameSettings() {
   try { return sanitiseGameSettings(JSON.parse(localStorage.getItem("rlcss_gameplay_settings") || "{}") || {}); }
@@ -377,6 +384,8 @@ const DEFAULT_CONTROLLER = {
   enabled: true,
   deadzone: 0.18,
   panSensitivity: 1,
+  aerialSensitivity: 1,
+  airRollSensitivity: 1,
   steerAxis: 0,
   throttleAxis: 7,
   brakeAxis: 6,
@@ -385,26 +394,30 @@ const DEFAULT_CONTROLLER = {
   jumpButton: 0,
   boostButton: 1,
   driftButton: 2,
+  airRollLeftButton: 4,
+  airRollRightButton: 5,
   camButton: 3,
-  resetButton: 5,
+  resetButton: 8,
   pauseButton: 9,
-  chatButton: 8,
-  voiceButton: 10,
-  micButton: 11
+  chatButton: 10,
+  voiceButton: 11,
+  micButton: 12
 };
 function sanitiseControllerSettings(raw = {}) {
   const merged = { ...DEFAULT_CONTROLLER, ...(raw || {}) };
   merged.enabled = merged.enabled !== false;
   merged.deadzone = clamp(Number(merged.deadzone) || DEFAULT_CONTROLLER.deadzone, 0.05, 0.35);
   merged.panSensitivity = clamp(Number(merged.panSensitivity) || DEFAULT_CONTROLLER.panSensitivity, 0.5, 1.5);
+  merged.aerialSensitivity = clamp(Number(merged.aerialSensitivity) || DEFAULT_CONTROLLER.aerialSensitivity, 0.55, 1.45);
+  merged.airRollSensitivity = clamp(Number(merged.airRollSensitivity) || DEFAULT_CONTROLLER.airRollSensitivity, 0.55, 1.55);
   for (const key of ["steerAxis", "throttleAxis", "brakeAxis", "cameraXAxis", "cameraYAxis"]) merged[key] = clamp(Math.round(Number(merged[key]) || 0), 0, 7);
-  for (const key of ["jumpButton", "boostButton", "driftButton", "camButton", "resetButton", "pauseButton", "chatButton", "voiceButton", "micButton"]) merged[key] = clamp(Math.round(Number(merged[key]) || 0), 0, 17);
+  for (const key of ["jumpButton", "boostButton", "driftButton", "airRollLeftButton", "airRollRightButton", "camButton", "resetButton", "pauseButton", "chatButton", "voiceButton", "micButton"]) merged[key] = clamp(Math.round(Number(merged[key]) || 0), 0, 17);
   return merged;
 }
 const CONTROLLER_BIND_ROWS = [
   ["steerAxis", "Left stick steer", "axis"], ["throttleAxis", "Right trigger / drive", "axis"], ["brakeAxis", "Left trigger / reverse", "axis"],
   ["cameraXAxis", "Right stick pan X", "axis"], ["cameraYAxis", "Right stick pan Y", "axis"],
-  ["jumpButton", "Jump", "button"], ["boostButton", "Boost", "button"], ["driftButton", "Drift", "button"], ["camButton", "Ball cam", "button"],
+  ["jumpButton", "Jump", "button"], ["boostButton", "Boost", "button"], ["driftButton", "Drift / free air roll", "button"], ["airRollLeftButton", "Air Roll Left (LB)", "button"], ["airRollRightButton", "Air Roll Right (RB)", "button"], ["camButton", "Ball cam", "button"],
   ["resetButton", "Reset", "button"], ["pauseButton", "Pause", "button"], ["chatButton", "Chat", "button"], ["voiceButton", "Voice", "button"], ["micButton", "Mic mute", "button"]
 ];
 function loadControllerSettings() {
@@ -417,7 +430,7 @@ let cameraFov = clamp(Number(localStorage.getItem("rlcss_camera_fov")) || DEFAUL
 let controllerSettings = loadControllerSettings();
 let pendingKeyBind = null;
 const controllerLatches = {};
-let controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
+let controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, airRollLeft: false, airRollRight: false, airRoll: false, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, reset: false };
 let controllerLook = { x: 0, y: 0, active: false };
 let cloudSettingsLoadedForUid = null;
 let settingsSaveTimer = 0;
@@ -431,7 +444,7 @@ const controllerNavLatches = {};
 let controllerNavLastMove = 0;
 let controllerNavSuppressUntil = 0;
 let controllerUiLastFocusAt = 0;
-const mobileInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
+const mobileInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, airRollLeft: false, airRollRight: false, airRoll: false, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, reset: false };
 let mobileDriftTimer = 0;
 let mobileDriftCooldownTimer = 0;
 let camKeyLatch = false;
@@ -936,6 +949,11 @@ function renderSettingsUi() {
   }
   Music.updateNowPlaying();
   applyGameSettingsToSelectors({ forceLobbyDefaults: false });
+  if (ui.settingsAerialSensitivity) ui.settingsAerialSensitivity.value = String(gameSettings.aerialSensitivity ?? 1);
+  if (ui.settingsAirControl) ui.settingsAirControl.value = String(gameSettings.airControlStrength ?? 1);
+  if (ui.settingsAirRollSensitivity) ui.settingsAirRollSensitivity.value = String(gameSettings.airRollSensitivity ?? 1);
+  if (ui.settingsMobileAerialControls) ui.settingsMobileAerialControls.checked = gameSettings.mobileAerialControls !== false;
+  document.body.classList.toggle("mobile-aerial-disabled", gameSettings.mobileAerialControls === false);
   if (ui.keybindList) {
     ui.keybindList.innerHTML = KEY_ACTIONS.map(([action, label]) => `
       <div class="bind-row">
@@ -982,7 +1000,7 @@ function renderSettingsUi() {
 }
 
 function setSettingsTab(tab = "gameplay") {
-  const safe = ["gameplay", "camera", "audio", "songs", "keyboard", "controller"].includes(tab) ? tab : "gameplay";
+  const safe = ["gameplay", "camera", "audio", "songs", "keyboard", "controller", "mobile"].includes(tab) ? tab : "gameplay";
   activeSettingsTab = safe;
   localStorage.setItem("rlcss_settings_tab", safe);
   document.querySelectorAll("[data-settings-tab]").forEach(btn => {
@@ -2177,7 +2195,7 @@ function navButtonEdge(name, pressed) {
 function settingsTabDelta(delta) {
   if (pendingControllerBind || pendingKeyBind) return false;
   if (!ui.settingsCard || ui.settingsCard.classList.contains("hidden")) return false;
-  const tabs = ["gameplay", "camera", "audio", "songs", "keyboard", "controller"];
+  const tabs = ["gameplay", "camera", "audio", "songs", "keyboard", "controller", "mobile"];
   const idx = Math.max(0, tabs.indexOf(activeSettingsTab));
   setSettingsTab(tabs[(idx + delta + tabs.length) % tabs.length]);
   return true;
@@ -2219,7 +2237,7 @@ function pollControllerMenuNavigation() {
 
 function pollController() {
   const pad = getFirstGamepad();
-  controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
+  controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, airRollLeft: false, airRollRight: false, airRoll: false, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, reset: false };
   controllerLook = { x: 0, y: 0, active: false };
   if (!pad) { setVoicePttHeld("controller", false); return controllerInput; }
   if (pendingControllerBind || pendingKeyBind) return controllerInput;
@@ -2231,14 +2249,23 @@ function pollController() {
   const jumpPressed = buttonPressed(pad, controllerSettings.jumpButton);
   const driftPressed = buttonPressed(pad, controllerSettings.driftButton);
   const resetPressed = buttonPressed(pad, controllerSettings.resetButton);
+  const airRollLeftPressed = buttonPressed(pad, controllerSettings.airRollLeftButton);
+  const airRollRightPressed = buttonPressed(pad, controllerSettings.airRollRightButton);
 
   // Gamepad left stick follows the same V10 convention as keyboard: positive steer turns left.
   controllerInput = {
     throttle: clamp(driveTrigger - brakeTrigger, -1, 1),
     steer: clamp(-steerAxis, -1, 1),
+    pitchUp: Math.max(0, axisValue(pad, 1) * (controllerSettings.aerialSensitivity || 1)),
+    pitchDown: Math.max(0, -axisValue(pad, 1) * (controllerSettings.aerialSensitivity || 1)),
+    yawLeft: Math.max(0, -steerAxis * (controllerSettings.aerialSensitivity || 1)),
+    yawRight: Math.max(0, steerAxis * (controllerSettings.aerialSensitivity || 1)),
     boost: boostPressed,
     jump: jumpPressed,
     drift: driftPressed,
+    airRoll: driftPressed,
+    airRollLeft: airRollLeftPressed,
+    airRollRight: airRollRightPressed,
     reset: resetPressed
   };
   const lookX = axisValue(pad, controllerSettings.cameraXAxis, Math.max(0.08, (controllerSettings.deadzone || 0.18) * 0.75));
@@ -2274,7 +2301,15 @@ function localInput() {
     jump: k.jump || mobileInput.jump || c.jump,
     drift: k.drift || mobileInput.drift || c.drift,
     cam: localBallCam,
-    reset: k.reset || mobileInput.reset || c.reset
+    reset: k.reset || mobileInput.reset || c.reset,
+    airRollLeft: k.airRollLeft || mobileInput.airRollLeft || c.airRollLeft,
+    airRollRight: k.airRollRight || mobileInput.airRollRight || c.airRollRight,
+    airRoll: k.airRoll || mobileInput.airRoll || c.airRoll,
+    pitchUp: clamp(((k.pitchUp || 0) + (mobileInput.pitchUp || 0) + (c.pitchUp || 0)) * (gameSettings.aerialSensitivity || 1), 0, 1.5),
+    pitchDown: clamp(((k.pitchDown || 0) + (mobileInput.pitchDown || 0) + (c.pitchDown || 0)) * (gameSettings.aerialSensitivity || 1), 0, 1.5),
+    yawLeft: clamp(((k.yawLeft || 0) + (mobileInput.yawLeft || 0) + (c.yawLeft || 0)) * (gameSettings.airControlStrength || 1), 0, 1.5),
+    yawRight: clamp(((k.yawRight || 0) + (mobileInput.yawRight || 0) + (c.yawRight || 0)) * (gameSettings.airControlStrength || 1), 0, 1.5),
+    airRollScale: gameSettings.airRollSensitivity || 1
   };
   return combined;
 }
@@ -3435,6 +3470,8 @@ function setupMobileControls() {
     // Physics yaw uses the opposite sign from the DOM X-axis, so invert here only.
     mobileInput.steer = clamp(-nx, -1, 1);
     mobileInput.throttle = clamp(-ny, -1, 1);
+    mobileInput.yawLeft = Math.max(0, -nx); mobileInput.yawRight = Math.max(0, nx);
+    mobileInput.pitchUp = Math.max(0, ny); mobileInput.pitchDown = Math.max(0, -ny);
     knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
     zone.classList.add("active");
   }
@@ -3442,6 +3479,7 @@ function setupMobileControls() {
     activeId = null;
     mobileInput.steer = 0;
     mobileInput.throttle = 0;
+    mobileInput.pitchUp = 0; mobileInput.pitchDown = 0; mobileInput.yawLeft = 0; mobileInput.yawRight = 0;
     knob.style.transform = "translate(-50%, -50%)";
     zone.classList.remove("active");
   }
@@ -3501,6 +3539,7 @@ function setupMobileControls() {
   function clearHeldAction() {
     mobileInput.boost = false;
     mobileInput.drift = false;
+    mobileInput.airRollLeft = false; mobileInput.airRollRight = false;
     activeAction = null;
     actionZones.forEach(el => el.classList.remove("active"));
   }
@@ -3512,11 +3551,14 @@ function setupMobileControls() {
 
     mobileInput.boost = false;
     mobileInput.drift = false;
+    mobileInput.airRollLeft = false; mobileInput.airRollRight = false;
     actionZones.forEach(el => el.classList.toggle("active", el === zoneEl));
     activeAction = next;
 
     if (next === "boost") mobileInput.boost = true;
     else if (next === "drift") mobileInput.drift = true;
+    else if (next === "airRollLeft") mobileInput.airRollLeft = true;
+    else if (next === "airRollRight") mobileInput.airRollRight = true;
     else if (next === "jump") pulseMobileAction("jump");
     else if (next === "reset") pulseMobileAction("reset", 95);
     else if (next === "cam") toggleBallCamFromTouch();

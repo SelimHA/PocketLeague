@@ -551,6 +551,8 @@ function makeCar(id, team, role, human, name, x, z, yaw, slotIndex, model = "def
     pitch: 0,
     roll: 0,
     yawVel: 0,
+    pitchVel: 0,
+    rollVel: 0,
     grounded: true,
     onGround: true,
     boost: STARTING_BOOST,
@@ -582,6 +584,13 @@ export function inputFromKeys(keys, bind) {
     boost: pressed("boost"),
     jump: pressed("jump"),
     drift: pressed("drift"),
+    airRollLeft: pressed("airRollLeft"),
+    airRollRight: pressed("airRollRight"),
+    airRoll: pressed("airRoll"),
+    pitchUp: pressed("pitchUp"),
+    pitchDown: pressed("pitchDown"),
+    yawLeft: pressed("yawLeft"),
+    yawRight: pressed("yawRight"),
     cam: pressed("cam"),
     reset: pressed("reset")
   };
@@ -596,6 +605,13 @@ export function defaultBindings() {
     boost: "ShiftLeft",
     jump: "Space",
     drift: "ControlLeft",
+    airRollLeft: "KeyQ",
+    airRollRight: "KeyE",
+    airRoll: "ControlLeft",
+    pitchUp: "KeyS",
+    pitchDown: "KeyW",
+    yawLeft: "KeyA",
+    yawRight: "KeyD",
     cam: "KeyB",
     reset: "KeyR",
     pause: "KeyP",
@@ -1167,7 +1183,8 @@ export function makeAIInput(car, state, meta) {
   // Avoid boosting through badly angled recoveries; better bots feather boost when
   // they need to rotate instead of wasting it.
   if (Math.abs(drive.delta) > 0.58 && intent !== "kickoff" && intent !== "save") drive.boost = false;
-  if (drive.boost && !(drive.throttle >= 0 && car.boost > 0.1 && (car.grounded || state.mode === "flying"))) drive.boost = false;
+  if (drive.boost && !(drive.throttle >= 0 && car.boost > 0.1)) drive.boost = false;
+  const aiAirRoll = !car.grounded && skill.aerial > 0.5 && Math.abs(car.roll || 0) > 0.18;
   if (!car.grounded) drive.drift = false;
   if (cfg.snooker) drive.boost = false;
 
@@ -1178,6 +1195,12 @@ export function makeAIInput(car, state, meta) {
     boost: drive.boost,
     jump,
     drift: drive.drift,
+    airRollLeft: aiAirRoll && (car.roll || 0) > 0,
+    airRollRight: aiAirRoll && (car.roll || 0) < 0,
+    pitchUp: !car.grounded && ball.y > car.y + 0.4 ? clamp(skill.aerial, 0, 1) : 0,
+    pitchDown: !car.grounded && ball.y < car.y - 0.2 ? clamp(skill.aerial * 0.6, 0, 1) : 0,
+    yawLeft: !car.grounded && drive.steer > 0 ? Math.abs(drive.steer) : 0,
+    yawRight: !car.grounded && drive.steer < 0 ? Math.abs(drive.steer) : 0,
     cam: false,
     reset: false
   };
@@ -1254,8 +1277,36 @@ function normaliseInput(input = {}) {
     jump: !!input.jump,
     drift: !!input.drift,
     cam: !!input.cam,
-    reset: !!input.reset
+    reset: !!input.reset,
+    airRollLeft: !!input.airRollLeft,
+    airRollRight: !!input.airRollRight,
+    airRoll: !!input.airRoll,
+    pitchUp: clamp(Number(input.pitchUp) || 0, 0, 1),
+    pitchDown: clamp(Number(input.pitchDown) || 0, 0, 1),
+    yawLeft: clamp(Number(input.yawLeft) || 0, 0, 1),
+    yawRight: clamp(Number(input.yawRight) || 0, 0, 1),
+    airRollScale: clamp(Number(input.airRollScale) || 1, 0.5, 1.7)
   };
+}
+
+function carAxes(car) {
+  const yaw = car.yaw || 0;
+  const pitch = car.pitch || 0;
+  const roll = car.roll || 0;
+  const sy = Math.sin(yaw), cy = Math.cos(yaw);
+  const sp = Math.sin(pitch), cp = Math.cos(pitch);
+  const sr = Math.sin(roll), cr = Math.cos(roll);
+  const fwd = { x: sy * cp, y: -sp, z: cy * cp };
+  const right = { x: cy * cr + sy * sp * sr, y: cp * sr, z: -sy * cr + cy * sp * sr };
+  const up = { x: -cy * sr + sy * sp * cr, y: cp * cr, z: sy * sr + cy * sp * cr };
+  return { fwd, right, up };
+}
+
+function aerialAxisInput(input, steer, throttle) {
+  const pitchInput = clamp((input.pitchUp || 0) - (input.pitchDown || 0) || throttle, -1, 1);
+  const yawInput = clamp((input.yawLeft || 0) - (input.yawRight || 0) || steer, -1, 1);
+  const rollInput = clamp(((input.airRollLeft ? 1 : 0) - (input.airRollRight ? 1 : 0) + (input.airRoll ? steer : 0)) * (input.airRollScale || 1), -1.7, 1.7);
+  return { pitchInput, yawInput, rollInput };
 }
 
 function updateCar(car, input, state, cfg, dt) {
@@ -1269,7 +1320,7 @@ function updateCar(car, input, state, cfg, dt) {
   const throttle = clamp(input.throttle || 0, -1, 1);
   const steer = clamp(input.steer || 0, -1, 1);
   const handbrake = !!input.drift;
-  const wantsBoost = !!input.boost && throttle >= 0 && car.boost > 0.1 && (car.grounded || state.mode === "flying");
+  const wantsBoost = !!input.boost && car.boost > 0.1;
   const jump = !!input.jump;
   const vehicle = VEHICLE_CONFIGS[car.model] || VEHICLE_CONFIGS.default;
 
@@ -1354,31 +1405,50 @@ function updateCar(car, input, state, cfg, dt) {
       car.jumpEventTick = state.tick;
     }
   } else {
+    const axes = carAxes(car);
+    const { fwd: airFwd, right: airRight, up: airUp } = axes;
+    const { pitchInput, yawInput, rollInput } = aerialAxisInput(input, steer, throttle);
     if (jump && !car.jumpLatch && car.jumpCooldown <= 0 && !car.doubleJumpUsed) {
       car.doubleJumpUsed = true;
       car.justJumped = true;
-      car.vy = Math.max(car.vy + 4.5 * cfg.jump * vehicle.jump, DOUBLE_JUMP_VELOCITY * cfg.jump * vehicle.jump);
-      car.vx += fwd.x * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
-      car.vz += fwd.z * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
-      car.pitch = -0.22;
+      const directional = Math.hypot(pitchInput, yawInput) > 0.20;
+      car.vy = Math.max(car.vy + 4.2 * cfg.jump * vehicle.jump, DOUBLE_JUMP_VELOCITY * cfg.jump * vehicle.jump);
+      car.vx += (directional ? airFwd.x * pitchInput + airRight.x * yawInput : airFwd.x) * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
+      car.vz += (directional ? airFwd.z * pitchInput + airRight.z * yawInput : airFwd.z) * DOUBLE_JUMP_FORWARD_KICK * vehicle.aerial;
+      car.pitchVel += directional ? -pitchInput * 5.8 : -2.0;
+      car.rollVel += yawInput * 3.6;
       car.jumpCooldown = 0.28;
       car.jumpEventTick = state.tick;
       car.doubleJumpEventTick = state.tick;
     }
-    car.yaw += steer * 2.05 * cfg.steer * vehicle.aerial * dt;
-    if (Math.abs(throttle) > 0.001) {
-      car.vx += fwd.x * throttle * 14.0 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
-      car.vz += fwd.z * throttle * 14.0 * cfg.drive * cfg.aerialDrive * vehicle.aerial * dt;
-    }
+
+    const aerialTune = vehicle.aerial * cfg.aerialDrive;
+    car.pitchVel = (car.pitchVel || 0) + (-pitchInput * 5.2 * aerialTune) * dt;
+    car.yawVel = (car.yawVel || 0) + (yawInput * 4.2 * aerialTune) * dt;
+    car.rollVel = (car.rollVel || 0) + (rollInput * 7.2 * aerialTune) * dt;
+    car.pitchVel *= Math.pow(0.975, dt * 120);
+    car.yawVel *= Math.pow(0.982, dt * 120);
+    car.rollVel *= Math.pow(0.978, dt * 120);
+    car.pitch = clamp((car.pitch || 0) + car.pitchVel * dt, -1.35, 1.35);
+    car.yaw += car.yawVel * dt;
+    car.roll = angleNorm((car.roll || 0) + car.rollVel * dt);
+
     if (wantsBoost) {
       car.boosting = true;
       car.boost = Math.max(0, car.boost - (state.mode === "flying" ? BOOST_DRAIN_FLYING : BOOST_DRAIN_AIR) * dt);
-      car.vx += fwd.x * 57 * cfg.drive * vehicle.boost * dt;
-      car.vz += fwd.z * 57 * cfg.drive * vehicle.boost * dt;
+      const boostPower = 62 * cfg.drive * vehicle.boost;
+      car.vx += airFwd.x * boostPower * dt;
+      car.vy += airFwd.y * boostPower * dt;
+      car.vz += airFwd.z * boostPower * dt;
     }
+    const feather = 8.5 * cfg.drive * aerialTune;
+    car.vx += (airFwd.x * Math.abs(throttle) * Math.sign(throttle) + airRight.x * steer * 0.45) * feather * dt;
+    car.vy += (airFwd.y * throttle + airUp.y * 0.08) * feather * dt;
+    car.vz += (airFwd.z * throttle + airRight.z * steer * 0.45) * feather * dt;
+    const airDrag = Math.pow(0.995, dt * 120);
+    car.vx *= airDrag; car.vz *= airDrag; car.vy *= Math.pow(0.998, dt * 120);
     car.vy -= GRAVITY * cfg.gravity * dt;
   }
-
   car.jumpLatch = !!jump;
   car.jumpCooldown = Math.max(0, (car.jumpCooldown || 0) - dt);
   car.x += car.vx * dt;
@@ -1386,12 +1456,20 @@ function updateCar(car, input, state, cfg, dt) {
   car.z += car.vz * dt;
 
   if (car.y <= CAR_GROUND_Y) {
+    const landingVy = car.vy || 0;
     car.y = CAR_GROUND_Y;
-    car.vy = 0;
-    car.grounded = true;
-    car.onGround = true;
+    car.vy = landingVy < -18 && Math.abs(car.roll || 0) > 1.15 ? Math.min(6, -landingVy * 0.18) : 0;
+    car.grounded = car.vy <= 0.05;
+    car.onGround = car.grounded;
     car.doubleJumpUsed = false;
     car.justJumped = false;
+    if (car.grounded) {
+      const uprightAssist = !input.airRollLeft && !input.airRollRight && !input.airRoll;
+      const rollToZero = angleNorm(car.roll || 0);
+      if (uprightAssist && Math.abs(rollToZero) < 1.25) car.roll = smooth(rollToZero, 0, 8, dt);
+      car.pitch = smooth(car.pitch || 0, 0, 10, dt);
+      car.pitchVel = 0; car.rollVel = (car.rollVel || 0) * 0.35;
+    }
   } else {
     car.grounded = false;
     car.onGround = false;
@@ -1411,9 +1489,11 @@ function updateCar(car, input, state, cfg, dt) {
   }
 
   const visualSpeed = Math.hypot(car.vx, car.vz);
-  const driftLean = car.drifting ? 0.12 * Math.sign(steer || car.yawVel || 1) : 0;
-  car.roll = smooth(car.roll || 0, -steer * clamp(visualSpeed / 42, 0, 1) * 0.16 + driftLean, 10, dt);
-  car.pitch = smooth(car.pitch || 0, -clamp(forwardSpeed / 55, -1, 1) * 0.08 + (car.grounded ? 0 : 0.12), 7, dt);
+  if (car.grounded) {
+    const driftLean = car.drifting ? 0.12 * Math.sign(steer || car.yawVel || 1) : 0;
+    car.roll = smooth(car.roll || 0, -steer * clamp(visualSpeed / 42, 0, 1) * 0.16 + driftLean, 10, dt);
+    car.pitch = smooth(car.pitch || 0, -clamp(forwardSpeed / 55, -1, 1) * 0.08, 7, dt);
+  }
 
   car.boostPickup = Math.max(0, (car.boostPickup || 0) - dt);
   car.cueCooldown = Math.max(0, (car.cueCooldown || 0) - dt);
@@ -1790,7 +1870,7 @@ export function compactState(state) {
       id: c.id, team: c.team, role: c.role, human: c.human, name: c.name, model: sanitiseVehicleModel(c.model),
       x: round(c.x), y: round(c.y), z: round(c.z),
       vx: round(c.vx), vy: round(c.vy), vz: round(c.vz),
-      yaw: round(c.yaw), yawVel: round(c.yawVel), pitch: round(c.pitch || 0), roll: round(c.roll || 0), grounded: !!c.grounded, doubleJumpUsed: !!c.doubleJumpUsed,
+      yaw: round(c.yaw), yawVel: round(c.yawVel), pitchVel: round(c.pitchVel || 0), rollVel: round(c.rollVel || 0), pitch: round(c.pitch || 0), roll: round(c.roll || 0), grounded: !!c.grounded, doubleJumpUsed: !!c.doubleJumpUsed,
       boost: Math.round(c.boost), boosting: !!c.boosting, drifting: !!c.drifting,
       boostPickup: round(c.boostPickup || 0), cueCooldown: round(c.cueCooldown || 0), bumpCooldown: round(c.bumpCooldown || 0),
       lastTouch: c.lastTouch || 0, justJumped: !!c.justJumped, jumpEventTick: c.jumpEventTick || 0, doubleJumpEventTick: c.doubleJumpEventTick || 0, slotIndex: c.slotIndex
