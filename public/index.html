@@ -88,7 +88,7 @@
         <button id="open-leaderboard" type="button" class="secondary small-action">Leaderboard</button>
       </div>
       <div class="row two menu-actions">
-        <button id="single-player" type="button" class="primary">Single Player Setup</button>
+        <button id="open-mode-menu" type="button" class="primary">Play</button>
         <button id="create-lobby" type="button">Create Online Lobby</button>
       </div>
       <div class="join-row full menu-join">
@@ -101,6 +101,27 @@
         <div><strong>Online</strong><span>Lobby, chat &amp; voice</span></div>
       </div>
       <p id="connection-status" class="status">Connecting to Firebase…</p>
+    </section>
+
+    <section id="game-mode-card" class="panel menu-panel hidden" aria-label="Choose game mode">
+      <div class="panel-head compact-head">
+        <div><h2>Choose Game Mode</h2><p class="muted">Pick a quick default match, full single match setup, or a local tournament.</p></div>
+        <button id="mode-menu-back" type="button" class="secondary">Back</button>
+      </div>
+      <div class="mode-choice-grid">
+        <button id="quick-match" type="button" class="mode-choice primary"><strong>Quick Match</strong><span>5 minute 1v1 with defaults.</span></button>
+        <button id="single-player" type="button" class="mode-choice"><strong>Single Match</strong><span>Full setup for one match.</span></button>
+        <button id="tournament-mode" type="button" class="mode-choice"><strong>Tournament Mode</strong><span>Local multi-match points series.</span></button>
+      </div>
+    </section>
+
+    <section id="tournament-card" class="panel menu-panel hidden" aria-label="Tournament standings">
+      <div class="panel-head compact-head">
+        <div><h2 id="tournament-title">Tournament</h2><p id="tournament-subtitle" class="muted">Local session standings.</p></div>
+        <button id="tournament-continue" type="button" class="primary">Continue</button>
+      </div>
+      <div id="tournament-standings" class="tournament-standings"></div>
+      <button id="tournament-exit" type="button" class="secondary">End Tournament</button>
     </section>
 
     <section id="account-card" class="panel account-panel hidden" aria-label="Account sign in">
@@ -181,10 +202,13 @@
           <label>
             Default match length
             <select id="settings-match-length">
+              <option value="60">1 minute</option>
               <option value="180">3 minutes</option>
               <option value="300" selected>5 minutes</option>
               <option value="420">7 minutes</option>
               <option value="600">10 minutes</option>
+              <option value="900">15 minutes</option>
+              <option value="900">15 minutes</option>
             </select>
           </label>
           <label>Aerial sensitivity
@@ -440,6 +464,7 @@
           <label>
             Match length
             <select id="match-length-select">
+              <option value="60">1 minute</option>
               <option value="180">3 minutes</option>
               <option value="300" selected>5 minutes</option>
               <option value="420">7 minutes</option>
@@ -478,6 +503,36 @@
               <option value="off">Voice disabled</option>
             </select>
           </label>
+          <label>Custom minutes
+            <input id="custom-match-minutes" type="number" min="1" max="30" step="1" placeholder="Optional" />
+          </label>
+          <details class="subpanel compact-rules-panel">
+            <summary>Match rules</summary>
+            <label class="toggle-label"><input id="half-time-enabled" type="checkbox" /> Enable half-time</label>
+            <label class="toggle-label"><input id="hydration-enabled" type="checkbox" /> Enable hydration break</label>
+            <label class="toggle-label"><input id="overtime-enabled" type="checkbox" /> Enable overtime on draws</label>
+            <label class="toggle-label"><input id="golden-goal-enabled" type="checkbox" checked /> Golden goal overtime</label>
+            <label>Overtime duration
+              <select id="overtime-duration-select">
+                <option value="60">1 minute</option>
+                <option value="180" selected>3 minutes</option>
+                <option value="300">5 minutes</option>
+                <option value="unlimited">Unlimited golden goal</option>
+              </select>
+            </label>
+          </details>
+          <details id="tournament-options" class="subpanel compact-rules-panel hidden">
+            <summary id="tournament-schedule-summary">Tournament schedule</summary>
+            <label>Number of matches
+              <select id="tournament-match-count"><option value="3">3</option><option value="5" selected>5</option><option value="7">7</option></select>
+            </label>
+            <label class="toggle-label"><input id="tournament-individual-lengths" type="checkbox" /> Customise each match length</label>
+            <label class="toggle-label"><input id="tournament-final-longer" type="checkbox" /> Final match is longer</label>
+            <label>Final match length
+              <select id="tournament-final-length"><option value="180">3 minutes</option><option value="300">5 minutes</option><option value="420">7 minutes</option><option value="600" selected>10 minutes</option><option value="900">15 minutes</option></select>
+            </label>
+            <div id="tournament-length-list" class="tournament-length-list"></div>
+          </details>
           <p id="max-humans-label" class="hint">Max humans: 2</p>
         </div>
 

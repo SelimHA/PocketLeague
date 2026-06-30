@@ -243,10 +243,12 @@ export const PITCH_SIZE_CONFIGS = {
 };
 
 export const MATCH_LENGTH_OPTIONS = {
+  60: { label: "1 minute", seconds: 60 },
   180: { label: "3 minutes", seconds: 180 },
   300: { label: "5 minutes", seconds: 300 },
   420: { label: "7 minutes", seconds: 420 },
-  600: { label: "10 minutes", seconds: 600 }
+  600: { label: "10 minutes", seconds: 600 },
+  900: { label: "15 minutes", seconds: 900 }
 };
 
 export const DEFAULT_META = {
@@ -261,7 +263,12 @@ export const DEFAULT_META = {
   voiceScope: "team",
   paused: false,
   status: "waiting",
-  matchLength: 300
+  matchLength: 300,
+  halfTimeEnabled: false,
+  hydrationEnabled: false,
+  overtimeEnabled: false,
+  goldenGoal: true,
+  overtimeDuration: 180
 };
 
 const BASE_FIELD_W = 72;
@@ -401,7 +408,7 @@ export function serialiseMeta(meta = {}) {
   const out = { ...DEFAULT_META, ...meta };
   out.teamSize = clamp(Number(out.teamSize) || 1, 1, 5);
   if (!PITCH_SIZE_CONFIGS[out.pitchSize]) out.pitchSize = "standard";
-  out.matchLength = clamp(Math.round(Number(out.matchLength) || DEFAULT_META.matchLength), 60, 900);
+  out.matchLength = clamp(Math.round(Number(out.matchLength) || DEFAULT_META.matchLength), 60, 1800);
   if (!MODE_CONFIGS[out.mode]) out.mode = "standard";
   if (!["rookie", "pro", "allstar"].includes(out.difficulty)) out.difficulty = "pro";
   if (!["balanced", "defensive", "aggressive", "chaotic"].includes(out.playstyle)) out.playstyle = "balanced";
@@ -412,6 +419,11 @@ export function serialiseMeta(meta = {}) {
   if (!["all", "team"].includes(out.chatScope)) out.chatScope = "all";
   if (!["all", "team", "off"].includes(out.voiceScope)) out.voiceScope = "team";
   out.paused = !!out.paused;
+  out.halfTimeEnabled = !!out.halfTimeEnabled && out.matchLength >= 120;
+  out.hydrationEnabled = !!out.hydrationEnabled && out.matchLength >= 180;
+  out.overtimeEnabled = !!out.overtimeEnabled;
+  out.goldenGoal = out.goldenGoal !== false;
+  out.overtimeDuration = out.overtimeDuration === "unlimited" ? "unlimited" : clamp(Math.round(Number(out.overtimeDuration) || 180), 60, 300);
   return out;
 }
 
@@ -472,6 +484,11 @@ export function makeInitialState(meta, players = {}) {
     goalFlash: null,
     sound: { roundSerial: 1, roundTick: 0, goalTick: 0, goalTeam: null, ballHitTick: 0, ballHitImpulse: 0, wallHitTick: 0, wallHitSpeed: 0, bounceTick: 0, bounceSpeed: 0, boostPadTick: 0, boostPadBig: false, boostPadCar: null, carBumpTick: 0, carBumpImpulse: 0 },
     kickoffTimer: KICKOFF_COUNTDOWN_SECONDS,
+    break: null,
+    halfTimeTriggered: false,
+    hydrationTriggered: false,
+    overtime: null,
+    demoSerial: 0,
     ended: false
   };
 }
@@ -557,6 +574,9 @@ function makeCar(id, team, role, human, name, x, z, yaw, slotIndex, model = "def
     onGround: true,
     boost: STARTING_BOOST,
     boosting: false,
+    boostHeld: 0,
+    demoed: false,
+    demoTimer: 0,
     drifting: false,
     boostPickup: 0,
     jumpCooldown: 0,
@@ -1235,15 +1255,32 @@ export class PhysicsHost {
     state.tick++;
     state.goalFlash = null;
 
-    if (state.kickoffTimer > 0) {
+    const resetRequested = Object.keys(players || {}).some(id => normaliseInput(this.inputs[id]).reset);
+    if (state.break) {
+      const humanIds = Object.keys(players || {});
+      state.break.timer = Math.max(0, (state.break.timer || 0) - dt);
+      state.break.skipVotes = humanIds.filter(id => normaliseInput(this.inputs[id]).reset).length;
+      state.break.humans = humanIds.length || 1;
+      if (state.break.timer <= 0 || (humanIds.length && state.break.skipVotes >= humanIds.length)) state.break = null;
+    } else if (state.kickoffTimer > 0) {
       state.kickoffTimer = Math.max(0, state.kickoffTimer - dt);
     } else {
+      const prev = state.timeLeft;
       state.timeLeft = Math.max(0, state.timeLeft - dt);
-      if (state.timeLeft <= 0) state.ended = true;
+      const halfPoint = (this.meta.matchLength || DEFAULT_META.matchLength) / 2;
+      if (this.meta.halfTimeEnabled && !state.halfTimeTriggered && prev > halfPoint && state.timeLeft <= halfPoint) {
+        state.halfTimeTriggered = true;
+        state.break = { type: "half", timer: 60, duration: 60, skipVotes: 0, humans: Object.keys(players || {}).length || 1 };
+      }
+      if (state.timeLeft <= 0) {
+        if (this.meta.overtimeEnabled && state.score.blue === state.score.orange && !state.overtime) {
+          state.overtime = { timer: this.meta.overtimeDuration === "unlimited" ? -1 : this.meta.overtimeDuration };
+          state.timeLeft = state.overtime.timer > 0 ? state.overtime.timer : 0;
+        } else state.ended = true;
+      }
     }
 
-    const resetRequested = Object.keys(players || {}).some(id => normaliseInput(this.inputs[id]).reset);
-    if (resetRequested && !this.resetLatch) resetKickoff(state, players, false);
+    if (!state.break && resetRequested && !this.resetLatch) resetKickoff(state, players, false);
     this.resetLatch = resetRequested;
 
     const humanIds = new Set(Object.keys(players));
@@ -1256,14 +1293,21 @@ export class PhysicsHost {
         car.model = sanitiseVehicleModel(players[car.id].model || players[car.id].vehicle || car.model);
       }
       const input = car.human ? normaliseInput(this.inputs[car.id]) : makeAIInput(car, state, this.meta);
-      updateCar(car, state.kickoffTimer > 0 ? { throttle: 0, steer: 0, boost: false, jump: false, drift: false } : input, state, cfg, dt);
+      if ((car.demoTimer || 0) > 0) {
+        car.demoTimer = Math.max(0, car.demoTimer - dt);
+        if (car.demoTimer <= 0) respawnDemoCar(car, state);
+        continue;
+      }
+      updateCar(car, (state.kickoffTimer > 0 || state.break) ? { throttle: 0, steer: 0, boost: false, jump: false, drift: false } : input, state, cfg, dt);
     }
 
-    updateBoostPads(state, dt);
-    resolveCarCar(state);
-    updateBall(state, cfg, dt);
-    resolveBallHits(state, cfg, dt, this.meta.mode);
-    resolveGoals(state, players);
+    if (!state.break) {
+      updateBoostPads(state, dt);
+      resolveCarCar(state);
+      updateBall(state, cfg, dt);
+      resolveBallHits(state, cfg, dt, this.meta.mode);
+      resolveGoals(state, players, this.meta);
+    }
     this.writeCounter = (this.writeCounter + 1) % MATCH_TICKS_PER_WRITE;
     return this.writeCounter === 0;
   }
@@ -1326,6 +1370,7 @@ function updateCar(car, input, state, cfg, dt) {
 
   car.boosting = false;
   car.drifting = false;
+  car.boostHeld = input.boost ? (car.boostHeld || 0) + dt : 0;
 
   if (car.grounded) {
     let driveAcc = 0;
@@ -1534,8 +1579,31 @@ function updateBoostPads(state, dt) {
   }
 }
 
+function respawnDemoCar(car, state) {
+  const idx = Number(car.slotIndex || 0);
+  const spawn = kickoffSpawn(car.team, idx % Math.max(1, state.teamSize || 1), state.teamSize || 1, state.arena, car.role, car.human, state.kickoffVariant);
+  car.x = spawn.x; car.y = CAR_GROUND_Y; car.z = spawn.z;
+  car.vx = 0; car.vy = 0; car.vz = 0;
+  car.yaw = spawn.yaw; car.yawVel = 0; car.pitch = 0; car.roll = 0; car.pitchVel = 0; car.rollVel = 0;
+  car.grounded = true; car.onGround = true; car.demoed = false; car.demoTimer = 0; car.boosting = false;
+}
+
+function maybeDemo(attacker, victim, nx, nz, closing, state) {
+  if (!attacker.boosting || (attacker.boostHeld || 0) < 3.2 || (victim.demoTimer || 0) > 0) return false;
+  const speed = horizontalSpeed(attacker);
+  const fwd = fwdFromYaw(attacker.yaw || 0);
+  const angle = Math.abs(fwd.x * -nx + fwd.z * -nz);
+  if (speed < 34 || closing < 18 || angle < 0.42) return false;
+  victim.demoed = true; victim.demoTimer = 5;
+  victim.vx = 0; victim.vy = 0; victim.vz = 0; victim.boosting = false;
+  state.demoSerial = (state.demoSerial || 0) + 1;
+  if (!state.sound) state.sound = {};
+  state.sound.demoTick = state.tick; state.sound.demoCar = victim.id; state.sound.demoBy = attacker.id;
+  return true;
+}
+
 function resolveCarCar(state) {
-  const cars = Object.values(state.cars);
+  const cars = Object.values(state.cars).filter(c => !(c.demoTimer > 0));
   for (let i = 0; i < cars.length; i++) {
     for (let j = i + 1; j < cars.length; j++) {
       const a = cars[i], b = cars[j];
@@ -1552,6 +1620,7 @@ function resolveCarCar(state) {
       const relZ = a.vz - b.vz;
       const closing = -(relX * nx + relZ * nz);
       if (closing > 0) {
+        if (maybeDemo(b, a, nx, nz, closing, state) || maybeDemo(a, b, -nx, -nz, closing, state)) continue;
         const impulse = closing * 0.42;
         const massA = (VEHICLE_CONFIGS[a.model] || VEHICLE_CONFIGS.default).mass;
         const massB = (VEHICLE_CONFIGS[b.model] || VEHICLE_CONFIGS.default).mass;
@@ -1678,6 +1747,7 @@ function updateBall(state, cfg, dt) {
 function resolveBallHits(state, cfg, dt, mode) {
   const b = state.ball;
   for (const car of Object.values(state.cars)) {
+    if ((car.demoTimer || 0) > 0) continue;
     if (cfg.snooker || mode === "snooker") {
       resolveCueHit(car, b, state, cfg);
       continue;
@@ -1819,7 +1889,7 @@ function resolveCarBallOBB(car, b, state, cfg) {
   state.sound.ballHitImpulse = impulse;
 }
 
-function resolveGoals(state, players) {
+function resolveGoals(state, players, meta = DEFAULT_META) {
   const b = state.ball;
   const arena = state.arena;
   const mouthX = Math.abs(b.x) < arena.goalW / 2 - BALL_RADIUS * 0.45;
@@ -1829,6 +1899,11 @@ function resolveGoals(state, players) {
   const team = scoredBlue ? "blue" : "orange";
   state.score[team] += 1;
   state.goalFlash = { team, tick: state.tick };
+  if (meta.hydrationEnabled && !state.hydrationTriggered && state.timeLeft < (meta.matchLength || DEFAULT_META.matchLength) * 0.62 && state.timeLeft > (meta.matchLength || DEFAULT_META.matchLength) * 0.25) {
+    state.hydrationTriggered = true;
+    state.break = { type: "hydration", timer: 30, duration: 30, skipVotes: 0, humans: Object.keys(players || {}).length || 1 };
+  }
+  if (state.overtime && meta.goldenGoal) state.ended = true;
   if (!state.sound) state.sound = {};
   state.sound.goalTick = state.tick;
   state.sound.goalTeam = team;
@@ -1851,7 +1926,7 @@ function resetKickoff(state, players, initial = false) {
     car.x = spawn.x; car.y = CAR_GROUND_Y; car.z = spawn.z;
     car.vx = 0; car.vy = 0; car.vz = 0;
     car.yaw = spawn.yaw; car.yawVel = 0; car.pitch = 0; car.roll = 0;
-    car.grounded = true; car.onGround = true;
+    car.grounded = true; car.onGround = true; car.demoed = false; car.demoTimer = 0; car.boostHeld = 0;
     const baseBoost = initial ? STARTING_BOOST : Math.max(car.boost || 0, STARTING_BOOST);
     car.boost = Math.min(BOOST_MAX, baseBoost);
     car.boosting = false; car.drifting = false; car.boostPickup = 0; car.jumpCooldown = 0; car.jumpLatch = false; car.doubleJumpUsed = false; car.justJumped = false; car.jumpEventTick = 0; car.doubleJumpEventTick = 0;
@@ -1902,6 +1977,9 @@ export function compactState(state) {
     goalFlash: state.goalFlash,
     sound: { ...(state.sound || {}) },
     kickoffTimer: round(state.kickoffTimer),
+    break: state.break ? { type: state.break.type, timer: round(state.break.timer || 0), duration: state.break.duration || 0, skipVotes: state.break.skipVotes || 0, humans: state.break.humans || 1 } : null,
+    overtime: state.overtime ? { timer: state.overtime.timer } : null,
+    demoSerial: state.demoSerial || 0,
     ended: state.ended
   };
 }
