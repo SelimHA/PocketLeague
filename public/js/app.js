@@ -4212,19 +4212,30 @@ function buildArena(state) {
     const midZ = (goalLineZ + backZ) / 2;
     const halfW = arena.goalW / 2;
     const post = 0.62;
-    // Real goal frame: posts touch the ground, crossbar sits at goal height,
-    // and rails/nets extend backwards into the goal depth.
-    box(post, arena.goalH, post, -halfW, arena.goalH / 2, goalLineZ, frameMat);
-    box(post, arena.goalH, post,  halfW, arena.goalH / 2, goalLineZ, frameMat);
-    box(arena.goalW + post, post, post, 0, arena.goalH, goalLineZ, frameMat);
-    box(arena.goalW + post, 0.42, post, 0, 0.21, goalLineZ, frameMat);
-    box(post * 0.72, arena.goalH, post * 0.72, -halfW, arena.goalH / 2, backZ, frameMat);
-    box(post * 0.72, arena.goalH, post * 0.72,  halfW, arena.goalH / 2, backZ, frameMat);
-    box(arena.goalW + post, post * 0.72, post * 0.72, 0, arena.goalH, backZ, frameMat);
-    box(post * 0.72, post * 0.72, arena.goalD, -halfW, arena.goalH, midZ, frameMat);
-    box(post * 0.72, post * 0.72, arena.goalD,  halfW, arena.goalH, midZ, frameMat);
-    box(post * 0.58, post * 0.58, arena.goalD, -halfW, 0.32, midZ, frameMat);
-    box(post * 0.58, post * 0.58, arena.goalD,  halfW, 0.32, midZ, frameMat);
+    function goalTube(radius, length, x, y, z, axis = "y", radiusScale = 1) {
+      const tube = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius * radiusScale, radius * radiusScale, length, mobilePerf ? 10 : 16),
+        frameMat
+      );
+      tube.position.set(x, y, z);
+      if (axis === "x") tube.rotation.z = Math.PI / 2;
+      if (axis === "z") tube.rotation.x = Math.PI / 2;
+      tube.castShadow = false;
+      tube.receiveShadow = true;
+      world.add(tube);
+      return tube;
+    }
+
+    // Real goal frame: rounded posts/crossbars keep the mouth visually clean.
+    // The old rectangular rails looked like extra boxes in and around the posts.
+    goalTube(post * 0.5, arena.goalH, -halfW, arena.goalH / 2, goalLineZ);
+    goalTube(post * 0.5, arena.goalH,  halfW, arena.goalH / 2, goalLineZ);
+    goalTube(post * 0.5, arena.goalW + post, 0, arena.goalH, goalLineZ, "x");
+    goalTube(post * 0.34, arena.goalH, -halfW, arena.goalH / 2, backZ);
+    goalTube(post * 0.34, arena.goalH,  halfW, arena.goalH / 2, backZ);
+    goalTube(post * 0.34, arena.goalW + post, 0, arena.goalH, backZ, "x");
+    goalTube(post * 0.30, arena.goalD, -halfW, arena.goalH, midZ, "z");
+    goalTube(post * 0.30, arena.goalD,  halfW, arena.goalH, midZ, "z");
 
     const netMat = new THREE.MeshBasicMaterial({ color: frameMat.color || new THREE.Color(0xffffff), wireframe: true, transparent: true, opacity: 0.26, side: THREE.DoubleSide });
     const back = new THREE.Mesh(new THREE.PlaneGeometry(arena.goalW, arena.goalH), netMat);
@@ -4243,15 +4254,8 @@ function buildArena(state) {
     roof.position.set(0, arena.goalH, midZ);
     world.add(roof);
 
-    const frameHex = frameMat.emissive?.getHex?.() || frameMat.color?.getHex?.() || 0xffffff;
-    const goalGlow = new THREE.MeshBasicMaterial({ color: frameHex, transparent: true, opacity: mobilePerf ? 0.16 : 0.25, depthWrite: false, side: THREE.DoubleSide });
-    const goalFloor = new THREE.Mesh(new THREE.PlaneGeometry(arena.goalW * 0.88, arena.goalD * 0.88), goalGlow.clone());
-    goalFloor.rotation.x = -Math.PI / 2;
-    goalFloor.position.set(0, 0.052, midZ);
-    world.add(goalFloor);
-
-    // Keep the goal mouth clear: decorative backboards/braces previously sat
-    // inside the posts and made the frame look cluttered during shots/replays.
+    // Keep the goal mouth clear: no decorative floor panels, lower rails,
+    // backboards, or braces inside the posts during shots/replays.
   }
 
   function addExteriorProps() {
@@ -4420,6 +4424,35 @@ function buildArena(state) {
       propBox(2.4, 0.62, 4.0, x, 0.48, z, i % 2 ? parkedMatA : parkedMatB, side * Math.PI * 0.5);
       propBox(1.55, 0.52, 1.25, x, 1.02, z - side * 0.12, darkMat, side * Math.PI * 0.5);
     }
+
+    // Low-key broadcast/stadium props: benches, camera rigs, speakers, and a
+    // compact hanging scoreboard. They sit above/outside play so the pitch stays readable.
+    const equipmentMat = new THREE.MeshStandardMaterial({ color: 0x0b1020, roughness: 0.66, metalness: 0.18 });
+    const cableMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: mobilePerf ? 0.28 : 0.45 });
+    const benchMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.72, metalness: 0.04 });
+    const propCount = mobilePerf ? 2 : 4;
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < propCount; i++) {
+        const z = -arena.l * 0.32 + i * (arena.l * 0.64 / Math.max(1, propCount - 1));
+        propBox(3.4, 0.42, 1.0, side * (arena.w / 2 + 3.4), 0.58, z, benchMat);
+        propBox(0.18, 1.8, 0.18, side * (arena.w / 2 + 4.9), 1.05, z + 1.4, equipmentMat);
+        propBox(0.9, 0.42, 0.6, side * (arena.w / 2 + 4.9), 2.1, z + 1.4, i % 2 ? glowBlue : glowOrange, side * Math.PI * 0.5);
+      }
+      for (let i = 0; i < (mobilePerf ? 3 : 5); i++) {
+        const z = -arena.l / 2 + (i + 0.5) * (arena.l / (mobilePerf ? 3 : 5));
+        propBox(0.32, 0.32, 3.2, side * (arena.w / 2 + 18.8), 12.8, z, equipmentMat);
+        propBox(0.12, 8.5, 0.12, side * (arena.w / 2 + 18.8), 8.4, z, cableMat);
+      }
+    }
+
+    const scoreTex = makeStadiumScreenTexture(theme, "0  :  0", trim);
+    const scoreScreen = new THREE.MeshBasicMaterial({ map: scoreTex, side: THREE.DoubleSide, transparent: true, opacity: mobilePerf ? 0.72 : 0.88 });
+    propBox(10.6, 2.8, 0.42, 0, 18.0, -3.3, equipmentMat);
+    propBox(10.6, 2.8, 0.42, 0, 18.0, 3.3, equipmentMat);
+    propPlane(9.2, 2.1, 0, 18.0, -3.55, scoreScreen, 0);
+    propPlane(9.2, 2.1, 0, 18.0, 3.55, scoreScreen, Math.PI);
+    propBox(0.24, 6.8, 0.24, -5.3, 20.9, 0, cableMat);
+    propBox(0.24, 6.8, 0.24,  5.3, 20.9, 0, cableMat);
 
     // V25: make each stadium theme read as a genuinely different arena,
     // not just the same props with a tint. These are decorative only.
