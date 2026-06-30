@@ -2258,3 +2258,35 @@ body.lobby-chat-enabled:not(.game-running) #mute-voice {
 @media (max-width: 380px) {
   .pause-actions button { font-size: 12px; }
 }
+
+/* Narrow viewport guard: keeps phone-width match HUD from spilling sideways. */
+@media (max-width: 720px) {
+  .hud {
+    width: calc(100vw - 12px);
+    max-width: 430px;
+    top: calc(max(7px, env(safe-area-inset-top)) + 42px);
+    gap: 4px;
+    justify-content: center;
+    font-size: clamp(9px, 2.8vw, 11px);
+  }
+  .score,
+  #clock {
+    min-width: 0;
+    padding: 6px 7px;
+    border-radius: 9px;
+    border-top-width: 3px;
+    white-space: nowrap;
+  }
+  .score {
+    flex: 0 1 35vw;
+    overflow: hidden;
+    text-align: center;
+  }
+  #clock {
+    flex: 0 0 auto;
+    min-width: 62px;
+  }
+  .controls-hint {
+    display: none !important;
+  }
+}

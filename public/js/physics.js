@@ -291,6 +291,8 @@ const CAR_RADIUS = 2.35;
 const CAR_GROUND_Y = CAR_HALF_Y + 0.08;
 const GRAVITY = 44;
 const BOOST_MAX = 100;
+const BOOST_PAD_RADIUS_SMALL = 1.85;
+const BOOST_PAD_RADIUS_BIG = 2.65;
 // V38: slightly tighter boost economy. Everyone now starts with the same
 // amount and the tank drains a little faster, so kickoff/boost-pad decisions
 // matter more without making boost feel scarce.
@@ -352,7 +354,7 @@ function makeBoostPads(arena) {
     x: clamp(x, -arena.w / 2 + 5, arena.w / 2 - 5),
     z: clamp(z, -arena.l / 2 + 8, arena.l / 2 - 8),
     y: 0,
-    radius: amount >= 100 ? 3.15 : 2.35,
+    radius: amount >= 100 ? BOOST_PAD_RADIUS_BIG : BOOST_PAD_RADIUS_SMALL,
     amount,
     big: amount >= 100,
     active: true,
@@ -1250,7 +1252,8 @@ function updateBoostPads(state, dt) {
   if (!Array.isArray(state.boostPads)) state.boostPads = makeBoostPads(state.arena);
   for (const pad of state.boostPads) {
     pad.big = !!pad.big || (pad.amount || 0) >= 100;
-    pad.radius = pad.radius || (pad.big ? 3.15 : 2.35);
+    const defaultRadius = pad.big ? BOOST_PAD_RADIUS_BIG : BOOST_PAD_RADIUS_SMALL;
+    pad.radius = Math.min(Number(pad.radius) || defaultRadius, defaultRadius);
     pad.amount = pad.amount || (pad.big ? 100 : 36);
     pad.respawn = pad.respawn || (pad.big ? 10 : 5);
     if (!pad.active) {
@@ -1640,7 +1643,7 @@ export function compactState(state) {
       lastTouchImpulse: round(state.ball.lastTouchImpulse || 0)
     },
     boostPads: (state.boostPads || []).map(p => ({
-      id: p.id, x: round(p.x), z: round(p.z), y: round(p.y || 0), radius: round(p.radius || (p.big ? 3.15 : 2.35)),
+      id: p.id, x: round(p.x), z: round(p.z), y: round(p.y || 0), radius: round(p.radius || (p.big ? BOOST_PAD_RADIUS_BIG : BOOST_PAD_RADIUS_SMALL)),
       amount: p.amount || (p.big ? 100 : 36), big: !!p.big, active: p.active !== false, timer: round(p.timer || 0), respawn: p.respawn || (p.big ? 10 : 5)
     })),
     cars,
