@@ -4626,6 +4626,63 @@ function buildArena(state) {
     addCrowdPixels(side);
     // V28 performance: emissive end trims replace dynamic point lights.
   }
+
+  // Fill the long touchline sides too, so every arena feels surrounded by a
+  // complete bowl instead of only having detail behind the goals. These props
+  // sit outside the collision walls and intentionally do not affect pitch art.
+  function addSideStandCrowd(side) {
+    const palette = crowd.slice(0, 4);
+    const total = mobilePerf ? 44 : 116;
+    const perColor = Math.max(1, Math.floor(total / palette.length));
+    let seed = ((arena.w * 29 + arena.l * 37 + (side > 0 ? 719 : 421)) >>> 0) || 1;
+    const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const geo = new THREE.BoxGeometry(0.08, 0.34, 0.52);
+    const dummy = new THREE.Object3D();
+    for (let c = 0; c < palette.length; c++) {
+      const mat = new THREE.MeshBasicMaterial({ color: palette[c], transparent: true, opacity: mobilePerf ? 0.42 : 0.58 });
+      const inst = new THREE.InstancedMesh(geo, mat, perColor);
+      for (let i = 0; i < perColor; i++) {
+        const tier = Math.floor(rand() * 5);
+        const x = side * (arena.w / 2 + 7.4 + tier * 2.6 + rand() * 0.45);
+        const y = 4.45 + tier * 2.05 + rand() * 0.34;
+        const z = -arena.l / 2 - 5 + rand() * (arena.l + 10);
+        dummy.position.set(x, y, z);
+        dummy.scale.set(1, 0.78 + rand() * 0.9, 0.75 + rand() * 0.75);
+        dummy.updateMatrix();
+        inst.setMatrixAt(i, dummy.matrix);
+      }
+      inst.castShadow = false;
+      inst.receiveShadow = false;
+      world.add(inst);
+    }
+  }
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 5; i++) {
+      const stand = box(4, 2.0, arena.l + 18 + i * 4.2, side * (arena.w / 2 + 10 + i * 2.7), 3 + i * 2.05, 0, standsMat);
+      stand.rotation.z = -side * 0.08;
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, arena.l + 16 + i * 4.2), railMat);
+      rail.position.set(side * (arena.w / 2 + 8.0 + i * 2.7), 4.12 + i * 2.05, 0);
+      rail.castShadow = false;
+      rail.receiveShadow = false;
+      world.add(rail);
+      if (i > 0) {
+        const crowdMat = new THREE.MeshBasicMaterial({ color: crowd[(i + 2) % crowd.length], transparent: true, opacity: 0.36 });
+        const ribbon = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.45, arena.l + 12 + i * 4.2), crowdMat);
+        ribbon.position.set(side * (arena.w / 2 + 7.8 + i * 2.7), 4.34 + i * 2.05, 0);
+        world.add(ribbon);
+      }
+    }
+    const aisleCount = mobilePerf ? 5 : 7;
+    for (let i = 0; i < aisleCount; i++) {
+      const z = -arena.l / 2 + (i + 0.5) * (arena.l / aisleCount);
+      const aisle = box(1.05, 9.4, 0.48, side * (arena.w / 2 + 15.2), 7.6, z, stairMat);
+      aisle.rotation.z = -side * 0.08;
+      const portal = box(0.65, 1.2, 3.2, side * (arena.w / 2 + 5.8), 2.15, z, i % 2 ? trimOrange : trimBlue);
+      portal.castShadow = false;
+      portal.receiveShadow = false;
+    }
+    addSideStandCrowd(side);
+  }
   // V28 performance: no extra side point lights; ambient + sun + emissive props are cheaper.
 
   addExteriorProps();
