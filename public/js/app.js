@@ -4250,20 +4250,8 @@ function buildArena(state) {
     goalFloor.position.set(0, 0.052, midZ);
     world.add(goalFloor);
 
-    const backboard = new THREE.Mesh(
-      new THREE.PlaneGeometry(arena.goalW + 5.0, 4.2),
-      new THREE.MeshBasicMaterial({ color: frameHex, transparent: true, opacity: mobilePerf ? 0.10 : 0.15, depthWrite: false, side: THREE.DoubleSide })
-    );
-    backboard.position.set(0, arena.goalH + 2.15, goalLineZ + side * 0.08);
-    world.add(backboard);
-
-    const braceMat = new THREE.MeshBasicMaterial({ color: frameHex, transparent: true, opacity: mobilePerf ? 0.46 : 0.66 });
-    for (const sx of [-1, 1]) {
-      const brace = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, arena.goalD * 1.12), braceMat);
-      brace.position.set(sx * (halfW + 0.36), arena.goalH * 0.58, midZ);
-      brace.rotation.x = side * 0.44;
-      world.add(brace);
-    }
+    // Keep the goal mouth clear: decorative backboards/braces previously sat
+    // inside the posts and made the frame look cluttered during shots/replays.
   }
 
   function addExteriorProps() {
@@ -4310,21 +4298,14 @@ function buildArena(state) {
         propBox(Math.max(4.6, arena.w / adCount - 1.2), 1.35, 0.28, x, 1.0, side * (arena.l / 2 + 2.2), mat);
       }
     }
-    const endCount = mobilePerf ? 3 : 4;
-    for (const side of [-1, 1]) {
-      for (let i = 0; i < endCount; i++) {
-        const x = (i - (endCount - 1) / 2) * (arena.goalW / Math.max(1, endCount - 1));
-        const mat = side < 0 ? glowBlue : glowOrange;
-        propBox(4.2, 1.25, 0.28, x, 1.0, side * (arena.l / 2 + arena.goalD + 1.4), mat);
-      }
-    }
+    // No ad blocks behind the goal opening; keep those sightlines clean.
 
     // Goal-end stands and entry tunnels make the arena feel enclosed without affecting collisions.
     for (const side of [-1, 1]) {
       propBox((arena.w - arena.goalW) * 0.46, 3.0, 8.0, -arena.w * 0.34, 2.1, side * (arena.l / 2 + arena.goalD + 6), darkMat);
       propBox((arena.w - arena.goalW) * 0.46, 3.0, 8.0,  arena.w * 0.34, 2.1, side * (arena.l / 2 + arena.goalD + 6), darkMat);
-      propBox(arena.goalW * 0.62, 3.2, 5.2, 0, 2.2, side * (arena.l / 2 + arena.goalD + 7.5), steelMat);
-      propBox(arena.goalW * 0.45, 2.0, 0.42, 0, 3.15, side * (arena.l / 2 + arena.goalD + 4.8), side < 0 ? glowBlue : glowOrange);
+      propBox(arena.goalW * 0.78, 2.7, 4.6, 0, 2.0, side * (arena.l / 2 + arena.goalD + 9.5), steelMat);
+      propBox(arena.goalW * 0.62, 1.15, 0.38, 0, 3.65, side * (arena.l / 2 + arena.goalD + 7.4), side < 0 ? glowBlue : glowOrange);
     }
 
     const cornerXs = [-arena.w / 2 - 16, arena.w / 2 + 16];
@@ -4586,6 +4567,8 @@ function buildArena(state) {
   }
 
   const standsMat = new THREE.MeshStandardMaterial({ color: theme.stands ?? 0x111827, roughness: 0.9 });
+  const stairMat = new THREE.MeshStandardMaterial({ color: 0xdbeafe, emissive: theme.trim ?? 0xffffff, emissiveIntensity: mobilePerf ? 0.10 : 0.18, roughness: 0.48, metalness: 0.06 });
+  const railMat = new THREE.MeshBasicMaterial({ color: theme.trim ?? 0xffffff, transparent: true, opacity: mobilePerf ? 0.24 : 0.40 });
   const crowd = theme.crowd || [0x1f2937, 0x0f172a, 0x243b53];
   function addCrowdPixels(side) {
     const palette = crowd.slice(0, 4);
@@ -4619,12 +4602,26 @@ function buildArena(state) {
     for (let i = 0; i < 5; i++) {
       const stand = box(arena.w + 20 + i * 5, 2.2, 4, 0, 3 + i * 2.2, side * (arena.l / 2 + 10 + i * 3), standsMat);
       stand.rotation.x = side * 0.08;
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(arena.w + 18 + i * 5, 0.14, 0.12), railMat);
+      rail.position.set(0, 4.16 + i * 2.2, side * (arena.l / 2 + 8.0 + i * 3));
+      rail.castShadow = false;
+      rail.receiveShadow = false;
+      world.add(rail);
       if (i > 0) {
         const crowdMat = new THREE.MeshBasicMaterial({ color: crowd[i % crowd.length], transparent: true, opacity: 0.36 });
         const ribbon = new THREE.Mesh(new THREE.BoxGeometry(arena.w + 14 + i * 5, 0.45, 0.16), crowdMat);
         ribbon.position.set(0, 4.4 + i * 2.2, side * (arena.l / 2 + 7.8 + i * 3));
         world.add(ribbon);
       }
+    }
+    const aisleCount = mobilePerf ? 4 : 6;
+    for (let i = 0; i < aisleCount; i++) {
+      const x = -arena.w / 2 + (i + 0.5) * (arena.w / aisleCount);
+      const aisle = box(0.48, 10.0, 1.1, x, 7.8, side * (arena.l / 2 + 16.0), stairMat);
+      aisle.rotation.x = side * 0.08;
+      const portal = box(3.4, 1.2, 0.65, x, 2.15, side * (arena.l / 2 + 6.0), i % 2 ? trimOrange : trimBlue);
+      portal.castShadow = false;
+      portal.receiveShadow = false;
     }
     addCrowdPixels(side);
     // V28 performance: emissive end trims replace dynamic point lights.
@@ -4644,11 +4641,24 @@ function buildArena(state) {
     new THREE.EdgesGeometry(ballGeo),
     new THREE.LineBasicMaterial({ color: theme.accentC ?? 0xdbeafe, transparent: true, opacity: mobilePerf ? 0.18 : 0.28 })
   );
+  const footballLineMat = new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: mobilePerf ? 0.64 : 0.78, depthWrite: false });
+  const seamRadius = VISUAL_CONSTANTS.BALL_RADIUS * 1.015;
+  const seamTube = VISUAL_CONSTANTS.BALL_RADIUS * 0.010;
+  const addBallSeam = (rotX = 0, rotY = 0, rotZ = 0, scaleX = 1, scaleY = 1) => {
+    const seam = new THREE.Mesh(new THREE.TorusGeometry(seamRadius, seamTube, mobilePerf ? 6 : 8, mobilePerf ? 40 : 64), footballLineMat);
+    seam.rotation.set(rotX, rotY, rotZ);
+    seam.scale.set(scaleX, scaleY, 1);
+    ballMesh.add(seam);
+  };
   const ballAura = new THREE.Mesh(
     new THREE.SphereGeometry(VISUAL_CONSTANTS.BALL_RADIUS * 1.06, mobilePerf ? 16 : 24, mobilePerf ? 10 : 14),
     new THREE.MeshBasicMaterial({ color: theme.trim ?? 0xffffff, transparent: true, opacity: mobilePerf ? 0.035 : 0.055, depthWrite: false })
   );
   ballMesh.add(ballAura, ballCore, ballEdges);
+  addBallSeam(Math.PI / 2, 0, 0, 1.0, 1.0);
+  addBallSeam(0, Math.PI / 2, 0, 1.0, 1.0);
+  addBallSeam(Math.PI / 2, Math.PI / 4, 0, 0.64, 1.0);
+  addBallSeam(Math.PI / 2, -Math.PI / 4, 0, 0.64, 1.0);
   world.add(ballMesh);
 }
 
