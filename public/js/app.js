@@ -29,12 +29,12 @@ const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
   name: $("#player-name"), nameLabel: $("#player-name-label"), signedPlayerName: $("#signed-player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
   accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountSubtitle: $("#account-subtitle"), accountAuthFields: $("#account-auth-fields"), accountProfileFields: $("#account-profile-fields"), accountProfileName: $("#account-profile-name"), accountDisplayName: $("#account-display-name"), saveDisplayNameAccount: $("#save-display-name-account"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), accountNewPassword: $("#account-new-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), changePasswordAccount: $("#change-password-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), voiceTestPlayback: $("#voice-test-playback"), voiceTestStatus: $("#voice-test-status"), voiceSpeakerMode: $("#voice-speaker-mode"), voiceActivationMode: $("#voice-activation-mode"), voiceVolume: $("#voice-volume"), voiceVolumeValue: $("#voice-volume-value"), voiceInputDevice: $("#voice-input-device"), voiceOutputDevice: $("#voice-output-device"), refreshAudioDevices: $("#refresh-audio-devices"), audioDeviceStatus: $("#audio-device-status"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), voiceTestPlayback: $("#voice-test-playback"), voiceTestStatus: $("#voice-test-status"), voiceSpeakerMode: $("#voice-speaker-mode"), voiceActivationMode: $("#voice-activation-mode"), voiceVolume: $("#voice-volume"), voiceVolumeValue: $("#voice-volume-value"), voiceMicSensitivity: $("#voice-mic-sensitivity"), voiceMicSensitivityValue: $("#voice-mic-sensitivity-value"), voiceInputDevice: $("#voice-input-device"), voiceOutputDevice: $("#voice-output-device"), refreshAudioDevices: $("#refresh-audio-devices"), audioDeviceStatus: $("#audio-device-status"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), pauseMusicPrev: $("#pause-music-prev"), pauseMusicPlay: $("#pause-music-play"), pauseMusicNext: $("#pause-music-next"), pauseMusicTitle: $("#pause-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
   leaveLobby: $("#leave-lobby"), blueList: $("#blue-team-list"), orangeList: $("#orange-team-list"),
-  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), toggleVoice: $("#toggle-voice"), muteVoice: $("#mute-voice"), activeSpeakers: $("#active-speakers"), pauseOverlay: $("#pause-overlay"), pauseOpenSettings: $("#pause-open-settings"), pauseResume: $("#pause-resume"),
+  hud: $("#hud"), scoreBlue: $("#score-blue"), scoreOrange: $("#score-orange"), clock: $("#clock"), countdown: $("#round-countdown"), leaveGame: $("#leave-game"), pauseGame: $("#pause-game"), toggleChat: $("#toggle-chat"), toggleVoice: $("#toggle-voice"), muteVoice: $("#mute-voice"), activeSpeakers: $("#active-speakers"), pauseOverlay: $("#pause-overlay"), pauseOpenSettings: $("#pause-open-settings"), pauseResume: $("#pause-resume"), pauseLeave: $("#pause-leave"),
   boostLabel: $("#boost-label"), boostBox: $("#boost-container"), boostFill: $("#boost-fill"),
   controlsHint: $("#controls-hint"), camState: $("#cam-state"),
   mobile: $("#mobile-controls"), stickZone: $("#stick-zone"), stickKnob: $("#stick-knob"),
@@ -295,6 +295,7 @@ const DEFAULT_AUDIO_SETTINGS = {
   voiceSpeakerMode: "always",
   voiceActivationMode: "open",
   voiceVolume: 0.85,
+  voiceMicSensitivity: 0.45,
   voiceInputDeviceId: "",
   voiceOutputDeviceId: "",
   musicTrack: "shuffle",
@@ -340,6 +341,7 @@ function sanitiseAudioSettings(raw = {}) {
     voiceSpeakerMode,
     voiceActivationMode,
     voiceVolume: clamp(Number(raw.voiceVolume ?? DEFAULT_AUDIO_SETTINGS.voiceVolume), 0, 1),
+    voiceMicSensitivity: clamp(Number(raw.voiceMicSensitivity ?? DEFAULT_AUDIO_SETTINGS.voiceMicSensitivity), 0, 1),
     voiceInputDeviceId: typeof raw.voiceInputDeviceId === "string" ? raw.voiceInputDeviceId : "",
     voiceOutputDeviceId: typeof raw.voiceOutputDeviceId === "string" ? raw.voiceOutputDeviceId : "",
     musicTrack: track,
@@ -352,6 +354,19 @@ function enabledMusicKeys(settings = audioSettings) {
 }
 function firstEnabledMusicKey(settings = audioSettings) {
   return enabledMusicKeys(settings)[0] || "";
+}
+function sensitivityLabel(value) {
+  const n = clamp(Number(value), 0, 1);
+  if (n < 0.22) return "Low";
+  if (n < 0.42) return "Medium-low";
+  if (n < 0.62) return "Normal";
+  if (n < 0.82) return "High";
+  return "Very high";
+}
+function voiceTalkingThreshold(id = "local") {
+  const sensitivity = clamp(Number(audioSettings.voiceMicSensitivity ?? DEFAULT_AUDIO_SETTINGS.voiceMicSensitivity), 0, 1);
+  const base = id === "local" ? 0.052 : 0.045;
+  return clamp(base + (0.5 - sensitivity) * 0.075, 0.012, 0.11);
 }
 function loadAudioSettings() {
   try { return sanitiseAudioSettings(JSON.parse(localStorage.getItem("rlcss_audio_settings") || "{}") || {}); }
@@ -901,6 +916,8 @@ function renderSettingsUi() {
   if (ui.voiceActivationMode) ui.voiceActivationMode.value = audioSettings.voiceActivationMode || DEFAULT_AUDIO_SETTINGS.voiceActivationMode;
   if (ui.voiceVolume) ui.voiceVolume.value = String(audioSettings.voiceVolume ?? DEFAULT_AUDIO_SETTINGS.voiceVolume);
   if (ui.voiceVolumeValue) ui.voiceVolumeValue.textContent = `${Math.round((audioSettings.voiceVolume ?? DEFAULT_AUDIO_SETTINGS.voiceVolume) * 100)}%`;
+  if (ui.voiceMicSensitivity) ui.voiceMicSensitivity.value = String(audioSettings.voiceMicSensitivity ?? DEFAULT_AUDIO_SETTINGS.voiceMicSensitivity);
+  if (ui.voiceMicSensitivityValue) ui.voiceMicSensitivityValue.textContent = sensitivityLabel(audioSettings.voiceMicSensitivity ?? DEFAULT_AUDIO_SETTINGS.voiceMicSensitivity);
   if (ui.voiceInputDevice && ui.voiceInputDevice.options.length) ui.voiceInputDevice.value = audioSettings.voiceInputDeviceId || "";
   if (ui.voiceOutputDevice && ui.voiceOutputDevice.options.length) ui.voiceOutputDevice.value = audioSettings.voiceOutputDeviceId || "";
   renderActiveSpeakers();
@@ -933,6 +950,9 @@ function renderSettingsUi() {
   if (ui.controllerPanSensitivityValue) ui.controllerPanSensitivityValue.textContent = `${Number(controllerSettings.panSensitivity ?? DEFAULT_CONTROLLER.panSensitivity).toFixed(2)}x`;
   const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
   const pad = pads[0] || null;
+  if (ui.controllerStatus) ui.controllerStatus.textContent = pad
+    ? `${pad.id || "Controller"} detected. Configure controls below.`
+    : "No controller detected yet. Press any controller button once to wake it up.";
   if (ui.controllerSettingsSection) ui.controllerSettingsSection.classList.toggle("no-controller", !pad);
   if (ui.controllerOptions) ui.controllerOptions.hidden = !pad;
   if (ui.controllerWaitCard) ui.controllerWaitCard.hidden = !!pad;
@@ -1850,21 +1870,28 @@ function updateGameVisibility() {
   }
   ui.hud.classList.toggle("hidden", !running);
   ui.leaveGame.classList.toggle("hidden", !running);
+  if (ui.leaveGame) { ui.leaveGame.textContent = "↩"; ui.leaveGame.title = "Leave match"; ui.leaveGame.setAttribute("aria-label", "Leave match"); }
   const isHostPlayer = running && (isSinglePlayer || currentMeta?.hostId === activePlayerId());
   if (ui.pauseGame) {
     ui.pauseGame.classList.toggle("hidden", !isHostPlayer);
-    ui.pauseGame.textContent = currentMeta?.paused ? "Resume" : "Pause";
+    ui.pauseGame.textContent = currentMeta?.paused ? "▶" : "⏸";
+    ui.pauseGame.title = currentMeta?.paused ? "Resume match" : "Pause match";
+    ui.pauseGame.setAttribute("aria-label", currentMeta?.paused ? "Resume match" : "Pause match");
   }
   if (ui.pauseOverlay) ui.pauseOverlay.classList.toggle("hidden", !running || !currentMeta?.paused);
   if (ui.pauseResume) ui.pauseResume.classList.toggle("hidden", !isHostPlayer);
   if (ui.pauseOpenSettings) ui.pauseOpenSettings.classList.toggle("hidden", !running || !currentMeta?.paused);
-  if (running && !chatOpenPreferenceSet && !isPhonePortrait()) chatOpen = true;
+  const lobbyChatActive = !!(lobbyCode && currentMeta && !isSinglePlayer && (currentMeta.status === "waiting" || currentMeta.status === "running"));
+  document.body.classList.toggle("lobby-chat-enabled", lobbyChatActive);
+  if (lobbyChatActive && !chatOpenPreferenceSet && !isPhonePortrait()) chatOpen = true;
   if (ui.toggleChat) {
-    ui.toggleChat.classList.toggle("hidden", !running);
-    ui.toggleChat.textContent = chatOpen ? "Hide Chat" : "Chat";
+    ui.toggleChat.classList.toggle("hidden", !lobbyChatActive);
+    ui.toggleChat.textContent = chatOpen ? "💬" : "💬";
+    ui.toggleChat.dataset.label = chatOpen ? "Hide chat" : "Open chat";
     ui.toggleChat.setAttribute("aria-expanded", chatOpen ? "true" : "false");
+    ui.toggleChat.title = "Toggle lobby/team chat (T)";
   }
-  if (ui.chatPanel) ui.chatPanel.classList.toggle("hidden", !running || !chatOpen);
+  if (ui.chatPanel) ui.chatPanel.classList.toggle("hidden", !lobbyChatActive || !chatOpen);
   updateVoiceUi();
   ui.boostLabel.classList.toggle("hidden", !running);
   ui.boostBox.classList.toggle("hidden", !running);
@@ -1957,6 +1984,7 @@ async function leaveToMenu(message = "") {
   if (ui.pauseGame) ui.pauseGame.classList.add("hidden");
   if (ui.pauseOverlay) ui.pauseOverlay.classList.add("hidden");
   if (ui.chatPanel) ui.chatPanel.classList.add("hidden");
+  document.body.classList.remove("lobby-chat-enabled");
   if (ui.toggleChat) ui.toggleChat.classList.add("hidden");
   if (ui.toggleVoice) ui.toggleVoice.classList.add("hidden");
   if (ui.muteVoice) ui.muteVoice.classList.add("hidden");
@@ -2415,9 +2443,19 @@ function voiceDisplayFor(id) {
 }
 
 function renderActiveSpeakers() {
+  const localInfo = voiceActive ? (voiceTalkers.local || { talking: false, level: 0 }) : null;
+  const localLevel = clamp(Number(localInfo?.level || 0), 0, 0.35);
+  const localPercentRaw = Math.round(clamp(localLevel / 0.18, 0, 1) * 100);
+  const localTalking = !!(localInfo?.talking && voiceActive && !voiceMuted && (!isPushToTalkMode() || isVoicePttHeld()));
+  if (ui.muteVoice) {
+    ui.muteVoice.style.setProperty("--voice-level", `${localPercentRaw}%`);
+    ui.muteVoice.classList.toggle("voice-input-detected", localPercentRaw > 8);
+    ui.muteVoice.classList.toggle("voice-local-talking", localTalking);
+    if (voiceActive) ui.muteVoice.dataset.level = `${localPercentRaw}%`;
+    else delete ui.muteVoice.dataset.level;
+  }
   if (!ui.activeSpeakers) return;
   const entries = Object.entries(voiceTalkers || {});
-  const localInfo = voiceActive ? (voiceTalkers.local || { talking: false, level: 0 }) : null;
   const talkers = entries
     .filter(([, info]) => info && info.talking)
     .map(([id, info]) => ({ id, ...voiceDisplayFor(id), level: info.level || 0 }))
@@ -2432,8 +2470,8 @@ function renderActiveSpeakers() {
     ui.activeSpeakers.innerHTML = "";
     return;
   }
-  const localLevel = clamp(Number(localInfo?.level || 0), 0, 0.28);
-  const localPercent = Math.round((localLevel / 0.28) * 100);
+  const localOverlayLevel = clamp(Number(localInfo?.level || 0), 0, 0.28);
+  const localPercent = Math.round((localOverlayLevel / 0.28) * 100);
   const transmitting = voiceActive && !voiceMuted && (!isPushToTalkMode() || isVoicePttHeld());
   ui.activeSpeakers.innerHTML = `
     <div class="active-speakers-title">Voice ${transmitting ? "live" : "monitor"}</div>
@@ -2495,7 +2533,7 @@ function ensureVoiceActivityLoop() {
         sum += v * v;
       }
       const level = Math.sqrt(sum / Math.max(1, item.data.length));
-      const threshold = id === "local" ? 0.06 : 0.045;
+      const threshold = voiceTalkingThreshold(id);
       const previous = voiceTalkers[id] || { talking: false, level: 0 };
       const talking = level > threshold;
       if (previous.talking !== talking || Math.abs((previous.level || 0) - level) > 0.02) changed = true;
@@ -2594,6 +2632,7 @@ function updateVoiceTransmitState() {
   const shouldTransmit = voiceActive && !voiceMuted && (!isPushToTalkMode() || isVoicePttHeld());
   if (voiceLocalStream) voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = shouldTransmit; });
   updateVoiceUi();
+  if (voiceActive) publishVoicePresence();
 }
 
 function setVoicePttHeld(source, held) {
@@ -2673,7 +2712,8 @@ function updateVoiceUi() {
     ui.toggleVoice.disabled = !runningOnline || disabledByHost || voiceConnecting;
     ui.toggleVoice.setAttribute("aria-pressed", voiceActive ? "true" : "false");
     const count = Math.max(0, voicePeers.size);
-    ui.toggleVoice.textContent = voiceActive ? `Voice ${voiceScopeLabel()} ${count ? count + 1 : 1}` : "Voice";
+    ui.toggleVoice.textContent = voiceActive ? "🔊" : "🎙";
+    ui.toggleVoice.dataset.label = voiceActive ? `Voice on · ${voiceScopeLabel()} · ${count ? count + 1 : 1}` : "Join voice";
     ui.toggleVoice.title = disabledByHost ? "Voice chat disabled by host" : "Join/leave voice chat (V). Works in lobbies and matches.";
   }
   if (ui.muteVoice) {
@@ -2683,7 +2723,8 @@ function updateVoiceUi() {
     ui.muteVoice.classList.toggle("voice-muted", voiceMuted || (pushMode && !isVoicePttHeld()));
     ui.muteVoice.classList.toggle("voice-talking", transmitting);
     ui.muteVoice.setAttribute("aria-pressed", transmitting ? "true" : "false");
-    ui.muteVoice.textContent = pushMode ? (transmitting ? "Talking" : "Hold Mic") : (voiceMuted ? "Mic Off" : "Mic On");
+    ui.muteVoice.textContent = pushMode ? (transmitting ? "🟢" : "🎤") : (voiceMuted ? "🔇" : "🎤");
+    ui.muteVoice.dataset.label = pushMode ? (transmitting ? "Talking" : "Hold to talk") : (voiceMuted ? "Mic muted" : "Mic on");
     ui.muteVoice.title = pushMode ? "Hold to talk. Uses your Mic / push-to-talk keyboard or controller binding too." : "Mute/unmute microphone (M)";
   }
   if (disabledByHost && voiceActive) stopVoice(true);
@@ -2758,6 +2799,22 @@ function reconcileVoicePeers() {
   }
 }
 
+async function requestVoiceStreamWithFallback() {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: selectedAudioInputConstraint(), video: false });
+  } catch (err) {
+    const namedDeviceFailed = !!audioSettings.voiceInputDeviceId && ["NotFoundError", "OverconstrainedError", "ConstraintNotSatisfiedError"].includes(err?.name);
+    if (!namedDeviceFailed) throw err;
+    audioSettings.voiceInputDeviceId = "";
+    renderSettingsInputs();
+    commitAudioSettings({ play: false });
+    return await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false
+    });
+  }
+}
+
 async function startVoice() {
   if (voiceActive || voiceConnecting) return;
   if (!canUseVoice()) {
@@ -2765,23 +2822,22 @@ async function startVoice() {
     return;
   }
   voiceConnecting = true;
+  setStatus("Requesting microphone permission… allow access in your browser popup.");
   updateVoiceUi();
   try {
-    voiceLocalStream = await navigator.mediaDevices.getUserMedia({
-      audio: selectedAudioInputConstraint(),
-      video: false
-    });
+    voiceLocalStream = await requestVoiceStreamWithFallback();
     voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = false; });
     attachVoiceAnalyser("local", voiceLocalStream);
+    refreshAudioDevices({ requestPermission: false }).catch(() => {});
     voiceActive = true;
     updateVoiceTransmitState();
     setupVoiceSubscriptions();
     await publishVoicePresence();
     reconcileVoicePeers();
-    setStatus(`Voice chat joined (${voiceScopeLabel()}).`);
+    setStatus(`Voice chat joined (${voiceScopeLabel()}). Speak now — your local meter should move in the voice overlay.`);
   } catch (err) {
     console.error(err);
-    setStatus(`Voice chat failed: ${err.message || err}. Check browser mic permission and HTTPS.`);
+    setStatus(`Voice chat failed: ${err.message || err}. Tap Voice again and allow microphone permission in the browser. HTTPS is required.`);
     stopLocalVoiceTracks();
   } finally {
     voiceConnecting = false;
@@ -3095,6 +3151,12 @@ if (ui.voiceVolume) ui.voiceVolume.addEventListener("input", () => {
   if (ui.voiceVolumeValue) ui.voiceVolumeValue.textContent = `${Math.round(audioSettings.voiceVolume * 100)}%`;
   commitAudioSettings({ play: false });
 });
+if (ui.voiceMicSensitivity) ui.voiceMicSensitivity.addEventListener("input", () => {
+  audioSettings.voiceMicSensitivity = clamp(Number(ui.voiceMicSensitivity.value), 0, 1);
+  if (ui.voiceMicSensitivityValue) ui.voiceMicSensitivityValue.textContent = sensitivityLabel(audioSettings.voiceMicSensitivity);
+  commitAudioSettings({ play: false });
+  renderActiveSpeakers();
+});
 if (ui.voiceSpeakerMode) ui.voiceSpeakerMode.addEventListener("change", () => {
   audioSettings.voiceSpeakerMode = ui.voiceSpeakerMode.value;
   commitAudioSettings({ play: false });
@@ -3149,6 +3211,9 @@ if (ui.menuMusicToggle) ui.menuMusicToggle.addEventListener("click", () => Music
 if (ui.menuMusicPrev) ui.menuMusicPrev.addEventListener("click", () => { SFX.resume(); Music.previous(); });
 if (ui.menuMusicNext) ui.menuMusicNext.addEventListener("click", () => { SFX.resume(); Music.next(false); });
 if (ui.menuMusicPlay) ui.menuMusicPlay.addEventListener("click", () => { SFX.resume(); Music.togglePreview(); });
+if (ui.pauseMusicPrev) ui.pauseMusicPrev.addEventListener("click", () => { SFX.resume(); Music.previous(); });
+if (ui.pauseMusicNext) ui.pauseMusicNext.addEventListener("click", () => { SFX.resume(); Music.next(false); });
+if (ui.pauseMusicPlay) ui.pauseMusicPlay.addEventListener("click", () => { SFX.resume(); Music.togglePreview(); });
 if (ui.controllerEnabled) ui.controllerEnabled.addEventListener("change", () => {
   controllerSettings.enabled = !!ui.controllerEnabled.checked;
   saveControllerSettings();
@@ -3183,6 +3248,7 @@ ui.leaveLobby.addEventListener("click", safeUi(() => leaveToMenu("Left lobby."),
 ui.leaveGame.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
 if (ui.pauseGame) ui.pauseGame.addEventListener("click", safeUi(togglePause, "Toggle pause"));
 if (ui.pauseResume) ui.pauseResume.addEventListener("click", safeUi(togglePause, "Resume match"));
+if (ui.pauseLeave) ui.pauseLeave.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
 if (ui.pauseOpenSettings) ui.pauseOpenSettings.addEventListener("click", () => openSettingsPanel(true));
 if (ui.toggleChat) ui.toggleChat.addEventListener("click", safeUi(toggleChatOpen, "Toggle chat"));
 if (ui.toggleVoice) ui.toggleVoice.addEventListener("click", safeUi(toggleVoice, "Toggle voice"));

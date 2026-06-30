@@ -19,19 +19,29 @@
 
   <div id="round-countdown" class="round-countdown hidden" aria-live="polite">5</div>
 
-  <button id="leave-game" class="floating-btn hidden" type="button">Leave</button>
-  <button id="pause-game" class="floating-btn pause-btn hidden" type="button">Pause</button>
-  <button id="toggle-chat" class="floating-btn chat-toggle hidden" type="button" aria-expanded="false" aria-controls="chat-panel" title="Toggle chat (T)">Chat</button>
-  <button id="toggle-voice" class="floating-btn voice-toggle hidden" type="button" aria-pressed="false" title="Join/leave voice chat (V)">Voice</button>
-  <button id="mute-voice" class="floating-btn voice-mute hidden" type="button" aria-pressed="false" title="Mute/unmute microphone (M)">Mic</button>
+  <button id="leave-game" class="floating-btn hidden" type="button" aria-label="Leave match" title="Leave match">↩</button>
+  <button id="pause-game" class="floating-btn pause-btn hidden" type="button" aria-label="Pause match" title="Pause match">⏸</button>
+  <button id="toggle-chat" class="floating-btn chat-toggle hidden" type="button" aria-expanded="false" aria-controls="chat-panel" aria-label="Toggle chat" title="Toggle chat (T)">💬</button>
+  <button id="toggle-voice" class="floating-btn voice-toggle hidden" type="button" aria-pressed="false" aria-label="Toggle voice chat" title="Join/leave voice chat (V)">🎙</button>
+  <button id="mute-voice" class="floating-btn voice-mute hidden" type="button" aria-pressed="false" aria-label="Microphone mute / push-to-talk" title="Mute/unmute microphone (M)">🎤</button>
   <div id="active-speakers" class="active-speakers hidden" aria-live="polite" aria-label="Active voice speakers"></div>
   <div id="pause-overlay" class="pause-overlay hidden" role="dialog" aria-live="polite" aria-label="Paused">
     <div class="pause-card">
       <div class="pause-title">PAUSED</div>
-      <p class="pause-copy">Open settings without leaving the match.</p>
+      <p class="pause-copy">Take a quick break, adjust settings, music, or leave the match.</p>
+      <div class="pause-music-player" aria-label="Paused music controls">
+        <button id="pause-music-prev" class="music-control-btn" type="button" title="Restart / previous song">⏮</button>
+        <button id="pause-music-play" class="music-control-btn" type="button" title="Play / pause music">▶</button>
+        <div class="pause-music-copy">
+          <span>Now playing</span>
+          <strong id="pause-music-title">Music disabled</strong>
+        </div>
+        <button id="pause-music-next" class="music-control-btn" type="button" title="Next song">⏭</button>
+      </div>
       <div class="pause-actions">
-        <button id="pause-open-settings" type="button" class="secondary">Settings</button>
-        <button id="pause-resume" type="button" class="primary">Resume</button>
+        <button id="pause-open-settings" type="button" class="secondary">⚙ Settings</button>
+        <button id="pause-resume" type="button" class="primary">▶ Resume</button>
+        <button id="pause-leave" type="button" class="secondary danger-action">↩ Leave</button>
       </div>
     </div>
   </div>
@@ -60,7 +70,7 @@
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V41 Voice/Profile Patch</div>
+      <div class="menu-kicker">V42 Lobby Voice/Chat Polish</div>
       <h1>RLCSS</h1>
       <p class="menu-subtitle">Rocket-style car football with richer arenas, voice/text chat, leaderboards, custom matches and full desktop controller support, AI music, menu music controls, and audio settings.</p>
       <div class="ai-music-badge" aria-label="AI music notice">♫ AI-generated soundtrack included</div>
@@ -241,6 +251,12 @@
                 <input id="voice-volume" type="range" min="0" max="1" step="0.01" />
                 <span id="voice-volume-value" class="setting-value">85%</span>
               </label>
+              <label class="range-label">
+                Mic sensitivity
+                <input id="voice-mic-sensitivity" type="range" min="0" max="1" step="0.01" />
+                <span id="voice-mic-sensitivity-value" class="setting-value">Normal</span>
+              </label>
+              <p class="hint">Increase sensitivity if the talking indicator does not move; lower it if background noise triggers voice.</p>
               <label>
                 Active speaker overlay (PC only)
                 <select id="voice-speaker-mode">
@@ -326,10 +342,10 @@
       <div class="settings-pane" data-settings-pane="controller" role="tabpanel" hidden>
         <div id="controller-settings-section" class="settings-section controller-settings-section">
           <h3>Controller</h3>
-          <p id="controller-status" class="hint">Connect a controller, then use the left stick to drive and the right stick to pan the camera. Use Detect to move a button/axis instead of picking it manually.</p>
+          <p id="controller-status" class="hint">PC controller support is ready once your browser sees a controller.</p>
           <div id="controller-wait-card" class="controller-wait-card" aria-live="polite">
             <strong>No controller detected</strong>
-            <span>Plug in or pair a controller, then press any button on it. This screen will unlock the controller options automatically.</span>
+            <span>Press any controller button once to wake it up. Options appear here after detection.</span>
           </div>
           <div id="controller-options" class="controller-options">
             <label class="toggle-label"><input id="controller-enabled" type="checkbox" /> Enable desktop controller support</label>

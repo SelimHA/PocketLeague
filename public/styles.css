@@ -2013,3 +2013,268 @@ body.music-loading .menu-music-panel {
   .signed-player-name strong { font-size: 18px; }
   .account-profile-fields #save-display-name-account { width: 100%; }
 }
+
+/* V42: lobby chat/voice, compact top controls, mic sensitivity and pause/controller polish */
+body.lobby-chat-enabled .chat-panel:not(.hidden) {
+  display: grid !important;
+}
+body.lobby-chat-enabled:not(.game-running) .chat-panel {
+  left: auto;
+  right: 18px;
+  bottom: 18px;
+  width: min(390px, calc(100vw - 36px));
+  max-height: min(46vh, 360px);
+  z-index: 42;
+}
+body.lobby-chat-enabled:not(.game-running) .chat-toggle,
+body.lobby-chat-enabled:not(.game-running) .voice-toggle,
+body.lobby-chat-enabled:not(.game-running) .voice-mute {
+  display: grid;
+}
+.floating-btn {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  font-size: 18px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+#toggle-chat,
+#toggle-voice,
+#mute-voice {
+  top: max(14px, env(safe-area-inset-top));
+  right: auto;
+  left: max(14px, env(safe-area-inset-left));
+  z-index: 45;
+}
+#toggle-voice { left: calc(max(14px, env(safe-area-inset-left)) + 50px); }
+#mute-voice { left: calc(max(14px, env(safe-area-inset-left)) + 100px); }
+#leave-game,
+#pause-game {
+  top: max(14px, env(safe-area-inset-top));
+  left: auto;
+  z-index: 45;
+}
+#leave-game { right: max(14px, env(safe-area-inset-right)); }
+#pause-game { right: calc(max(14px, env(safe-area-inset-right)) + 50px); }
+#toggle-chat::after,
+#toggle-voice::after,
+#mute-voice::after {
+  content: attr(data-label);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 5px);
+  transform: translateX(-50%);
+  max-width: 110px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: rgba(255,255,255,.72);
+  background: rgba(0,0,0,.42);
+  font-size: 9px;
+  font-weight: 900;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .14s ease;
+}
+#toggle-chat:hover::after,
+#toggle-voice:hover::after,
+#mute-voice:hover::after,
+body.using-controller #toggle-chat:focus-visible::after,
+body.using-controller #toggle-voice:focus-visible::after,
+body.using-controller #mute-voice:focus-visible::after { opacity: 1; }
+.pause-overlay {
+  width: min(460px, calc(100vw - 28px));
+}
+.pause-card {
+  min-width: 0;
+  width: 100%;
+  padding: 22px;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(18,185,255,.18), transparent 34%),
+    radial-gradient(circle at 85% 88%, rgba(255,122,24,.16), transparent 36%),
+    rgba(5, 7, 13, .88);
+}
+.pause-title { font-size: clamp(38px, 7vw, 76px); }
+.pause-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.pause-actions button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 11px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.danger-action {
+  color: #fff;
+  background: rgba(255,90,90,.18);
+  border-color: rgba(255,130,130,.34);
+}
+.audio-subsection .hint {
+  margin-top: -4px;
+}
+.controller-wait-card {
+  text-align: center;
+}
+.controller-wait-card strong::before {
+  content: '🎮 ';
+}
+.controller-wait-card span {
+  max-width: 520px;
+  margin: 0 auto;
+}
+@media (pointer: coarse) and (orientation: portrait), (max-width: 720px) {
+  .floating-btn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    font-size: 15px;
+    opacity: .92;
+  }
+  #toggle-chat,
+  #toggle-voice,
+  #mute-voice,
+  #pause-game,
+  #leave-game {
+    top: max(6px, env(safe-area-inset-top));
+    bottom: auto;
+  }
+  #toggle-chat { left: max(7px, env(safe-area-inset-left)); }
+  #toggle-voice { left: calc(max(7px, env(safe-area-inset-left)) + 39px); }
+  #mute-voice { left: calc(max(7px, env(safe-area-inset-left)) + 78px); }
+  #leave-game { right: max(7px, env(safe-area-inset-right)); }
+  #pause-game { right: calc(max(7px, env(safe-area-inset-right)) + 39px); }
+  #toggle-chat::after,
+  #toggle-voice::after,
+  #mute-voice::after { display: none; }
+  body.lobby-chat-enabled:not(.game-running) .chat-panel,
+  body.lobby-chat-enabled.game-running .chat-panel,
+  .chat-panel {
+    left: 8px;
+    right: 8px;
+    bottom: calc(34svh + 8px);
+    width: auto;
+    max-height: min(32svh, 250px);
+  }
+  body.lobby-chat-enabled:not(.game-running) .chat-panel {
+    bottom: max(8px, env(safe-area-inset-bottom));
+    max-height: min(46vh, 340px);
+  }
+  .chat-head strong { font-size: 11px; }
+  .chat-tab, .chat-mini-btn, .chat-form button { padding: 6px 8px; font-size: 10px; }
+  .pause-overlay {
+    top: 34%;
+    width: min(96vw, 430px);
+  }
+  .pause-card {
+    padding: 16px;
+    border-radius: 20px;
+  }
+  .pause-title { font-size: clamp(34px, 12vw, 58px); }
+  .pause-copy { font-size: 12px; margin-bottom: 12px; }
+  .pause-actions {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .pause-actions button {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
+
+/* V42 final polish: pause music controls, non-overlapping phone top buttons, local mic activity */
+.pause-music-player {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 16px;
+  padding: 9px 10px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.075);
+  border: 1px solid rgba(255,255,255,.13);
+}
+.pause-music-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+.pause-music-copy span {
+  color: rgba(255,255,255,.58);
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  font-weight: 900;
+}
+.pause-music-copy strong {
+  color: rgba(255,255,255,.94);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+#mute-voice.voice-input-detected::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 4px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(82,255,207,.95) var(--voice-level, 0%), rgba(255,255,255,.18) var(--voice-level, 0%));
+  pointer-events: none;
+}
+#mute-voice.voice-local-talking {
+  border-color: rgba(82,255,207,.62);
+  box-shadow: 0 0 18px rgba(82,255,207,.22), 0 8px 22px rgba(0,0,0,.30);
+}
+#mute-voice[data-level]::after {
+  content: attr(data-label) ' · ' attr(data-level);
+}
+body.lobby-chat-enabled:not(.game-running) #toggle-chat,
+body.lobby-chat-enabled:not(.game-running) #toggle-voice,
+body.lobby-chat-enabled:not(.game-running) #mute-voice {
+  z-index: 130;
+}
+
+@media (pointer: coarse) and (orientation: portrait), (max-width: 720px) {
+  body.lobby-chat-enabled:not(.game-running) .menu-music-dock {
+    top: calc(max(7px, env(safe-area-inset-top)) + 42px);
+  }
+  body.lobby-chat-enabled:not(.game-running).music-dock-open .menu-music-panel {
+    max-width: min(92vw, 360px);
+  }
+  .pause-music-player {
+    grid-template-columns: auto auto 1fr auto;
+    gap: 6px;
+    margin: 10px 0 12px;
+    padding: 8px;
+    border-radius: 16px;
+  }
+  .pause-music-player .music-control-btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+  }
+  .pause-music-copy span { font-size: 8px; }
+  .pause-music-copy strong { font-size: 11px; max-width: 180px; }
+}
+
+@media (max-width: 380px) {
+  .pause-music-copy strong { max-width: 130px; }
+  .pause-actions button { font-size: 12px; }
+}
