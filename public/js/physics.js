@@ -649,10 +649,10 @@ function aiSkill(meta) {
   // deliberately hesitates and over-commits sometimes; Pro rotates and saves;
   // All-Star anticipates touches and chooses boost/aerials much more reliably.
   return d === "rookie"
-    ? { think: 0.24, aim: 0.70, speed: 0.78, boost: 0.38, jump: 0.34, error: 7.4, read: 0.38, rotation: 0.46, challenge: 0.62, patience: 0.38, aerial: 0.18, save: 0.56, mistake: 0.28, kickoff: 0.42, intercept: 0.44, discipline: 0.48, shot: 0.55, fake: 0.10 }
+    ? { think: 0.24, aim: 0.70, speed: 0.78, boost: 0.38, jump: 0.34, error: 7.4, read: 0.38, rotation: 0.46, challenge: 0.62, patience: 0.38, aerial: 0.18, save: 0.56, mistake: 0.28, kickoff: 0.42, intercept: 0.44, discipline: 0.48, shot: 0.55, fake: 0.10, recovery: 0.44, wallRead: 0.42 }
     : d === "allstar"
-      ? { think: 0.040, aim: 1.30, speed: 1.16, boost: 1.12, jump: 0.96, error: 0.72, read: 1.20, rotation: 1.26, challenge: 1.14, patience: 1.05, aerial: 0.92, save: 1.22, mistake: 0.035, kickoff: 0.99, intercept: 1.28, discipline: 1.28, shot: 1.24, fake: 0.42 }
-      : { think: 0.085, aim: 1.03, speed: 1.02, boost: 0.88, jump: 0.68, error: 2.55, read: 0.80, rotation: 0.90, challenge: 0.90, patience: 0.74, aerial: 0.58, save: 0.90, mistake: 0.12, kickoff: 0.93, intercept: 0.86, discipline: 0.88, shot: 0.88, fake: 0.24 };
+      ? { think: 0.040, aim: 1.30, speed: 1.16, boost: 1.12, jump: 0.96, error: 0.72, read: 1.20, rotation: 1.26, challenge: 1.14, patience: 1.05, aerial: 0.92, save: 1.22, mistake: 0.035, kickoff: 0.99, intercept: 1.28, discipline: 1.28, shot: 1.24, fake: 0.42, recovery: 1.24, wallRead: 1.22 }
+      : { think: 0.085, aim: 1.03, speed: 1.02, boost: 0.88, jump: 0.68, error: 2.55, read: 0.80, rotation: 0.90, challenge: 0.90, patience: 0.74, aerial: 0.58, save: 0.90, mistake: 0.12, kickoff: 0.93, intercept: 0.86, discipline: 0.88, shot: 0.88, fake: 0.24, recovery: 0.86, wallRead: 0.82 };
 }
 
 function styleConfig(meta) {
@@ -808,7 +808,7 @@ function selectAiIntercept(car, state, skill, danger01, roleCfg) {
     const behindBonus = carBehindBallForTeam(car, p, car.team) ? -0.18 * roleCfg.attack : 0.18 * roleCfg.discipline;
     const defenceBias = ownSign * p.z > state.arena.l * 0.12 ? -0.18 * roleCfg.defence * danger01 : 0;
     const attackBias = enemySign * p.z > state.arena.l * 0.12 ? -0.12 * roleCfg.attack : 0;
-    const wallPenalty = Math.abs(p.x) > state.arena.w * 0.43 ? 0.10 * (1.25 - skill.aim) : 0;
+    const wallPenalty = Math.abs(p.x) > state.arena.w * 0.43 ? 0.12 * (1.35 - (skill.wallRead || skill.aim)) : 0;
     const score = eta + timing + heightPenalty + behindBonus + defenceBias + attackBias + wallPenalty;
     if (!best || score < best.score) best = { point: p, time: t, eta, score };
   }
@@ -936,6 +936,73 @@ function setAiDebug(car, intent, tx, tz) {
   car.aiTargetZ = tz;
 }
 
+function wallPressure(car, state, margin = 8.5) {
+  const halfW = state.arena.w / 2;
+  const halfL = state.arena.l / 2;
+  const px = clamp((halfW - Math.abs(car.x)) / margin, 0, 1);
+  const pz = clamp((halfL - Math.abs(car.z)) / margin, 0, 1);
+  const nearSide = px < 1;
+  const nearBack = pz < 1;
+  return {
+    near: nearSide || nearBack,
+    side: nearSide ? Math.sign(car.x || 1) : 0,
+    back: nearBack ? Math.sign(car.z || 1) : 0,
+    amount: Math.max(nearSide ? 1 - px : 0, nearBack ? 1 - pz : 0),
+    corner: nearSide && nearBack
+  };
+}
+
+function escapeTargetFromWall(car, state, pressure) {
+  const awayX = pressure.side ? -pressure.side * 18 : -Math.sign(car.x || 1) * 5;
+  const awayZ = pressure.back ? -pressure.back * 20 : (state.ball.z - car.z) * 0.25;
+  return {
+    x: clamp(car.x + awayX, -state.arena.w / 2 + 12, state.arena.w / 2 - 12),
+    z: clamp(car.z + awayZ, -state.arena.l / 2 + 12, state.arena.l / 2 - 12)
+  };
+}
+
+function updateAiRecovery(car, state, target, intent, skill) {
+  const speed = carSpeed2(car);
+  const pressure = wallPressure(car, state);
+  const grounded = car.grounded && Math.abs(car.y - CAR_GROUND_Y) < 1.25;
+  const dx = target.x - car.x;
+  const dz = target.z - car.z;
+  const dist = Math.hypot(dx, dz);
+  const fwd = fwdFromYaw(car.yaw || 0);
+  const frontDot = dist > 0.001 ? (dx * fwd.x + dz * fwd.z) / dist : 1;
+  const facingWall = pressure.near && (
+    (pressure.side && pressure.side * fwd.x > 0.50) ||
+    (pressure.back && pressure.back * fwd.z > 0.50)
+  );
+  const pinned = grounded && pressure.near && speed < 3.2 && (facingWall || pressure.corner || frontDot < -0.55);
+  const blocked = grounded && speed < 2.2 && dist > 9 && Math.abs(frontDot) < 0.22;
+  const urgent = intent === "save" || intent === "kickoff";
+  if (!urgent && (pinned || blocked)) {
+    car.aiStuckTicks = (car.aiStuckTicks || 0) + 1;
+  } else if (speed > 6 || !grounded || urgent) {
+    car.aiStuckTicks = Math.max(0, (car.aiStuckTicks || 0) - 4);
+  } else {
+    car.aiStuckTicks = Math.max(0, (car.aiStuckTicks || 0) - 1);
+  }
+
+  if (car.aiRecoveryUntil && state.tick < car.aiRecoveryUntil) {
+    return { active: true, pressure, escape: escapeTargetFromWall(car, state, pressure), reverse: !!car.aiRecoveryReverse };
+  }
+  car.aiRecoveryUntil = 0;
+  car.aiRecoveryReverse = false;
+
+  const threshold = Math.round(30 - clamp(skill.recovery || 0.8, 0.35, 1.35) * 11);
+  if (!urgent && car.aiStuckTicks > threshold) {
+    const reverse = facingWall || pressure.corner || frontDot < -0.42;
+    car.aiRecoveryUntil = state.tick + Math.round((reverse ? 0.52 : 0.36) * 120);
+    car.aiRecoveryReverse = reverse;
+    car.aiPlan = null;
+    car.aiNextThinkTick = 0;
+    return { active: true, pressure, escape: escapeTargetFromWall(car, state, pressure), reverse };
+  }
+  return { active: false, pressure, escape: null, reverse: false };
+}
+
 function makeDriveInput(car, target, state, skill, intent, opts = {}) {
   const dx = target.x - car.x;
   const dz = target.z - car.z;
@@ -947,12 +1014,14 @@ function makeDriveInput(car, target, state, skill, intent, opts = {}) {
   const aimPower = 1.55 + skill.aim * 0.48;
   let steer = clamp(delta * aimPower, -1, 1);
   const precise = opts.precise || intent === "save" || intent === "guard" || dist < 10;
-  const behind = Math.abs(delta) > 2.28 && dist < 18;
-  let throttle = behind ? -0.52 : clamp(dist / (precise ? 16 : 10), 0.30, 1) * skill.speed;
-  if (Math.abs(delta) > 1.15 && !behind) throttle *= precise ? 0.38 : 0.56;
+  const allowReverse = opts.allowReverse !== false;
+  const shouldBackUp = allowReverse && (opts.forceReverse || (Math.abs(delta) > 2.18 && dist < (precise ? 22 : 18)));
+  let throttle = shouldBackUp ? (opts.forceReverse ? -0.88 : -0.58) : clamp(dist / (precise ? 16 : 10), 0.30, 1) * skill.speed;
+  if (shouldBackUp) steer *= -1;
+  if (Math.abs(delta) > 1.15 && !shouldBackUp) throttle *= precise ? 0.38 : 0.56;
   if (intent === "recover") throttle = clamp(throttle, 0.34, 0.82);
   if (intent === "boost") throttle = 1;
-  if (["guard", "shadow", "support", "rotate", "fake"].includes(intent) && !behind) {
+  if (["guard", "shadow", "support", "rotate", "fake"].includes(intent) && !shouldBackUp) {
     const holdRadius = intent === "guard" ? 13 : intent === "shadow" ? 16 : 18;
     const targetSpeed = intent === "guard" ? 7.5 : intent === "shadow" ? 12 : intent === "fake" ? 13 : 16;
     if (dist < holdRadius && forwardSpeed > targetSpeed) throttle *= intent === "guard" ? 0.18 : 0.34;
@@ -966,6 +1035,7 @@ function makeDriveInput(car, target, state, skill, intent, opts = {}) {
   const driftConfidence = clamp((driftSkill - 0.34) / 0.82, 0, 1);
   const driftWindow = driftConfidence > 0.78 || Math.sin(state.tick * 0.047 + (car.aiNoiseSeed || 0) * 1.9) > 0.18 - driftConfidence * 0.98;
   const shouldDrift = car.grounded
+    && !shouldBackUp
     && speed > (intent === "kickoff" ? 8.0 : 9.2)
     && Math.abs(delta) > driftThreshold
     && Math.abs(delta) < 2.62
@@ -1169,9 +1239,32 @@ export function makeAIInput(car, state, meta) {
   target.x = clamp(target.x, -state.arena.w / 2 + 6.5, state.arena.w / 2 - 6.5);
   target.z = clamp(target.z, -state.arena.l / 2 - state.arena.goalD + 5.5, state.arena.l / 2 + state.arena.goalD - 5.5);
 
+  // Finalized AI behaviour plan after evaluating the existing controller:
+  // 1) keep tactical role selection as the high-level brain,
+  // 2) add a low-level recovery layer that can override stale plans,
+  // 3) make reversing a deliberate persistent action instead of a one-frame
+  //    side effect, and
+  // 4) bias wall/corner recoveries toward the arena interior so bots stop
+  //    grinding along walls when their route planner still wants the ball.
+  let driveBoostScale = intent === "boost" ? 0.55 : intent === "save" ? 0.85 : intent === "kickoff" ? 1.35 : 1;
+  const recovery = updateAiRecovery(car, state, target, intent, skill);
+  if (recovery.active) {
+    intent = recovery.reverse ? "reverse-recover" : "recover";
+    target = recovery.escape || target;
+    precise = false;
+    driveBoostScale = 0;
+  } else if (recovery.pressure.near && ["support", "rotate", "boost", "fake"].includes(intent) && skill.wallRead > 0.7) {
+    const escape = escapeTargetFromWall(car, state, recovery.pressure);
+    target.x = target.x * 0.72 + escape.x * 0.28;
+    target.z = target.z * 0.72 + escape.z * 0.28;
+  }
+
+  if (intent === "recover" || intent === "reverse-recover") driveBoostScale = 0;
   const drive = makeDriveInput(car, target, state, skill, intent, {
     precise,
-    boostScale: intent === "boost" ? 0.55 : intent === "save" ? 0.85 : intent === "kickoff" ? 1.35 : 1
+    boostScale: driveBoostScale,
+    forceReverse: intent === "reverse-recover",
+    allowReverse: intent !== "kickoff"
   });
 
   if (intent === "kickoff") {
