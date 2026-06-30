@@ -898,6 +898,76 @@ function approachTargetBehindBall(ball, aim, distance) {
   };
 }
 
+function closestOpponentTo(state, team, target) {
+  const opponents = opponentCars(state, team);
+  if (!opponents.length) return null;
+  let best = null;
+  let bestD = Infinity;
+  for (const opponent of opponents) {
+    const d = distance2(opponent, target);
+    if (d < bestD) { bestD = d; best = opponent; }
+  }
+  return best ? { car: best, dist: bestD } : null;
+}
+
+function aiTouchSetup(car, state, ball, aim, skill, intent, role, danger01) {
+  const ownSign = car.team === "blue" ? -1 : 1;
+  const enemySign = -ownSign;
+  const fwd = fwdFromYaw(car.yaw || 0);
+  const toBallX = ball.x - car.x;
+  const toBallZ = ball.z - car.z;
+  const dist = Math.hypot(toBallX, toBallZ) || 1;
+  const ballAhead = (toBallX * fwd.x + toBallZ * fwd.z) / dist;
+  const ballSpeed = Math.hypot(ball.vx || 0, ball.vz || 0);
+  const ballGoalSide = enemySign * ball.z;
+  const carGoalSide = enemySign * car.z;
+  const behindBall = carGoalSide < ballGoalSide - 0.6;
+  const opponent = closestOpponentTo(state, car.team, ball);
+  const pressure = opponent ? clamp(1 - opponent.dist / 22, 0, 1) : 0;
+  const attackingRole = role === "attack" || role === "balanced" || role === "midfield";
+  const controllable = attackingRole
+    && intent === "shot"
+    && behindBall
+    && ball.y < 3.4
+    && dist < 11.5
+    && ballAhead > 0.18
+    && danger01 < 0.58;
+
+  if (!controllable) {
+    return { active: false, target: null, jump: false, boostScale: 1, precise: false };
+  }
+
+  const shotLane = goalTargetForShot(state, car.team, ball, skill);
+  const carryBias = pressure > 0.35 ? 0.16 : 0.07;
+  const desiredBehind = clamp(3.2 + ballSpeed * 0.055 - skill.aim * 0.55, 2.2, 4.6);
+  let target = approachTargetBehindBall(ball, shotLane, desiredBehind);
+
+  // Better bots offset the touch when pressured, creating a Rocket League-like
+  // hook/cut rather than always driving through the exact centre of the ball.
+  if (skill.shot > 0.78 && pressure > 0.18) {
+    const side = Math.sign((opponent?.car?.x || 0) - ball.x) || Math.sign(car.x - ball.x) || 1;
+    target.x = clamp(target.x - side * state.arena.w * carryBias, -state.arena.w * 0.44, state.arena.w * 0.44);
+  }
+
+  const isFinishingTouch = enemySign * ball.z > state.arena.l * 0.25 || pressure > 0.58;
+  const aligned = ballAhead > 0.62 && Math.abs(target.x - car.x) < 5.5 + skill.aim * 3;
+  const jump = isFinishingTouch
+    && aligned
+    && car.grounded
+    && dist < 5.6
+    && ball.y > 1.55
+    && ball.y < 4.8
+    && Math.random() < clamp(0.18 + skill.jump * skill.shot * 0.42, 0, 0.72);
+
+  return {
+    active: true,
+    target,
+    jump,
+    boostScale: pressure > 0.45 || isFinishingTouch ? 1.15 : 0.62,
+    precise: skill.aim > 0.82
+  };
+}
+
 function nearestUsefulBoostPad(car, state, preferBig = false) {
   const pads = (state.boostPads || []).filter(p => p.active !== false && (preferBig ? p.big : true));
   if (!pads.length && preferBig) return nearestUsefulBoostPad(car, state, false);
@@ -1111,6 +1181,8 @@ export function makeAIInput(car, state, meta) {
   let approachDistance = cfg.snooker ? 14 : 7.6;
   let precise = false;
   let holdPlan = false;
+  car.aiTouchJump = false;
+  car.aiTouchBoostScale = 1;
 
   const ticksSinceRound = state.tick - Number(state.sound?.roundTick || 0);
   const kickoffActive = Math.abs(ball.x) < 0.1 && Math.abs(ball.z) < 0.1 && state.kickoffTimer <= 0 && ticksSinceRound < 120 * 4;
@@ -1173,6 +1245,16 @@ export function makeAIInput(car, state, meta) {
     approachDistance = cfg.snooker ? 13 : clamp(8.8 - skill.aim * 1.45 + ballSpeed * 0.030 - skill.shot * 0.28, 5.2, 10.8);
     target = approachTargetBehindBall(predicted, aim, approachDistance);
     if (distToBall < 7.2 + skill.aim * 1.4 || ownEta < 0.28) target = { x: predicted.x + (aim.x - predicted.x) * 0.08, z: predicted.z + (aim.z - predicted.z) * 0.08 };
+    const touch = aiTouchSetup(car, state, predicted, aim, skill, intent, role, danger01);
+    if (touch.active) {
+      target = touch.target;
+      precise = touch.precise;
+      car.aiTouchJump = touch.jump;
+      car.aiTouchBoostScale = touch.boostScale;
+    } else {
+      car.aiTouchJump = false;
+      car.aiTouchBoostScale = 1;
+    }
   } else if (firstMan && !hasBetterMate && shouldPressureOpponent && skill.fake > 0.18 && role !== "defence" && role !== "goalkeeper") {
     intent = "fake";
     aim = inOwnThird ? clearanceTarget(state, car.team, predicted) : goalTargetForShot(state, car.team, predicted, skill);
@@ -1246,7 +1328,7 @@ export function makeAIInput(car, state, meta) {
   //    side effect, and
   // 4) bias wall/corner recoveries toward the arena interior so bots stop
   //    grinding along walls when their route planner still wants the ball.
-  let driveBoostScale = intent === "boost" ? 0.55 : intent === "save" ? 0.85 : intent === "kickoff" ? 1.35 : 1;
+  let driveBoostScale = intent === "boost" ? 0.55 : intent === "save" ? 0.85 : intent === "kickoff" ? 1.35 : (car.aiTouchBoostScale || 1);
   const recovery = updateAiRecovery(car, state, target, intent, skill);
   if (recovery.active) {
     intent = recovery.reverse ? "reverse-recover" : "recover";
@@ -1285,6 +1367,7 @@ export function makeAIInput(car, state, meta) {
   const shotAligned = ballAhead > (intent === "save" ? 0.35 : 0.55) && Math.abs(drive.delta) < (intent === "save" ? 0.65 : 0.42);
   const reachableHeight = state.mode === "flying" ? 16 : (skill.aerial > 0.7 ? 7.6 : 5.8);
   let jump = false;
+  if (car.aiTouchJump && (intent === "shot" || intent === "challenge")) jump = true;
   if ((intent === "shot" || intent === "challenge" || intent === "save" || intent === "kickoff") && ballDist < (intent === "save" ? 9.5 : 7.4) && shotAligned) {
     if (ball.y > 2.35 && ball.y < reachableHeight && car.grounded && Math.random() < clamp(skill.jump * (intent === "save" ? skill.save : 1), 0, 1.15)) jump = true;
     if (intent === "kickoff" && ballDist < 7.2 && car.grounded && (skill.jump > 0.55 || ((meta.difficulty || "pro") !== "rookie" && aiRoundRoll(car, state, 3) < 0.86))) jump = true;
@@ -1297,7 +1380,13 @@ export function makeAIInput(car, state, meta) {
   // they need to rotate instead of wasting it.
   if (Math.abs(drive.delta) > 0.58 && intent !== "kickoff" && intent !== "save") drive.boost = false;
   if (drive.boost && !(drive.throttle >= 0 && car.boost > 0.1)) drive.boost = false;
-  const aiAirRoll = !car.grounded && skill.aerial > 0.5 && Math.abs(car.roll || 0) > 0.18;
+  const aerialTarget = intent === "save" || intent === "shot" || intent === "challenge" ? predicted : ball;
+  const airDx = aerialTarget.x - car.x;
+  const airDz = aerialTarget.z - car.z;
+  const desiredAirYaw = Math.atan2(airDx, airDz);
+  const airYawDelta = angleDiff(desiredAirYaw, car.yaw || 0);
+  const aiAirRoll = !car.grounded && skill.aerial > 0.5 && (Math.abs(car.roll || 0) > 0.16 || Math.abs(airYawDelta) > 0.35);
+  const desiredRollSign = Math.abs(car.roll || 0) > 0.16 ? Math.sign(car.roll || 0) : Math.sign(airYawDelta || drive.steer || 0);
   if (!car.grounded) drive.drift = false;
   if (cfg.snooker) drive.boost = false;
 
@@ -1308,12 +1397,12 @@ export function makeAIInput(car, state, meta) {
     boost: drive.boost,
     jump,
     drift: drive.drift,
-    airRollLeft: aiAirRoll && (car.roll || 0) > 0,
-    airRollRight: aiAirRoll && (car.roll || 0) < 0,
-    pitchUp: !car.grounded && ball.y > car.y + 0.4 ? clamp(skill.aerial, 0, 1) : 0,
-    pitchDown: !car.grounded && ball.y < car.y - 0.2 ? clamp(skill.aerial * 0.6, 0, 1) : 0,
-    yawLeft: !car.grounded && drive.steer > 0 ? Math.abs(drive.steer) : 0,
-    yawRight: !car.grounded && drive.steer < 0 ? Math.abs(drive.steer) : 0,
+    airRollLeft: aiAirRoll && desiredRollSign > 0,
+    airRollRight: aiAirRoll && desiredRollSign < 0,
+    pitchUp: !car.grounded && aerialTarget.y > car.y + 0.35 ? clamp(skill.aerial, 0, 1) : 0,
+    pitchDown: !car.grounded && aerialTarget.y < car.y - 0.25 ? clamp(skill.aerial * 0.6, 0, 1) : 0,
+    yawLeft: !car.grounded && airYawDelta > 0 ? clamp(Math.abs(airYawDelta) * skill.aerial, 0, 1) : 0,
+    yawRight: !car.grounded && airYawDelta < 0 ? clamp(Math.abs(airYawDelta) * skill.aerial, 0, 1) : 0,
     cam: false,
     reset: false
   };
@@ -1440,10 +1529,17 @@ function carAxes(car) {
 }
 
 function aerialAxisInput(input, steer, throttle) {
-  const pitchInput = clamp((input.pitchUp || 0) - (input.pitchDown || 0) || throttle, -1, 1);
-  const yawInput = clamp((input.yawLeft || 0) - (input.yawRight || 0) || steer, -1, 1);
-  const rollInput = clamp(((input.airRollLeft ? 1 : 0) - (input.airRollRight ? 1 : 0) + (input.airRoll ? steer : 0)) * (input.airRollScale || 1), -1.7, 1.7);
-  return { pitchInput, yawInput, rollInput };
+  const pitchButtons = (input.pitchUp || 0) - (input.pitchDown || 0);
+  const yawButtons = (input.yawLeft || 0) - (input.yawRight || 0);
+  const pitchInput = clamp(Math.abs(pitchButtons) > 0.001 ? pitchButtons : throttle, -1, 1);
+  const yawInput = clamp(Math.abs(yawButtons) > 0.001 ? yawButtons : steer, -1, 1);
+  // Directional air roll is a dedicated roll torque, while free air roll rolls
+  // from the steering axis only while the drift/air-roll modifier is held.
+  // Keeping them separate fixes AIR L/R feeling like weak drift aliases.
+  const directionalRoll = (input.airRollLeft ? 1 : 0) - (input.airRollRight ? 1 : 0);
+  const freeRoll = input.airRoll ? steer : 0;
+  const rollInput = clamp((directionalRoll + freeRoll) * (input.airRollScale || 1), -1.85, 1.85);
+  return { pitchInput, yawInput, rollInput, directionalRoll, freeRoll };
 }
 
 function updateCar(car, input, state, cfg, dt) {
@@ -1545,7 +1641,7 @@ function updateCar(car, input, state, cfg, dt) {
   } else {
     const axes = carAxes(car);
     const { fwd: airFwd, right: airRight, up: airUp } = axes;
-    const { pitchInput, yawInput, rollInput } = aerialAxisInput(input, steer, throttle);
+    const { pitchInput, yawInput, rollInput, directionalRoll, freeRoll } = aerialAxisInput(input, steer, throttle);
     if (jump && !car.jumpLatch && car.jumpCooldown <= 0 && !car.doubleJumpUsed) {
       car.doubleJumpUsed = true;
       car.justJumped = true;
@@ -1561,12 +1657,22 @@ function updateCar(car, input, state, cfg, dt) {
     }
 
     const aerialTune = vehicle.aerial * cfg.aerialDrive;
-    car.pitchVel = (car.pitchVel || 0) + (-pitchInput * 5.2 * aerialTune) * dt;
-    car.yawVel = (car.yawVel || 0) + (yawInput * 4.2 * aerialTune) * dt;
-    car.rollVel = (car.rollVel || 0) + (rollInput * 7.2 * aerialTune) * dt;
+    const directionalAirRoll = Math.abs(directionalRoll) > 0.001;
+    const freeAirRoll = Math.abs(freeRoll) > 0.001;
+    const airRollHeld = directionalAirRoll || freeAirRoll;
+    car.pitchVel = (car.pitchVel || 0) + (-pitchInput * (directionalAirRoll ? 4.55 : 5.2) * aerialTune) * dt;
+    car.yawVel = (car.yawVel || 0) + (yawInput * (directionalAirRoll ? 3.75 : 4.2) * aerialTune) * dt;
+    car.rollVel = (car.rollVel || 0) + (rollInput * (directionalAirRoll ? 10.9 : 8.4) * aerialTune) * dt;
+    if (directionalAirRoll && Math.abs(yawInput) > 0.05) {
+      car.pitchVel += -directionalRoll * yawInput * 1.35 * aerialTune * dt;
+      car.yawVel += directionalRoll * pitchInput * 0.82 * aerialTune * dt;
+    }
+    if (!airRollHeld && Math.abs(car.roll || 0) > 0.05) {
+      car.rollVel += -Math.sin(car.roll || 0) * 4.3 * aerialTune * dt;
+    }
     car.pitchVel *= Math.pow(0.975, dt * 120);
-    car.yawVel *= Math.pow(0.982, dt * 120);
-    car.rollVel *= Math.pow(0.978, dt * 120);
+    car.yawVel *= Math.pow(directionalAirRoll ? 0.988 : 0.982, dt * 120);
+    car.rollVel *= Math.pow(airRollHeld ? 0.992 : 0.970, dt * 120);
     car.pitch = clamp((car.pitch || 0) + car.pitchVel * dt, -1.35, 1.35);
     car.yaw += car.yawVel * dt;
     car.roll = angleNorm((car.roll || 0) + car.rollVel * dt);
