@@ -837,6 +837,70 @@ function goalTargetForShot(state, team, from, skill = null) {
   return { x: clamp(x, -maxAim, maxAim), z: goalZ };
 }
 
+
+function teamForwardTarget(state, team, from, depth = 0.30) {
+  const enemySign = team === "blue" ? 1 : -1;
+  return {
+    x: clamp((from?.x || 0) * 0.62, -state.arena.w * 0.36, state.arena.w * 0.36),
+    z: enemySign * state.arena.l * depth
+  };
+}
+
+function passLaneScore(state, passer, mate, ball, skill, danger01) {
+  const enemySign = passer.team === "blue" ? 1 : -1;
+  const mateAhead = enemySign * (mate.z - ball.z);
+  const lateralGap = Math.abs(mate.x - ball.x);
+  const mateDist = distance2(mate, ball);
+  if (mateDist < 8 || mateDist > state.arena.l * 0.46) return null;
+  if (mateAhead < -state.arena.l * 0.11) return null;
+  const opponents = opponentCars(state, passer.team);
+  let lanePressure = 0;
+  for (const o of opponents) {
+    const vx = mate.x - ball.x;
+    const vz = mate.z - ball.z;
+    const wx = o.x - ball.x;
+    const wz = o.z - ball.z;
+    const len2 = Math.max(1, vx * vx + vz * vz);
+    const t = clamp((wx * vx + wz * vz) / len2, 0, 1);
+    const px = ball.x + vx * t;
+    const pz = ball.z + vz * t;
+    const d = Math.hypot(o.x - px, o.z - pz);
+    lanePressure = Math.max(lanePressure, clamp(1 - d / 13.5, 0, 1));
+  }
+  const openBonus = (1 - lanePressure) * 1.35;
+  const forwardBonus = clamp(mateAhead / (state.arena.l * 0.36), -0.4, 1.1);
+  const roleBonus = mate.role === "attack" ? 0.34 : mate.role === "midfield" || mate.role === "balanced" ? 0.22 : mate.human ? 0.28 : 0;
+  const reachable = clamp(1 - Math.abs(mateDist - 24) / 36, 0, 1);
+  const wideOutlet = clamp(lateralGap / (state.arena.w * 0.30), 0, 1) * 0.22;
+  const dangerPenalty = danger01 > 0.52 && enemySign * mate.z > enemySign * ball.z ? 0.36 : 0;
+  return openBonus + forwardBonus + roleBonus + reachable + wideOutlet - dangerPenalty + skill.discipline * 0.10;
+}
+
+function selectPassOption(car, state, ball, skill, danger01, role) {
+  const teamSize = Math.max(1, Number(state.teamSize || 1));
+  if (teamSize <= 1 || role === "goalkeeper" || danger01 > 0.72) return null;
+  const enemySign = car.team === "blue" ? 1 : -1;
+  const inAttackingFlow = enemySign * ball.z > -state.arena.l * 0.20;
+  const ballLow = (ball.y || 0) < 4.6;
+  if (!inAttackingFlow || !ballLow) return null;
+  const mates = teamCars(state, car.team).filter(c => c.id !== car.id && !(c.demoTimer > 0));
+  let best = null;
+  for (const mate of mates) {
+    const score = passLaneScore(state, car, mate, ball, skill, danger01);
+    if (score == null) continue;
+    const leadSeconds = clamp(distance2(mate, ball) / 42, 0.22, 0.78);
+    const receive = {
+      x: clamp(mate.x + (mate.vx || 0) * leadSeconds, -state.arena.w * 0.43, state.arena.w * 0.43),
+      z: clamp(mate.z + (mate.vz || 0) * leadSeconds + enemySign * 5.5, -state.arena.l * 0.42, state.arena.l * 0.42)
+    };
+    const finalScore = score + (mate.human ? 0.24 : 0) + (mate.role === "attack" && enemySign * receive.z > 0 ? 0.18 : 0);
+    if (!best || finalScore > best.score) best = { mate, receive, score: finalScore };
+  }
+  const threshold = (skill.discipline > 1.05 ? 1.82 : 2.05) - (role === "midfield" ? 0.18 : 0) - (role === "balanced" ? 0.08 : 0);
+  if (!best || best.score < threshold) return null;
+  return best;
+}
+
 function clearanceTarget(state, team, from) {
   const enemySign = team === "blue" ? 1 : -1;
   const side = (from?.x || state.ball.x || 0) >= 0 ? -1 : 1;
@@ -926,7 +990,7 @@ function aiTouchSetup(car, state, ball, aim, skill, intent, role, danger01) {
   const pressure = opponent ? clamp(1 - opponent.dist / 22, 0, 1) : 0;
   const attackingRole = role === "attack" || role === "balanced" || role === "midfield";
   const controllable = attackingRole
-    && intent === "shot"
+    && (intent === "shot" || intent === "pass")
     && behindBall
     && ball.y < 3.4
     && dist < 11.5
@@ -937,10 +1001,10 @@ function aiTouchSetup(car, state, ball, aim, skill, intent, role, danger01) {
     return { active: false, target: null, jump: false, boostScale: 1, precise: false };
   }
 
-  const shotLane = goalTargetForShot(state, car.team, ball, skill);
+  const touchLane = aim || goalTargetForShot(state, car.team, ball, skill);
   const carryBias = pressure > 0.35 ? 0.16 : 0.07;
   const desiredBehind = clamp(3.2 + ballSpeed * 0.055 - skill.aim * 0.55, 2.2, 4.6);
-  let target = approachTargetBehindBall(ball, shotLane, desiredBehind);
+  let target = approachTargetBehindBall(ball, touchLane, desiredBehind);
 
   // Better bots offset the touch when pressured, creating a Rocket League-like
   // hook/cut rather than always driving through the exact centre of the ball.
@@ -949,7 +1013,8 @@ function aiTouchSetup(car, state, ball, aim, skill, intent, role, danger01) {
     target.x = clamp(target.x - side * state.arena.w * carryBias, -state.arena.w * 0.44, state.arena.w * 0.44);
   }
 
-  const isFinishingTouch = enemySign * ball.z > state.arena.l * 0.25 || pressure > 0.58;
+  const isPass = intent === "pass";
+  const isFinishingTouch = !isPass && (enemySign * ball.z > state.arena.l * 0.25 || pressure > 0.58);
   const aligned = ballAhead > 0.62 && Math.abs(target.x - car.x) < 5.5 + skill.aim * 3;
   const jump = isFinishingTouch
     && aligned
@@ -963,7 +1028,7 @@ function aiTouchSetup(car, state, ball, aim, skill, intent, role, danger01) {
     active: true,
     target,
     jump,
-    boostScale: pressure > 0.45 || isFinishingTouch ? 1.15 : 0.62,
+    boostScale: isPass ? 0.52 : (pressure > 0.45 || isFinishingTouch ? 1.15 : 0.62),
     precise: skill.aim > 0.82
   };
 }
@@ -1111,7 +1176,7 @@ function makeDriveInput(car, target, state, skill, intent, opts = {}) {
     && Math.abs(delta) < 2.62
     && driftSkill > 0.38
     && driftWindow;
-  const boostIntent = ["challenge", "shot", "save", "kickoff", "boost"].includes(intent);
+  const boostIntent = ["challenge", "shot", "pass", "save", "kickoff", "boost"].includes(intent);
   const boostAngle = intent === "kickoff" ? 0.50 : intent === "save" ? 0.38 : 0.34;
   const boostMinDist = intent === "kickoff" ? 9 : intent === "save" ? 13 : 18;
   const boostAllowed = throttle >= 0.04 && car.boost > (precise ? 14 : 7) && (car.grounded || state.mode === "flying");
@@ -1181,6 +1246,7 @@ export function makeAIInput(car, state, meta) {
   let approachDistance = cfg.snooker ? 14 : 7.6;
   let precise = false;
   let holdPlan = false;
+  let passOption = null;
   car.aiTouchJump = false;
   car.aiTouchBoostScale = 1;
 
@@ -1242,7 +1308,15 @@ export function makeAIInput(car, state, meta) {
     const attacking = inEnemyHalf || (style.attack > 1.12 && !inOwnThird);
     intent = attacking ? "shot" : "challenge";
     aim = attacking ? goalTargetForShot(state, car.team, predicted, skill) : clearanceTarget(state, car.team, predicted);
-    approachDistance = cfg.snooker ? 13 : clamp(8.8 - skill.aim * 1.45 + ballSpeed * 0.030 - skill.shot * 0.28, 5.2, 10.8);
+    passOption = attacking ? selectPassOption(car, state, predicted, skill, danger01, role) : null;
+    const passBias = style.support * skill.discipline * (role === "midfield" ? 1.22 : role === "balanced" ? 1.10 : 1);
+    if (passOption && passBias > 0.82 && (passOption.mate.human || passOption.score > 2.22 || enemySign * predicted.z < state.arena.l * 0.30)) {
+      intent = "pass";
+      aim = passOption.receive;
+      approachDistance = cfg.snooker ? 13 : clamp(9.4 - skill.aim * 1.15 + ballSpeed * 0.025, 5.8, 11.2);
+    } else {
+      approachDistance = cfg.snooker ? 13 : clamp(8.8 - skill.aim * 1.45 + ballSpeed * 0.030 - skill.shot * 0.28, 5.2, 10.8);
+    }
     target = approachTargetBehindBall(predicted, aim, approachDistance);
     if (distToBall < 7.2 + skill.aim * 1.4 || ownEta < 0.28) target = { x: predicted.x + (aim.x - predicted.x) * 0.08, z: predicted.z + (aim.z - predicted.z) * 0.08 };
     const touch = aiTouchSetup(car, state, predicted, aim, skill, intent, role, danger01);
@@ -1263,6 +1337,12 @@ export function makeAIInput(car, state, meta) {
   } else if (secondMan || role === "balanced" || role === "midfield") {
     intent = "support";
     target = supportTargetForRole(car, state, role, rank, style, roleCfg, predicted, ownSign);
+    const carrier = teamCars(state, car.team).find(c => c.id !== car.id && distance2(c, ball) < 12 && carBehindBallForTeam(c, ball, car.team));
+    if (teamSize > 1 && carrier && skill.discipline > 0.62 && enemySign * ball.z > -state.arena.l * 0.22) {
+      const outlet = teamForwardTarget(state, car.team, car, role === "attack" ? 0.34 : 0.24);
+      target.x = target.x * 0.48 + outlet.x * 0.52;
+      target.z = target.z * 0.48 + outlet.z * 0.52;
+    }
     precise = true;
     holdPlan = skill.discipline > 0.70;
   } else {
@@ -1367,8 +1447,8 @@ export function makeAIInput(car, state, meta) {
   const shotAligned = ballAhead > (intent === "save" ? 0.35 : 0.55) && Math.abs(drive.delta) < (intent === "save" ? 0.65 : 0.42);
   const reachableHeight = state.mode === "flying" ? 16 : (skill.aerial > 0.7 ? 7.6 : 5.8);
   let jump = false;
-  if (car.aiTouchJump && (intent === "shot" || intent === "challenge")) jump = true;
-  if ((intent === "shot" || intent === "challenge" || intent === "save" || intent === "kickoff") && ballDist < (intent === "save" ? 9.5 : 7.4) && shotAligned) {
+  if (car.aiTouchJump && (intent === "shot" || intent === "challenge" || intent === "pass")) jump = true;
+  if ((intent === "shot" || intent === "challenge" || intent === "pass" || intent === "save" || intent === "kickoff") && ballDist < (intent === "save" ? 9.5 : 7.4) && shotAligned) {
     if (ball.y > 2.35 && ball.y < reachableHeight && car.grounded && Math.random() < clamp(skill.jump * (intent === "save" ? skill.save : 1), 0, 1.15)) jump = true;
     if (intent === "kickoff" && ballDist < 7.2 && car.grounded && (skill.jump > 0.55 || ((meta.difficulty || "pro") !== "rookie" && aiRoundRoll(car, state, 3) < 0.86))) jump = true;
   }
@@ -1380,11 +1460,11 @@ export function makeAIInput(car, state, meta) {
   // they need to rotate instead of wasting it.
   if (Math.abs(drive.delta) > 0.58 && intent !== "kickoff" && intent !== "save") drive.boost = false;
   if (drive.boost && !(drive.throttle >= 0 && car.boost > 0.1)) drive.boost = false;
-  const aerialTarget = intent === "save" || intent === "shot" || intent === "challenge" ? predicted : ball;
+  const aerialTarget = intent === "save" || intent === "shot" || intent === "challenge" || intent === "pass" ? predicted : ball;
   const airDx = aerialTarget.x - car.x;
   const airDz = aerialTarget.z - car.z;
   const desiredAirYaw = Math.atan2(airDx, airDz);
-  const airYawDelta = angleDiff(desiredAirYaw, car.yaw || 0);
+  const airYawDelta = angleNorm(desiredAirYaw - (car.yaw || 0));
   const aiAirRoll = !car.grounded && skill.aerial > 0.5 && (Math.abs(car.roll || 0) > 0.16 || Math.abs(airYawDelta) > 0.35);
   const desiredRollSign = Math.abs(car.roll || 0) > 0.16 ? Math.sign(car.roll || 0) : Math.sign(airYawDelta || drive.steer || 0);
   if (!car.grounded) drive.drift = false;
