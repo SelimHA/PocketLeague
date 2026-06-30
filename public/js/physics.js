@@ -1,4 +1,4 @@
-export const ROLES = ["goalkeeper", "defence", "midfield", "attack"];
+export const ROLES = ["balanced", "goalkeeper", "defence", "midfield", "attack"];
 
 // V20 re-tunes the multiplayer rebuild back toward the last pre-multiplayer
 // single-file version (V10): wider baseline pitch, 120 Hz host physics,
@@ -385,6 +385,18 @@ function sanitiseAiTuning(raw = {}) {
   return out;
 }
 
+function sanitiseAiRoles(raw = {}) {
+  const out = { blue: {}, orange: {} };
+  for (const team of ["blue", "orange"]) {
+    const src = raw?.[team] || {};
+    for (const [slot, role] of Object.entries(src)) {
+      const n = clamp(Number(slot), 0, 4);
+      if (ROLES.includes(role)) out[team][n] = role;
+    }
+  }
+  return out;
+}
+
 export function serialiseMeta(meta = {}) {
   const out = { ...DEFAULT_META, ...meta };
   out.teamSize = clamp(Number(out.teamSize) || 1, 1, 5);
@@ -395,6 +407,7 @@ export function serialiseMeta(meta = {}) {
   if (!["balanced", "defensive", "aggressive", "chaotic"].includes(out.playstyle)) out.playstyle = "balanced";
   if (!["balanced", "defensive", "aggressive", "rotational", "chaotic"].includes(out.aiStrategy)) out.aiStrategy = out.playstyle || "balanced";
   out.aiTuning = sanitiseAiTuning(out.aiTuning);
+  out.aiRoles = sanitiseAiRoles(out.aiRoles);
   if (!STADIUM_THEMES[out.theme]) out.theme = "v10";
   if (!["all", "team"].includes(out.chatScope)) out.chatScope = "all";
   if (!["all", "team", "off"].includes(out.voiceScope)) out.voiceScope = "team";
@@ -403,8 +416,8 @@ export function serialiseMeta(meta = {}) {
 }
 
 export function defaultRoleForSlot(i, teamSize) {
-  if (teamSize <= 1) return "attack";
-  if (i === 0) return teamSize >= 2 ? "goalkeeper" : "attack";
+  if (teamSize <= 1) return "balanced";
+  if (i === 0) return "goalkeeper";
   if (teamSize >= 4 && i === 1) return "defence";
   if (i === teamSize - 1) return "attack";
   return "midfield";
@@ -415,6 +428,7 @@ export function sanitiseVehicleModel(model) {
 }
 
 function aiVehicleForSlot(team, i, role) {
+  if (role === "balanced") return i % 2 ? "rally" : "default";
   if (role === "goalkeeper") return i % 2 ? "van" : "truck";
   if (role === "defence") return i % 2 ? "rally" : "van";
   if (role === "midfield") return i % 2 ? "sport" : "rally";
@@ -434,7 +448,8 @@ export function makeInitialState(meta, players = {}) {
       const human = teamHumans[i];
       const id = human ? human.id : `AI_${team}_${i}`;
       const configuredAiRole = cleanMeta.aiRoles?.[team]?.[i];
-      const role = human?.role || configuredAiRole || defaultRoleForSlot(i, cleanMeta.teamSize);
+      const humanRole = ROLES.includes(human?.role) ? human.role : null;
+      const role = humanRole || configuredAiRole || defaultRoleForSlot(i, cleanMeta.teamSize);
       const spawn = kickoffSpawn(team, i, cleanMeta.teamSize, arena, role, !!human, kickoffVariant);
       const model = human ? sanitiseVehicleModel(human.model || human.vehicle || human.carModel) : aiVehicleForSlot(team, i, role);
       cars[id] = makeCar(id, team, role, !!human, human?.name || aiName(team, role, i), spawn.x, spawn.z, spawn.yaw, slotIndex++, model);
@@ -463,7 +478,7 @@ export function makeInitialState(meta, players = {}) {
 
 function aiName(team, role, i) {
   const prefix = team === "blue" ? "Blue" : "Orange";
-  const roleName = role === "goalkeeper" ? "GK" : role === "defence" ? "Back" : role === "midfield" ? "Mid" : "Striker";
+  const roleName = role === "balanced" ? "Flex" : role === "goalkeeper" ? "GK" : role === "defence" ? "Back" : role === "midfield" ? "Mid" : "Striker";
   return `${prefix} ${roleName} ${i + 1}`;
 }
 
@@ -507,7 +522,7 @@ function kickoffSpawn(team, i, teamSize, arena, role = "attack", human = false, 
       ? { x: blueX, z: blueZ, yaw }
       : { x: -blueX, z: -blueZ, yaw };
   }
-  const roleDepth = { goalkeeper: 0.43, defence: 0.33, midfield: 0.24, attack: 0.17 };
+  const roleDepth = { goalkeeper: 0.43, defence: 0.33, midfield: 0.24, balanced: 0.21, attack: 0.17 };
   const roles = Array.from({ length: teamSize }, (_, idx) => idx === i ? role : defaultRoleForSlot(idx, teamSize));
   const sameRoleCount = roles.filter(r => r === role).length;
   const roleIndex = roles.slice(0, i + 1).filter(r => r === role).length - 1;
@@ -519,6 +534,8 @@ function kickoffSpawn(team, i, teamSize, arena, role = "attack", human = false, 
     z = sign * arena.l * 0.36;
   } else if (role === "goalkeeper") {
     x *= 0.45;
+  } else if (role === "balanced") {
+    z = sign * arena.l * 0.20;
   } else if (role === "attack") {
     z = sign * arena.l * 0.16;
   }
@@ -596,10 +613,10 @@ function aiSkill(meta) {
   // deliberately hesitates and over-commits sometimes; Pro rotates and saves;
   // All-Star anticipates touches and chooses boost/aerials much more reliably.
   return d === "rookie"
-    ? { think: 0.22, aim: 0.70, speed: 0.78, boost: 0.38, jump: 0.34, error: 7.4, read: 0.38, rotation: 0.46, challenge: 0.62, patience: 0.38, aerial: 0.18, save: 0.56, mistake: 0.28, kickoff: 0.42 }
+    ? { think: 0.24, aim: 0.70, speed: 0.78, boost: 0.38, jump: 0.34, error: 7.4, read: 0.38, rotation: 0.46, challenge: 0.62, patience: 0.38, aerial: 0.18, save: 0.56, mistake: 0.28, kickoff: 0.42, intercept: 0.44, discipline: 0.48, shot: 0.55, fake: 0.10 }
     : d === "allstar"
-      ? { think: 0.040, aim: 1.28, speed: 1.16, boost: 1.12, jump: 0.96, error: 0.72, read: 1.18, rotation: 1.24, challenge: 1.12, patience: 1.05, aerial: 0.92, save: 1.20, mistake: 0.035, kickoff: 0.99 }
-      : { think: 0.080, aim: 1.02, speed: 1.02, boost: 0.88, jump: 0.68, error: 2.55, read: 0.78, rotation: 0.88, challenge: 0.90, patience: 0.74, aerial: 0.58, save: 0.88, mistake: 0.12, kickoff: 0.93 };
+      ? { think: 0.040, aim: 1.30, speed: 1.16, boost: 1.12, jump: 0.96, error: 0.72, read: 1.20, rotation: 1.26, challenge: 1.14, patience: 1.05, aerial: 0.92, save: 1.22, mistake: 0.035, kickoff: 0.99, intercept: 1.28, discipline: 1.28, shot: 1.24, fake: 0.42 }
+      : { think: 0.085, aim: 1.03, speed: 1.02, boost: 0.88, jump: 0.68, error: 2.55, read: 0.80, rotation: 0.90, challenge: 0.90, patience: 0.74, aerial: 0.58, save: 0.90, mistake: 0.12, kickoff: 0.93, intercept: 0.86, discipline: 0.88, shot: 0.88, fake: 0.24 };
 }
 
 function styleConfig(meta) {
@@ -613,6 +630,18 @@ function styleConfig(meta) {
         : p === "chaotic"
           ? { attack: 1.16, defence: 0.84, chase: 1.48, chaos: 1, rotation: 0.42, support: 0.70, boostDiscipline: 0.72 }
           : { attack: 1, defence: 1, chase: 1, chaos: 0, rotation: 1, support: 1, boostDiscipline: 1 };
+}
+
+function roleConfig(role = "attack") {
+  return role === "balanced"
+    ? { attack: 1.04, defence: 1.06, challenge: 1.00, support: 1.06, rotation: 1.08, boostNeed: 1.00, width: 0.30, depth: 0.30, patience: 1.00, aerial: 1.00, discipline: 1.06 }
+    : role === "goalkeeper"
+      ? { attack: 0.34, defence: 1.62, challenge: 0.42, support: 0.70, rotation: 1.18, boostNeed: 0.64, width: 0.18, depth: 0.09, patience: 1.36, aerial: 0.76, discipline: 1.34 }
+      : role === "defence"
+        ? { attack: 0.62, defence: 1.30, challenge: 0.72, support: 0.86, rotation: 1.18, boostNeed: 0.88, width: 0.28, depth: 0.17, patience: 1.12, aerial: 0.88, discipline: 1.18 }
+        : role === "midfield"
+          ? { attack: 0.96, defence: 1.02, challenge: 0.96, support: 1.18, rotation: 1.08, boostNeed: 1.00, width: 0.34, depth: 0.32, patience: 0.98, aerial: 1.02, discipline: 1.02 }
+          : { attack: 1.32, defence: 0.76, challenge: 1.18, support: 0.88, rotation: 0.92, boostNeed: 1.08, width: 0.26, depth: 0.46, patience: 0.78, aerial: 1.08, discipline: 0.84 };
 }
 
 function aiTuningForCar(meta, car) {
@@ -684,7 +713,7 @@ function opponentCars(state, team) {
 }
 
 function rolePriority(role) {
-  return role === "attack" ? -0.18 : role === "midfield" ? 0.02 : role === "defence" ? 0.22 : 0.48;
+  return role === "attack" ? -0.18 : role === "balanced" ? -0.04 : role === "midfield" ? 0.02 : role === "defence" ? 0.22 : 0.48;
 }
 
 function aiCarEta(car, target, state, skill, danger01 = 0) {
@@ -711,7 +740,46 @@ function aiRankForBall(car, state, skill, danger01) {
   return Math.max(0, mates.findIndex(v => v.id === car.id));
 }
 
-function goalTargetForShot(state, team, from) {
+function opponentEtaTo(state, team, target, skill, danger01) {
+  const opponents = opponentCars(state, team);
+  if (!opponents.length) return Infinity;
+  return Math.min(...opponents.map(c => aiCarEta(c, target, state, skill, danger01)));
+}
+
+function teamEtaTo(state, team, target, skill, danger01, ignoreId = null) {
+  const mates = teamCars(state, team).filter(c => c.id !== ignoreId);
+  if (!mates.length) return Infinity;
+  return Math.min(...mates.map(c => aiCarEta(c, target, state, skill, danger01)));
+}
+
+function carBehindBallForTeam(car, ball, team) {
+  const enemySign = team === "blue" ? 1 : -1;
+  return enemySign * car.z < enemySign * ball.z - 1.5;
+}
+
+function selectAiIntercept(car, state, skill, danger01, roleCfg) {
+  const maxRead = clamp(0.32 + skill.read * 0.95 + skill.intercept * 0.46 + danger01 * 0.32, 0.38, 2.25);
+  const samples = skill.intercept > 1.12 ? 8 : skill.intercept > 0.78 ? 6 : 4;
+  const ownSign = car.team === "blue" ? -1 : 1;
+  const enemySign = -ownSign;
+  let best = null;
+  for (let i = 0; i < samples; i++) {
+    const t = samples <= 1 ? 0.18 : 0.14 + (i / (samples - 1)) * maxRead;
+    const p = ballAt(state, t);
+    const eta = aiCarEta(car, p, state, skill, danger01);
+    const timing = Math.abs(eta - t) * (skill.intercept > 1 ? 0.48 : 0.82);
+    const heightPenalty = Math.max(0, p.y - (skill.aerial > 0.75 ? 7.4 : 4.8)) * (1.25 - skill.aerial * 0.62);
+    const behindBonus = carBehindBallForTeam(car, p, car.team) ? -0.18 * roleCfg.attack : 0.18 * roleCfg.discipline;
+    const defenceBias = ownSign * p.z > state.arena.l * 0.12 ? -0.18 * roleCfg.defence * danger01 : 0;
+    const attackBias = enemySign * p.z > state.arena.l * 0.12 ? -0.12 * roleCfg.attack : 0;
+    const wallPenalty = Math.abs(p.x) > state.arena.w * 0.43 ? 0.10 * (1.25 - skill.aim) : 0;
+    const score = eta + timing + heightPenalty + behindBonus + defenceBias + attackBias + wallPenalty;
+    if (!best || score < best.score) best = { point: p, time: t, eta, score };
+  }
+  return best || { point: ballAt(state, 0.2), time: 0.2, eta: 0.2, score: 0 };
+}
+
+function goalTargetForShot(state, team, from, skill = null) {
   const enemySign = team === "blue" ? 1 : -1;
   const opponents = opponentCars(state, team);
   const goalZ = enemySign * (state.arena.l / 2 + state.arena.goalD * 0.34);
@@ -723,7 +791,14 @@ function goalTargetForShot(state, team, from) {
   } else if (Math.abs(from?.x || 0) > state.arena.goalW * 0.18) {
     x = -(from.x || 0) * 0.22;
   }
-  return { x: clamp(x, -state.arena.goalW * 0.34, state.arena.goalW * 0.34), z: goalZ };
+  if (skill?.shot && skill.shot > 0.95 && inNet.length) {
+    const coveredLeft = inNet.some(o => o.x < -state.arena.goalW * 0.12);
+    const coveredRight = inNet.some(o => o.x > state.arena.goalW * 0.12);
+    if (coveredLeft && !coveredRight) x = state.arena.goalW * 0.30;
+    else if (coveredRight && !coveredLeft) x = -state.arena.goalW * 0.30;
+  }
+  const maxAim = state.arena.goalW * (skill?.shot > 1.05 ? 0.42 : 0.34);
+  return { x: clamp(x, -maxAim, maxAim), z: goalZ };
 }
 
 function clearanceTarget(state, team, from) {
@@ -732,6 +807,47 @@ function clearanceTarget(state, team, from) {
   return {
     x: side * state.arena.w * 0.36,
     z: enemySign * state.arena.l * 0.22
+  };
+}
+
+function backPostTarget(state, team, ball, depth = 2.4) {
+  const ownSign = team === "blue" ? -1 : 1;
+  const postSide = (ball?.x || 0) >= 0 ? -1 : 1;
+  return {
+    x: clamp(postSide * state.arena.goalW * 0.34, -state.arena.goalW * 0.42, state.arena.goalW * 0.42),
+    z: ownSign * (state.arena.l / 2 - depth)
+  };
+}
+
+function supportTargetForRole(car, state, role, rank, style, roleCfg, ball, ownSign) {
+  const slotLane = ((car.slotIndex % Math.max(1, Number(state.teamSize || 1))) - (Math.max(1, Number(state.teamSize || 1)) - 1) / 2);
+  const side = slotLane === 0 ? (car.slotIndex % 2 ? 1 : -1) : Math.sign(slotLane);
+  const ownGoalZ = ownSign * (state.arena.l / 2 - 6.4);
+  if (role === "goalkeeper") return backPostTarget(state, car.team, ball, 4.4);
+  if (role === "defence") {
+    return {
+      x: clamp(ball.x * 0.34 + side * state.arena.w * 0.16, -state.arena.w * 0.38, state.arena.w * 0.38),
+      z: clamp((ball.z + ownGoalZ) * 0.50, -state.arena.l * 0.42, state.arena.l * 0.42)
+    };
+  }
+  if (role === "balanced") {
+    const danger = clamp((ownSign * ball.z) / (state.arena.l * 0.48), 0, 1);
+    const defendZ = (ball.z + ownGoalZ) * 0.42;
+    const attackZ = ball.z - ownSign * state.arena.l * (rank === 0 ? 0.11 : 0.16);
+    return {
+      x: clamp(ball.x * (danger > 0.42 ? 0.38 : 0.54) + side * state.arena.w * roleCfg.width * (danger > 0.42 ? 0.48 : 0.86), -state.arena.w * 0.42, state.arena.w * 0.42),
+      z: clamp(danger > 0.42 ? defendZ : attackZ, -state.arena.l * 0.40, state.arena.l * 0.40)
+    };
+  }
+  if (role === "midfield") {
+    return {
+      x: clamp(ball.x * 0.42 + side * state.arena.w * roleCfg.width, -state.arena.w * 0.44, state.arena.w * 0.44),
+      z: clamp(ball.z * 0.30 + ownSign * state.arena.l * (style.defence > 1.2 ? 0.08 : -0.02), -state.arena.l * 0.38, state.arena.l * 0.38)
+    };
+  }
+  return {
+    x: clamp(ball.x * 0.62 + side * state.arena.w * roleCfg.width, -state.arena.w * 0.43, state.arena.w * 0.43),
+    z: clamp(ball.z - ownSign * state.arena.l * 0.16, -state.arena.l * 0.35, state.arena.l * 0.42)
   };
 }
 
@@ -800,16 +916,30 @@ function makeDriveInput(car, target, state, skill, intent, opts = {}) {
   if (Math.abs(delta) > 1.15 && !behind) throttle *= precise ? 0.38 : 0.56;
   if (intent === "recover") throttle = clamp(throttle, 0.34, 0.82);
   if (intent === "boost") throttle = 1;
+  if (["guard", "shadow", "support", "rotate", "fake"].includes(intent) && !behind) {
+    const holdRadius = intent === "guard" ? 13 : intent === "shadow" ? 16 : 18;
+    const targetSpeed = intent === "guard" ? 7.5 : intent === "shadow" ? 12 : intent === "fake" ? 13 : 16;
+    if (dist < holdRadius && forwardSpeed > targetSpeed) throttle *= intent === "guard" ? 0.18 : 0.34;
+    if (dist < 5.2 && forwardSpeed > 5.5) throttle = -0.26;
+    if (intent === "shadow" && throttle > 0) throttle = clamp(throttle, 0.16, 0.68);
+    if (intent === "fake" && throttle > 0) throttle = clamp(throttle, 0.18, 0.72);
+  }
   const aligned = Math.abs(delta) < (precise ? 0.20 : 0.32);
   const driftThreshold = intent === "kickoff" ? 0.38 : (precise ? 0.68 : 0.52);
-  const shouldDrift = speed > (intent === "kickoff" ? 8.0 : 9.2)
+  const driftSkill = clamp(skill.rotation * (intent === "kickoff" ? 1.18 : 1), 0, 1.45);
+  const driftConfidence = clamp((driftSkill - 0.34) / 0.82, 0, 1);
+  const driftWindow = driftConfidence > 0.78 || Math.sin(state.tick * 0.047 + (car.aiNoiseSeed || 0) * 1.9) > 0.18 - driftConfidence * 0.98;
+  const shouldDrift = car.grounded
+    && speed > (intent === "kickoff" ? 8.0 : 9.2)
     && Math.abs(delta) > driftThreshold
     && Math.abs(delta) < 2.62
-    && skill.rotation > 0.48;
+    && driftSkill > 0.38
+    && driftWindow;
   const boostIntent = ["challenge", "shot", "save", "kickoff", "boost"].includes(intent);
   const boostAngle = intent === "kickoff" ? 0.50 : intent === "save" ? 0.38 : 0.34;
   const boostMinDist = intent === "kickoff" ? 9 : intent === "save" ? 13 : 18;
-  const boost = car.boost > (precise ? 14 : 7)
+  const boostAllowed = throttle >= 0.04 && car.boost > (precise ? 14 : 7) && (car.grounded || state.mode === "flying");
+  const boost = boostAllowed
     && boostIntent
     && Math.abs(delta) < boostAngle
     && dist > boostMinDist
@@ -823,14 +953,23 @@ export function makeAIInput(car, state, meta) {
   const tune = aiTuningForCar(meta, car);
   const skill = { ...aiSkill(meta) };
   const style = { ...styleConfig(meta) };
+  const role = ROLES.includes(car.role) ? car.role : "balanced";
+  const roleCfg = roleConfig(role);
   skill.speed *= (0.96 + (tune.aggression - 1) * 0.35 + (tune.boost - 1) * 0.18);
   skill.boost *= tune.boost;
   skill.jump *= (0.94 + (tune.aggression - 1) * 0.25);
   skill.save *= (0.96 + (tune.defence - 1) * 0.34);
-  style.attack *= tune.aggression;
-  style.defence *= tune.defence;
-  style.chase *= (0.98 + (tune.aggression - 1) * 0.34);
-  style.boostDiscipline *= (1 + (1 - tune.boost) * 0.26);
+  skill.challenge *= roleCfg.challenge;
+  skill.rotation *= roleCfg.rotation;
+  skill.aerial *= roleCfg.aerial;
+  skill.patience *= roleCfg.patience;
+  skill.discipline *= roleCfg.discipline;
+  style.attack *= tune.aggression * roleCfg.attack;
+  style.defence *= tune.defence * roleCfg.defence;
+  style.chase *= (0.98 + (tune.aggression - 1) * 0.34) * roleCfg.challenge;
+  style.support *= roleCfg.support;
+  style.rotation *= roleCfg.rotation;
+  style.boostDiscipline *= (1 + (1 - tune.boost) * 0.26) / roleCfg.boostNeed;
 
   const ownSign = car.team === "blue" ? -1 : 1;
   const enemySign = -ownSign;
@@ -843,27 +982,43 @@ export function makeAIInput(car, state, meta) {
   const nearOwnGoal = Math.abs(ball.z - ownGoalZ) < state.arena.l * 0.28;
   const danger01 = clamp((movingAtOwnGoal ? 0.35 : 0) + ownHalfDepth * 0.55 + (nearOwnGoal ? 0.24 : 0) + clamp(ballSpeed / 60, 0, 0.20), 0, 1);
   const distToBall = distance2(car, ball);
+  const intercept = selectAiIntercept(car, state, skill, danger01, roleCfg);
+  const predicted = intercept.point;
+  const ownEta = aiCarEta(car, predicted, state, skill, danger01);
+  const opponentEta = opponentEtaTo(state, car.team, predicted, skill, danger01);
+  const mateEta = teamEtaTo(state, car.team, predicted, skill, danger01, car.id);
   const rank = aiRankForBall(car, state, skill, danger01);
   const teamSize = Math.max(1, Number(state.teamSize || meta.teamSize || 1));
-  const role = car.role || "attack";
   const firstMan = rank === 0 || style.chaos;
   const secondMan = rank === 1 || (teamSize === 1 && rank === 0);
   const thirdMan = rank >= 2;
-  const predictSeconds = clamp(0.16 + distToBall / 92 * skill.read + danger01 * 0.22, 0.14, skill.read > 1 ? 1.45 : 1.08);
-  const predicted = ballAt(state, predictSeconds);
+  const hasBetterMate = mateEta + (skill.discipline > 1 ? 0.18 : 0.05) < ownEta && !style.chaos;
+  const behindBall = carBehindBallForTeam(car, predicted, car.team);
+  const inOwnThird = ownSign * predicted.z > state.arena.l * 0.16;
+  const inEnemyHalf = enemySign * predicted.z > 0;
+  const canWinRace = ownEta < opponentEta + (skill.discipline > 1 ? 0.20 : 0.05);
+  const shouldPressureOpponent = opponentEta < ownEta + 0.42 && (firstMan || style.chase > 1.15) && role !== "goalkeeper";
 
   let intent = "support";
   let target = { x: predicted.x, z: predicted.z };
-  let aim = goalTargetForShot(state, car.team, predicted);
+  let aim = goalTargetForShot(state, car.team, predicted, skill);
   let approachDistance = cfg.snooker ? 14 : 7.6;
   let precise = false;
+  let holdPlan = false;
 
   const ticksSinceRound = state.tick - Number(state.sound?.roundTick || 0);
   const kickoffActive = Math.abs(ball.x) < 0.1 && Math.abs(ball.z) < 0.1 && state.kickoffTimer <= 0 && ticksSinceRound < 120 * 4;
-  const canChallenge = firstMan || (role === "attack" && rank <= 1 && style.attack > 1.05) || (role === "midfield" && rank <= 1 && style.chase > 1.05) || (role === "defence" && danger01 > 0.58 && rank <= 1);
-  const shouldDefend = danger01 > (role === "goalkeeper" ? 0.30 : role === "defence" ? 0.38 : 0.62 / Math.max(0.65, style.defence));
+  const canChallenge = (firstMan && !hasBetterMate)
+    || (role === "attack" && rank <= 1 && style.attack > 1.03 && !hasBetterMate)
+    || (role === "balanced" && rank <= 1 && (danger01 > 0.36 || style.chase > 0.95) && !hasBetterMate)
+    || (role === "midfield" && rank <= 1 && style.chase > 1.08 && danger01 < 0.72)
+    || (role === "defence" && danger01 > 0.54 && rank <= 1);
+  const shouldDefend = danger01 > (role === "goalkeeper" ? 0.26 : role === "defence" ? 0.35 : role === "balanced" ? 0.46 : 0.60 / Math.max(0.65, style.defence));
+  const disciplinedChallenge = canChallenge
+    && (canWinRace || shouldPressureOpponent || danger01 > 0.68 || style.chaos)
+    && (behindBall || danger01 > 0.52 || role === "attack" || skill.discipline < 0.82);
 
-  if (kickoffActive && (role === "attack" || rank === 0)) {
+  if (kickoffActive && (role === "attack" || role === "balanced" || rank === 0)) {
     intent = "kickoff";
     const kickoffShot = (meta.difficulty || "pro") !== "rookie" && aiRoundRoll(car, state, 2) < (meta.difficulty === "allstar" ? 0.52 : 0.28);
     aim = kickoffShot ? goalTargetForShot(state, car.team, ball) : { x: 0, z: enemyGoalZ };
@@ -873,80 +1028,95 @@ export function makeAIInput(car, state, meta) {
     approachDistance = 0;
     precise = false;
   } else if (role === "goalkeeper") {
-    if (danger01 > 0.42 || Math.abs(ball.z - ownGoalZ) < state.arena.l * 0.22) {
-      intent = danger01 > 0.72 || distToBall < 15 ? "save" : "guard";
-      const intercept = ballAt(state, clamp(Math.abs(ball.z - ownGoalZ) / Math.max(12, Math.abs(ball.vz) + 6), 0.15, 1.15));
+    if (danger01 > 0.38 || inOwnThird || Math.abs(ball.z - ownGoalZ) < state.arena.l * 0.24) {
+      intent = danger01 > 0.68 || (distToBall < 16 && canWinRace) ? "save" : "guard";
+      const goalIntercept = ballAt(state, clamp(Math.abs(ball.z - ownGoalZ) / Math.max(12, Math.abs(ball.vz) + 7), 0.15, 1.15 + skill.read * 0.25));
       target = {
-        x: clamp(intercept.x * 0.88, -state.arena.goalW * 0.43, state.arena.goalW * 0.43),
+        x: clamp(goalIntercept.x * 0.88, -state.arena.goalW * 0.43, state.arena.goalW * 0.43),
         z: ownGoalZ - ownSign * (intent === "save" ? 2.0 : 0.2)
       };
       aim = clearanceTarget(state, car.team, predicted);
       precise = true;
-      if (intent === "save" && distToBall < 17 && Math.abs(ball.z - ownGoalZ) < state.arena.l * 0.18) {
+      if (intent === "save" && (distToBall < 18 || ownEta < intercept.time + 0.45) && Math.abs(ball.z - ownGoalZ) < state.arena.l * 0.22) {
         target = approachTargetBehindBall(predicted, aim, 5.8);
       }
     } else {
       intent = "guard";
-      target = {
-        x: clamp(ball.x * 0.42, -state.arena.goalW * 0.38, state.arena.goalW * 0.38),
-        z: ownGoalZ - ownSign * 1.4
-      };
+      target = backPostTarget(state, car.team, ball, 3.6);
       precise = true;
+      holdPlan = true;
     }
-  } else if (shouldDefend && (role === "defence" || rank <= 1 || style.defence > 1.18)) {
-    intent = danger01 > 0.68 && rank <= 1 ? "save" : "shadow";
+  } else if (shouldDefend && (role === "defence" || role === "balanced" || rank <= 1 || style.defence > 1.18)) {
+    intent = danger01 > 0.66 && rank <= 1 && !hasBetterMate ? "save" : "shadow";
     aim = clearanceTarget(state, car.team, predicted);
-    if (intent === "save" && distToBall < state.arena.l * 0.33) {
+    if (intent === "save" && distToBall < state.arena.l * 0.35 && (behindBall || danger01 > 0.78 || skill.discipline < 0.78)) {
       target = approachTargetBehindBall(predicted, aim, 6.6);
     } else {
-      const lane = ((car.slotIndex % Math.max(1, teamSize)) - (teamSize - 1) / 2) * 6.2;
-      target = {
-        x: clamp(ball.x * 0.62 + lane, -state.arena.w * 0.40, state.arena.w * 0.40),
-        z: (ball.z + ownGoalZ) * (role === "defence" ? 0.48 : 0.38)
-      };
+      target = role === "defence" || role === "balanced"
+        ? supportTargetForRole(car, state, role, rank, style, roleCfg, predicted, ownSign)
+        : {
+          x: clamp(ball.x * 0.54, -state.arena.w * 0.36, state.arena.w * 0.36),
+          z: (ball.z + ownGoalZ) * 0.42
+        };
     }
     precise = true;
-  } else if (canChallenge && style.chase * skill.challenge > (role === "goalkeeper" ? 1.1 : 0.55)) {
-    const attacking = Math.sign(predicted.z || enemySign) === enemySign || style.attack > 1.15;
+  } else if (disciplinedChallenge && style.chase * skill.challenge > 0.52) {
+    const attacking = inEnemyHalf || (style.attack > 1.12 && !inOwnThird);
     intent = attacking ? "shot" : "challenge";
-    aim = attacking ? goalTargetForShot(state, car.team, predicted) : clearanceTarget(state, car.team, predicted);
-    approachDistance = cfg.snooker ? 13 : clamp(8.6 - skill.aim * 1.4 + ballSpeed * 0.035, 5.6, 10.6);
+    aim = attacking ? goalTargetForShot(state, car.team, predicted, skill) : clearanceTarget(state, car.team, predicted);
+    approachDistance = cfg.snooker ? 13 : clamp(8.8 - skill.aim * 1.45 + ballSpeed * 0.030 - skill.shot * 0.28, 5.2, 10.8);
     target = approachTargetBehindBall(predicted, aim, approachDistance);
-    if (distToBall < 7.2 + skill.aim * 1.4) target = { x: predicted.x + (aim.x - predicted.x) * 0.08, z: predicted.z + (aim.z - predicted.z) * 0.08 };
-  } else if (secondMan || role === "midfield") {
-    intent = "support";
-    const side = car.slotIndex % 2 ? 1 : -1;
-    const supportDepth = style.attack > 1.2 ? 0.10 : style.defence > 1.2 ? -0.08 : 0.0;
-    target = {
-      x: clamp(ball.x * 0.48 + side * state.arena.w * 0.13, -state.arena.w * 0.42, state.arena.w * 0.42),
-      z: clamp(ball.z * 0.28 + ownSign * state.arena.l * (0.08 - supportDepth), -state.arena.l * 0.36, state.arena.l * 0.36)
-    };
+    if (distToBall < 7.2 + skill.aim * 1.4 || ownEta < 0.28) target = { x: predicted.x + (aim.x - predicted.x) * 0.08, z: predicted.z + (aim.z - predicted.z) * 0.08 };
+  } else if (firstMan && !hasBetterMate && shouldPressureOpponent && skill.fake > 0.18 && role !== "defence" && role !== "goalkeeper") {
+    intent = "fake";
+    aim = inOwnThird ? clearanceTarget(state, car.team, predicted) : goalTargetForShot(state, car.team, predicted, skill);
+    target = approachTargetBehindBall(predicted, aim, 10.5 + skill.patience * 1.6);
     precise = true;
+  } else if (secondMan || role === "balanced" || role === "midfield") {
+    intent = "support";
+    target = supportTargetForRole(car, state, role, rank, style, roleCfg, predicted, ownSign);
+    precise = true;
+    holdPlan = skill.discipline > 0.70;
   } else {
     intent = "rotate";
-    const lane = ((car.slotIndex % Math.max(1, teamSize)) - (teamSize - 1) / 2) * state.arena.w * 0.10;
-    target = {
-      x: clamp(lane - ball.x * 0.15, -state.arena.w * 0.38, state.arena.w * 0.38),
-      z: ownGoalZ - ownSign * (role === "defence" || thirdMan ? 9.0 : 15.5)
-    };
+    target = (role === "attack" || role === "balanced") && !thirdMan
+      ? supportTargetForRole(car, state, role, rank, style, roleCfg, predicted, ownSign)
+      : {
+        x: clamp(((car.slotIndex % Math.max(1, teamSize)) - (teamSize - 1) / 2) * state.arena.w * 0.10 - ball.x * 0.15, -state.arena.w * 0.38, state.arena.w * 0.38),
+        z: ownGoalZ - ownSign * (role === "defence" || thirdMan ? 9.0 : 15.5)
+      };
     precise = true;
+    holdPlan = true;
   }
 
   // Real players rotate for boost when they are not the immediate challenger.
   // V38: with the same starting boost as humans, bots now value pads more and
   // take nearby route pads during support/rotation, rather than waiting until
   // they are completely empty.
-  const lowBoost = car.boost < (role === "attack" ? 20 : 28) * style.boostDiscipline;
+  const roleBoostFloor = role === "attack" ? 20 : role === "balanced" ? 24 : 28;
+  const lowBoost = car.boost < roleBoostFloor * style.boostDiscipline;
   const routeBoost = ["support", "rotate", "guard"].includes(intent) && car.boost < (skill.rotation > 0.9 ? 62 : 48);
   const urgent = intent === "save" || (intent === "challenge" && danger01 > 0.62) || intent === "kickoff";
-  if ((lowBoost || routeBoost) && !urgent && !cfg.snooker && car.grounded) {
+  if ((lowBoost || routeBoost) && !urgent && !cfg.snooker && car.grounded && (role !== "goalkeeper" || danger01 < 0.32)) {
     const pad = nearestUsefulBoostPad(car, state, car.boost < 12 || (routeBoost && skill.rotation > 0.9));
     const maxPadRange = state.arena.l * (routeBoost ? 0.34 : (skill.rotation > 0.9 ? 0.55 : 0.38));
     if (pad && Math.hypot(car.x - pad.x, car.z - pad.z) < maxPadRange) {
       intent = "boost";
       target = { x: pad.x, z: pad.z };
       precise = false;
+      holdPlan = false;
     }
+  }
+
+  const urgentPlan = intent === "save" || intent === "kickoff" || danger01 > 0.76;
+  if (!urgentPlan && car.aiPlan && state.tick < (car.aiNextThinkTick || 0)) {
+    intent = car.aiPlan.intent || intent;
+    target = { x: car.aiPlan.x, z: car.aiPlan.z };
+    precise = !!car.aiPlan.precise;
+  } else {
+    const thinkTicks = Math.max(3, Math.round((skill.think + aiRoundRoll(car, state, 7) * skill.think * 0.55) * 120));
+    car.aiPlan = { intent, x: target.x, z: target.z, precise };
+    car.aiNextThinkTick = state.tick + (holdPlan ? Math.round(thinkTicks * 1.25) : thinkTicks);
   }
 
   // Human-like errors: mostly Rookie, occasionally Pro. All-Star remains clean.
@@ -971,8 +1141,8 @@ export function makeAIInput(car, state, meta) {
   if (intent === "kickoff") {
     drive.throttle = 1;
     const kickoffFast = (meta.difficulty || "pro") !== "rookie" && aiRoundRoll(car, state, 1) < skill.kickoff;
-    if (kickoffFast && car.boost > 2 && drive.dist > 6 && Math.abs(drive.delta) < 0.72) drive.boost = true;
-    if (kickoffFast && carSpeed2(car) > 9 && Math.abs(drive.delta) > 0.34 && Math.abs(drive.delta) < 1.35) drive.drift = true;
+    if (kickoffFast && car.boost > 2 && (car.grounded || state.mode === "flying") && drive.dist > 6 && Math.abs(drive.delta) < 0.72) drive.boost = true;
+    if (kickoffFast && car.grounded && carSpeed2(car) > 9 && Math.abs(drive.delta) > 0.34 && Math.abs(drive.delta) < 1.35) drive.drift = true;
   }
 
   const ballDist = distance2(car, ball);
@@ -997,6 +1167,8 @@ export function makeAIInput(car, state, meta) {
   // Avoid boosting through badly angled recoveries; better bots feather boost when
   // they need to rotate instead of wasting it.
   if (Math.abs(drive.delta) > 0.58 && intent !== "kickoff" && intent !== "save") drive.boost = false;
+  if (drive.boost && !(drive.throttle >= 0 && car.boost > 0.1 && (car.grounded || state.mode === "flying"))) drive.boost = false;
+  if (!car.grounded) drive.drift = false;
   if (cfg.snooker) drive.boost = false;
 
   setAiDebug(car, intent, target.x, target.z);

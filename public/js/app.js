@@ -1498,7 +1498,7 @@ async function createLobby() {
       updatedAt: serverTimestamp(),
       status: "waiting"
     };
-    const player = { name: playerName, team: ui.team.value || "blue", role: ui.role.value || "midfield", model: ui.vehicle?.value || "default", ready: false, joinedAt: serverTimestamp(), isHost: true };
+    const player = { name: playerName, team: ui.team.value || "blue", role: ui.role.value || "balanced", model: ui.vehicle?.value || "default", ready: false, joinedAt: serverTimestamp(), isHost: true };
 
     // Write granularly instead of one large root write. This works with stricter
     // Realtime Database rules and gives clearer failure messages on phones.
@@ -1535,7 +1535,7 @@ async function joinLobby() {
     if (humans >= maxHumans) return setStatus(`Lobby is full for ${MODE_CONFIGS[meta.mode].label}.`);
     const counts = countTeams(data.players || {});
     const team = counts.blue <= counts.orange ? "blue" : "orange";
-    await withTimeout(set(lobbyRef(code, `players/${uid}`), { name: playerName, team, role: "midfield", model: ui.vehicle?.value || "default", ready: false, joinedAt: serverTimestamp(), isHost: false }), 12000, "Joining lobby");
+    await withTimeout(set(lobbyRef(code, `players/${uid}`), { name: playerName, team, role: "balanced", model: ui.vehicle?.value || "default", ready: false, joinedAt: serverTimestamp(), isHost: false }), 12000, "Joining lobby");
     await enterLobby(code);
     setStatus(`Joined lobby ${code}.`);
   } catch (err) {
@@ -1565,7 +1565,7 @@ function startSinglePlayer() {
     [singlePlayerId]: {
       name: playerName,
       team: ui.team.value || "blue",
-      role: ui.role.value || "midfield",
+      role: ui.role.value || "balanced",
       model: ui.vehicle?.value || "default",
       ready: true,
       joinedAt: Date.now(),
@@ -1598,7 +1598,7 @@ function startSoloMatch() {
     ...(currentPlayers[localId] || {}),
     name: sanitizeName(isAccountUser() ? accountName() : ui.name.value),
     team: ui.team.value || currentPlayers[localId]?.team || "blue",
-    role: ui.role.value || currentPlayers[localId]?.role || "midfield",
+    role: ui.role.value || currentPlayers[localId]?.role || "balanced",
     model: ui.vehicle?.value || currentPlayers[localId]?.model || "default",
     ready: true
   };
@@ -1683,7 +1683,7 @@ function renderLobby() {
   if (ui.chatScope) ui.chatScope.value = currentMeta.chatScope || DEFAULT_META.chatScope;
   if (ui.voiceScope) ui.voiceScope.value = currentMeta.voiceScope || DEFAULT_META.voiceScope;
   ui.team.value = local.team || "blue";
-  ui.role.value = local.role || "midfield";
+  ui.role.value = ROLES.includes(local.role) ? local.role : "balanced";
   if (ui.vehicle) ui.vehicle.value = (VEHICLE_CONFIGS[local.model] ? local.model : "default");
   updateVehiclePreview(false);
   ui.ready.classList.toggle("not-ready", !isSinglePlayer && !!local.ready);
@@ -1802,7 +1802,7 @@ function renderTeamList(team, root) {
 }
 
 function roleLabel(role) {
-  return role === "goalkeeper" ? "Goalkeeper" : role === "defence" ? "Back / Defence" : role === "midfield" ? "Midfield" : "Attack";
+  return role === "balanced" ? "Balanced" : role === "goalkeeper" ? "Goalkeeper" : role === "defence" ? "Back / Defence" : role === "midfield" ? "Midfield" : "Attack";
 }
 
 function escapeHtml(s) {
