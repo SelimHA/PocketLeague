@@ -3808,6 +3808,8 @@ let ballMesh = null;
 const carMeshes = new Map();
 const boostPadMeshes = new Map();
 const nameSprites = new Map();
+const boostTrailMeshes = new Map();
+const ballTrail = [];
 const menuDemo = new THREE.Group();
 scene.add(menuDemo);
 let menuDemoBuilt = false;
@@ -4168,6 +4170,8 @@ function buildArena(state) {
   ballMesh = null;
   carMeshes.clear();
   boostPadMeshes.clear();
+  boostTrailMeshes.clear();
+  ballTrail.length = 0;
   nameSprites.clear();
   applySceneTheme(theme);
 
@@ -4833,6 +4837,61 @@ function carMaterial(team, human, model = "default") {
   });
 }
 
+
+function createRoundedBoxMesh(w, h, d, radius, material, segments = 4) {
+  const r = Math.max(0.02, Math.min(radius, w * 0.45, h * 0.45));
+  const shape = new THREE.Shape();
+  const x = w / 2 - r;
+  const y = h / 2 - r;
+  shape.moveTo(-x, -h / 2);
+  shape.lineTo(x, -h / 2);
+  shape.quadraticCurveTo(w / 2, -h / 2, w / 2, -y);
+  shape.lineTo(w / 2, y);
+  shape.quadraticCurveTo(w / 2, h / 2, x, h / 2);
+  shape.lineTo(-x, h / 2);
+  shape.quadraticCurveTo(-w / 2, h / 2, -w / 2, y);
+  shape.lineTo(-w / 2, -y);
+  shape.quadraticCurveTo(-w / 2, -h / 2, -x, -h / 2);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: d, bevelEnabled: true, bevelThickness: r * 0.38, bevelSize: r * 0.44, bevelSegments: segments, curveSegments: segments });
+  geo.center();
+  const mesh = new THREE.Mesh(geo, material);
+  return mesh;
+}
+
+function addAeroKit(g, bodyW, bodyH, bodyD, team, modelKey) {
+  const accent = team === "blue" ? 0x32d7ff : 0xff9a2b;
+  const carbon = new THREE.MeshStandardMaterial({ color: 0x070a10, roughness: 0.42, metalness: 0.34 });
+  const accentMat = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.42, roughness: 0.24, metalness: 0.18 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x07111e, emissive: accent, emissiveIntensity: 0.08, roughness: 0.12, metalness: 0.52, transparent: true, opacity: 0.88 });
+  const splitter = createRoundedBoxMesh(bodyW * 0.82, 0.10, 0.34, 0.06, carbon, 3);
+  splitter.position.set(0, 0.22, bodyD / 2 + 0.23);
+  const diffuser = createRoundedBoxMesh(bodyW * 0.76, 0.14, 0.24, 0.05, carbon, 3);
+  diffuser.position.set(0, 0.30, -bodyD / 2 - 0.18);
+  const spoiler = createRoundedBoxMesh(bodyW * 0.88, 0.10, 0.30, 0.06, carbon, 3);
+  spoiler.position.set(0, bodyH + 0.52, -bodyD * 0.46);
+  spoiler.rotation.x = -0.10;
+  const wingA = createRoundedBoxMesh(0.10, 0.50, 0.16, 0.04, carbon, 3);
+  const wingB = wingA.clone();
+  wingA.position.set(-bodyW * 0.38, bodyH + 0.28, -bodyD * 0.45);
+  wingB.position.set(bodyW * 0.38, bodyH + 0.28, -bodyD * 0.45);
+  g.add(splitter, diffuser, spoiler, wingA, wingB);
+  for (const sx of [-1, 1]) {
+    const skirt = createRoundedBoxMesh(0.12, 0.18, bodyD * 0.74, 0.05, carbon, 3);
+    skirt.position.set(sx * (bodyW / 2 + 0.08), 0.34, -bodyD * 0.02);
+    const neon = createRoundedBoxMesh(0.055, 0.07, bodyD * 0.68, 0.035, accentMat, 3);
+    neon.position.set(sx * (bodyW / 2 + 0.145), 0.53, -bodyD * 0.02);
+    const window = createRoundedBoxMesh(bodyW * 0.22, bodyH * 0.34, 0.06, 0.05, glassMat, 3);
+    window.position.set(sx * bodyW * 0.31, bodyH + 0.20, 0.08);
+    window.rotation.y = sx * Math.PI / 2;
+    g.add(skirt, neon, window);
+  }
+  if (modelKey === "sport") {
+    const intake = createRoundedBoxMesh(bodyW * 0.34, 0.08, bodyD * 0.28, 0.04, carbon, 3);
+    intake.position.set(0, bodyH + 0.14, bodyD * 0.12);
+    g.add(intake);
+  }
+}
+
 function createWheelMesh(x, z, scale = 1) {
   const wheel = new THREE.Mesh(
     new THREE.CylinderGeometry(0.34 * scale, 0.34 * scale, 0.42 * scale, 14),
@@ -4886,11 +4945,11 @@ function createCarMesh(car, state) {
   const [cabinW, cabinH, cabinD] = vehicle.cabin || VEHICLE_CONFIGS.default.cabin;
   const [cabinX, cabinY, cabinZ] = vehicle.cabinOffset || VEHICLE_CONFIGS.default.cabinOffset;
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, bodyD), carMaterial(car.team, car.human, modelKey));
+  const body = createRoundedBoxMesh(bodyW, bodyH, bodyD, 0.22, carMaterial(car.team, car.human, modelKey), isPhonePortrait() ? 3 : 5);
   body.position.y = bodyH / 2;
   body.castShadow = true;
 
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(cabinW, cabinH, cabinD), new THREE.MeshStandardMaterial({ color: 0x10141e, roughness: 0.22, metalness: 0.4 }));
+  const cabin = createRoundedBoxMesh(cabinW, cabinH, cabinD, 0.18, new THREE.MeshStandardMaterial({ color: 0x10141e, roughness: 0.16, metalness: 0.55, transparent: true, opacity: 0.92 }), isPhonePortrait() ? 3 : 5);
   cabin.position.set(cabinX, cabinY, cabinZ);
   cabin.castShadow = true;
 
@@ -4957,6 +5016,7 @@ function createCarMesh(car, state) {
   g.userData.flame = flame;
   g.add(body, cabin, nose, flame);
   addVehicleLighting(g, bodyW, bodyH, bodyD, car.team, modelKey);
+  addAeroKit(g, bodyW, bodyH, bodyD, car.team, modelKey);
 
   if (state.mode === "snooker") {
     const cueMat = new THREE.MeshStandardMaterial({ color: 0xd8b47a, roughness: 0.4 });
@@ -5009,9 +5069,9 @@ function createPreviewVehicleMesh(modelKey, team = "blue") {
   const [bodyW, bodyH, bodyD] = vehicle.body || VEHICLE_CONFIGS.default.body;
   const [cabinW, cabinH, cabinD] = vehicle.cabin || VEHICLE_CONFIGS.default.cabin;
   const [cabinX, cabinY, cabinZ] = vehicle.cabinOffset || VEHICLE_CONFIGS.default.cabinOffset;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, bodyD), carMaterial(team, true, modelKey));
+  const body = createRoundedBoxMesh(bodyW, bodyH, bodyD, 0.22, carMaterial(team, true, modelKey), isPhonePortrait() ? 3 : 5);
   body.position.y = bodyH / 2;
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(cabinW, cabinH, cabinD), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.22, metalness: 0.38 }));
+  const cabin = createRoundedBoxMesh(cabinW, cabinH, cabinD, 0.18, new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.16, metalness: 0.55, transparent: true, opacity: 0.92 }), isPhonePortrait() ? 3 : 5);
   cabin.position.set(cabinX, cabinY, cabinZ);
   const accent = new THREE.Mesh(new THREE.BoxGeometry(Math.max(1.45, bodyW * 0.72), 0.30, 0.26), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: team === "blue" ? 0x0a91ff : 0xff6a00, emissiveIntensity: 0.35 }));
   accent.position.set(0, bodyH * 0.76, bodyD / 2 + 0.10);
@@ -5025,6 +5085,7 @@ function createPreviewVehicleMesh(modelKey, team = "blue") {
     createWheelMesh(wheelX, wheelZ, wheelScale)
   );
   addVehicleLighting(g, bodyW, bodyH, bodyD, team, modelKey);
+  addAeroKit(g, bodyW, bodyH, bodyD, team, modelKey);
   if (modelKey === "rally") {
     const rollBar = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.055, 8, 18, Math.PI), new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.36, metalness: 0.5 }));
     rollBar.rotation.z = Math.PI;
@@ -5152,18 +5213,92 @@ function handleSoundEvents(state) {
   }
 }
 
+
+function makeTrailSprite(color, opacity, scale) {
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }));
+  sprite.scale.setScalar(scale);
+  world.add(sprite);
+  return sprite;
+}
+
+function updateBallTrail(state) {
+  const phone = isPhonePortrait();
+  const max = phone ? 7 : 14;
+  if (!ballMesh || !state.ball) return;
+  const speed = Math.hypot(state.ball.vx || 0, state.ball.vy || 0, state.ball.vz || 0);
+  if (speed > 10 && !phone) {
+    const theme = themeForState(state);
+    const s = makeTrailSprite(theme.trim ?? 0xdbeafe, 0.20, Math.min(2.4, 0.75 + speed * 0.018));
+    s.position.copy(ballMesh.position);
+    ballTrail.unshift({ mesh: s, life: 1 });
+  }
+  while (ballTrail.length > max) {
+    const old = ballTrail.pop();
+    world.remove(old.mesh);
+    old.mesh.material.dispose();
+  }
+  for (let i = ballTrail.length - 1; i >= 0; i--) {
+    const p = ballTrail[i];
+    p.life -= 0.075;
+    p.mesh.material.opacity = Math.max(0, p.life) * 0.18;
+    p.mesh.scale.multiplyScalar(0.985);
+    if (p.life <= 0) {
+      world.remove(p.mesh);
+      p.mesh.material.dispose();
+      ballTrail.splice(i, 1);
+    }
+  }
+}
+
+function updateCarEffects(car, mesh) {
+  const speed = Math.hypot(car.vx || 0, car.vz || 0);
+  const color = car.team === "blue" ? 0x38d8ff : 0xff8a24;
+  let trail = boostTrailMeshes.get(car.id);
+  if (!trail) {
+    trail = new THREE.Group();
+    for (let i = 0; i < (isPhonePortrait() ? 3 : 6); i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+      sprite.scale.set(0.8 + i * 0.25, 0.8 + i * 0.25, 1);
+      trail.add(sprite);
+    }
+    world.add(trail);
+    boostTrailMeshes.set(car.id, trail);
+  }
+  const fwd = new THREE.Vector3(Math.sin(car.yaw), 0, Math.cos(car.yaw));
+  const active = (!!car.boosting && (car.boost || 0) > 0) || speed > 31;
+  trail.visible = active && !(car.demoTimer > 0);
+  if (trail.visible) {
+    trail.position.set(car.x - fwd.x * 2.35, car.y + 0.62, car.z - fwd.z * 2.35);
+    trail.rotation.y = car.yaw;
+    let i = 0;
+    for (const s of trail.children) {
+      const spread = (i - (trail.children.length - 1) / 2) * 0.12;
+      s.position.set(spread, 0, -i * 0.52);
+      s.material.opacity = (car.boosting ? 0.42 : 0.18) * (1 - i / trail.children.length);
+      s.scale.setScalar((car.boosting ? 1.25 : 0.82) + i * 0.26 + Math.random() * 0.18);
+      i++;
+    }
+  }
+}
+
 function updateVisuals(state) {
   if (!state) return;
   buildArena(state);
   const live = new Set(Object.keys(state.cars || {}));
   for (const [id, mesh] of carMeshes.entries()) {
-    if (!live.has(id)) { world.remove(mesh); carMeshes.delete(id); }
+    if (!live.has(id)) {
+      world.remove(mesh);
+      carMeshes.delete(id);
+      const trail = boostTrailMeshes.get(id);
+      if (trail) { world.remove(trail); boostTrailMeshes.delete(id); }
+    }
   }
   if (ballMesh) {
     ballMesh.position.set(state.ball.x, state.ball.y, state.ball.z);
     ballMesh.rotation.set(state.ball.rx, 0, state.ball.rz);
   }
   updateBoostPadVisuals(state);
+  updateBallTrail(state);
   for (const car of Object.values(state.cars || {})) {
     let mesh = carMeshes.get(car.id);
     const modelKey = VEHICLE_CONFIGS[car.model] ? car.model : "default";
@@ -5178,6 +5313,7 @@ function updateVisuals(state) {
     mesh.rotation.set(car.pitch || 0, car.yaw, car.roll || 0, "YXZ");
     const scale = car.cueCooldown > 0 ? 1 + car.cueCooldown * 0.45 : 1;
     mesh.scale.set(1, 1, scale);
+    updateCarEffects(car, mesh);
     if (mesh.userData.flame) {
       const boosting = !!car.boosting && (car.boost || 0) > 0;
       mesh.userData.flame.visible = boosting;
