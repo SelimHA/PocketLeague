@@ -268,7 +268,9 @@ export const DEFAULT_META = {
   hydrationEnabled: false,
   overtimeEnabled: false,
   goldenGoal: true,
-  overtimeDuration: 180
+  overtimeDuration: 180,
+  aiTeamCommands: { enabled: false, smarterOpponents: true, commandStrength: "normal" },
+  activeTeamCommands: {}
 };
 
 const BASE_FIELD_W = 72;
@@ -392,6 +394,37 @@ function sanitiseAiTuning(raw = {}) {
   return out;
 }
 
+function sanitiseAiTeamCommandSettings(raw = {}) {
+  const inputMode = ["quick", "push", "alwaysMatch", "alwaysLobbyMatch"].includes(raw.inputMode) ? raw.inputMode : "quick";
+  const commandStrength = ["subtle", "normal", "strong"].includes(raw.commandStrength) ? raw.commandStrength : "normal";
+  return {
+    enabled: !!raw.enabled,
+    inputMode,
+    serverAiEnabled: !!raw.serverAiEnabled,
+    voiceEnabled: inputMode !== "quick",
+    serverSttEnabled: !!raw.serverSttEnabled,
+    showTranscript: raw.showTranscript !== false,
+    showAcknowledgements: raw.showAcknowledgements !== false,
+    commandStrength,
+    smarterOpponents: raw.smarterOpponents !== false,
+    sameTeamOnly: raw.sameTeamOnly !== false
+  };
+}
+
+const AI_COMMAND_INTENTS = new Set(["ATTACK_BALL", "TAKE_SHOT", "DEFEND_GOAL", "ROTATE_BACK", "CLEAR_BALL", "PASS_LEFT", "PASS_RIGHT", "GET_BOOST", "GOALKEEPER_HOLD", "TEAM_PRESS", "MARK_OPPONENT", "SPREAD_OUT", "CENTER_BALL", "HOLD_POSITION", "SUPPORT_ME"]);
+function sanitiseActiveTeamCommands(raw = {}) {
+  const now = Date.now();
+  const out = { blue: [], orange: [] };
+  for (const team of ["blue", "orange"]) {
+    const src = raw?.[team] || {};
+    const list = Array.isArray(src) ? src : Object.values(src);
+    out[team] = list.filter(cmd => cmd && AI_COMMAND_INTENTS.has(cmd.intent) && Number(cmd.expiresAt || 0) > now - 1000).slice(-6).map(cmd => ({
+      intent: cmd.intent, target: String(cmd.target || "all").slice(0, 24), strength: clamp(Number(cmd.strength ?? 0.75), 0.1, 1), confidence: clamp(Number(cmd.confidence ?? 1), 0, 1), createdAt: Number(cmd.createdAt || now), expiresAt: Number(cmd.expiresAt || now + 6000), issuedBy: String(cmd.issuedBy || "").slice(0, 64)
+    }));
+  }
+  return out;
+}
+
 function sanitiseAiRoles(raw = {}) {
   const out = { blue: {}, orange: {} };
   for (const team of ["blue", "orange"]) {
@@ -424,6 +457,8 @@ export function serialiseMeta(meta = {}) {
   out.overtimeEnabled = !!out.overtimeEnabled;
   out.goldenGoal = out.goldenGoal !== false;
   out.overtimeDuration = out.overtimeDuration === "unlimited" ? "unlimited" : clamp(Math.round(Number(out.overtimeDuration) || 180), 60, 300);
+  out.aiTeamCommands = sanitiseAiTeamCommandSettings(out.aiTeamCommands);
+  out.activeTeamCommands = sanitiseActiveTeamCommands(out.activeTeamCommands);
   return out;
 }
 
@@ -637,7 +672,8 @@ export function defaultBindings() {
     pause: "KeyP",
     chat: "KeyT",
     voice: "KeyV",
-    mic: "KeyM"
+    mic: "KeyM",
+    aiCommand: "KeyC"
   };
 }
 
@@ -678,6 +714,24 @@ function roleConfig(role = "attack") {
         : role === "midfield"
           ? { attack: 0.96, defence: 1.02, challenge: 0.96, support: 1.18, rotation: 1.08, boostNeed: 1.00, width: 0.34, depth: 0.32, patience: 0.98, aerial: 1.02, discipline: 1.02 }
           : { attack: 1.32, defence: 0.76, challenge: 1.18, support: 0.88, rotation: 0.92, boostNeed: 1.08, width: 0.26, depth: 0.46, patience: 0.78, aerial: 1.08, discipline: 0.84 };
+}
+
+function activeCommandForCar(meta, car) {
+  const list = meta?.activeTeamCommands?.[car.team] || [];
+  const now = Date.now();
+  return list.filter(cmd => cmd && cmd.expiresAt > now && (cmd.target === "all" || String(cmd.target || "").toLowerCase() === String(car.role || "").toLowerCase() || String(cmd.target || "").toLowerCase() === String(car.id || "").toLowerCase()))
+    .sort((a, b) => (b.strength * b.confidence) - (a.strength * a.confidence))[0] || null;
+}
+
+function opponentCommandBoost(meta, car, players = {}) {
+  const cfg = meta?.aiTeamCommands || {};
+  if (!cfg.enabled || !cfg.smarterOpponents || car.human) return 1;
+  const humans = Object.values(players || {}).filter(p => p && !p.localAi);
+  if (!humans.length) return 1;
+  const opponentHumans = humans.filter(p => (p.team || "blue") !== car.team);
+  const sameTeamHumans = humans.filter(p => (p.team || "blue") === car.team);
+  if (sameTeamHumans.length || !opponentHumans.length) return 1;
+  return meta.difficulty === "allstar" ? 1.18 : meta.difficulty === "pro" ? 1.11 : 1.04;
 }
 
 function aiTuningForCar(meta, car) {
@@ -1189,13 +1243,18 @@ function makeDriveInput(car, target, state, skill, intent, opts = {}) {
   return { throttle, steer, boost, drift: shouldDrift, aligned, dist, delta };
 }
 
-export function makeAIInput(car, state, meta) {
+export function makeAIInput(car, state, meta, players = {}) {
   const cfg = MODE_CONFIGS[state.mode] || MODE_CONFIGS.standard;
   const tune = aiTuningForCar(meta, car);
   const skill = { ...aiSkill(meta) };
   const style = { ...styleConfig(meta) };
   const role = ROLES.includes(car.role) ? car.role : "balanced";
   const roleCfg = roleConfig(role);
+  const teamCommand = activeCommandForCar(meta, car);
+  const smartBoost = opponentCommandBoost(meta, car, players);
+  if (smartBoost > 1) {
+    skill.think /= smartBoost; skill.aim *= smartBoost; skill.read *= smartBoost; skill.rotation *= smartBoost; skill.challenge *= smartBoost; skill.save *= smartBoost; skill.intercept *= smartBoost; skill.discipline *= smartBoost; skill.recovery *= smartBoost; skill.mistake /= smartBoost; skill.error /= smartBoost; skill.boost *= Math.min(1.12, smartBoost);
+  }
   skill.speed *= (0.96 + (tune.aggression - 1) * 0.35 + (tune.boost - 1) * 0.18);
   skill.boost *= tune.boost;
   skill.jump *= (0.94 + (tune.aggression - 1) * 0.25);
@@ -1257,6 +1316,13 @@ export function makeAIInput(car, state, meta) {
     || (role === "balanced" && rank <= 1 && (danger01 > 0.36 || style.chase > 0.95) && !hasBetterMate)
     || (role === "midfield" && rank <= 1 && style.chase > 1.08 && danger01 < 0.72)
     || (role === "defence" && danger01 > 0.54 && rank <= 1);
+  if (teamCommand) {
+    const s = clamp(teamCommand.strength || 0.75, 0.1, 1);
+    if (["DEFEND_GOAL", "GOALKEEPER_HOLD", "ROTATE_BACK", "CLEAR_BALL", "HOLD_POSITION"].includes(teamCommand.intent)) { style.defence *= 1 + s * 0.55; style.attack *= 1 - s * 0.22; skill.discipline *= 1 + s * 0.20; }
+    if (["ATTACK_BALL", "TAKE_SHOT", "TEAM_PRESS", "CENTER_BALL"].includes(teamCommand.intent)) { style.attack *= 1 + s * 0.45; style.chase *= 1 + s * 0.28; skill.challenge *= 1 + s * 0.22; }
+    if (["GET_BOOST", "ROTATE_BACK", "SPREAD_OUT"].includes(teamCommand.intent)) { style.rotation *= 1 + s * 0.32; style.boostDiscipline *= 1 + s * 0.22; }
+    if (["PASS_LEFT", "PASS_RIGHT", "SUPPORT_ME"].includes(teamCommand.intent)) { style.support *= 1 + s * 0.48; skill.discipline *= 1 + s * 0.18; }
+  }
   const shouldDefend = danger01 > (role === "goalkeeper" ? 0.26 : role === "defence" ? 0.35 : role === "balanced" ? 0.46 : 0.60 / Math.max(0.65, style.defence));
   const disciplinedChallenge = canChallenge
     && (canWinRace || shouldPressureOpponent || danger01 > 0.68 || style.chaos)
@@ -1365,7 +1431,8 @@ export function makeAIInput(car, state, meta) {
   const lowBoost = car.boost < roleBoostFloor * style.boostDiscipline;
   const routeBoost = ["support", "rotate", "guard"].includes(intent) && car.boost < (skill.rotation > 0.9 ? 62 : 48);
   const urgent = intent === "save" || (intent === "challenge" && danger01 > 0.62) || intent === "kickoff";
-  if ((lowBoost || routeBoost) && !urgent && !cfg.snooker && car.grounded && (role !== "goalkeeper" || danger01 < 0.32)) {
+  if (teamCommand?.intent === "GET_BOOST" && !urgent && car.boost < 78) { intent = "boost"; }
+  if ((lowBoost || routeBoost || intent === "boost") && !urgent && !cfg.snooker && car.grounded && (role !== "goalkeeper" || danger01 < 0.32)) {
     const pad = nearestUsefulBoostPad(car, state, car.boost < 12 || (routeBoost && skill.rotation > 0.9));
     const maxPadRange = state.arena.l * (routeBoost ? 0.34 : (skill.rotation > 0.9 ? 0.55 : 0.38));
     if (pad && Math.hypot(car.x - pad.x, car.z - pad.z) < maxPadRange) {
@@ -1376,6 +1443,15 @@ export function makeAIInput(car, state, meta) {
     }
   }
 
+  if (teamCommand) {
+    const side = teamCommand.intent === "PASS_LEFT" ? -1 : teamCommand.intent === "PASS_RIGHT" ? 1 : 0;
+    if (teamCommand.intent === "ROTATE_BACK" || teamCommand.intent === "DEFEND_GOAL" || teamCommand.intent === "GOALKEEPER_HOLD") { intent = teamCommand.intent === "GOALKEEPER_HOLD" ? "guard" : "rotate"; target = backPostTarget(state, car.team, ball, teamCommand.intent === "GOALKEEPER_HOLD" ? 1.8 : 7.5); precise = true; holdPlan = true; }
+    else if (teamCommand.intent === "CLEAR_BALL") { intent = danger01 > 0.25 ? "save" : "challenge"; aim = clearanceTarget(state, car.team, predicted); target = approachTargetBehindBall(predicted, aim, 6.2); precise = true; }
+    else if (teamCommand.intent === "TAKE_SHOT" && (firstMan || role === "attack")) { intent = "shot"; aim = goalTargetForShot(state, car.team, predicted, skill); target = approachTargetBehindBall(predicted, aim, 5.9); }
+    else if (teamCommand.intent === "TEAM_PRESS" && role !== "goalkeeper") { intent = "challenge"; target = approachTargetBehindBall(predicted, goalTargetForShot(state, car.team, predicted, skill), 7.0); }
+    else if (side) { intent = "pass"; aim = { x: side * state.arena.w * 0.34, z: enemySign * state.arena.l * 0.20 }; target = approachTargetBehindBall(predicted, aim, 8.2); precise = true; }
+    else if (teamCommand.intent === "SPREAD_OUT") { target.x = clamp(target.x + ((car.slotIndex % 2 ? 1 : -1) * state.arena.w * 0.16), -state.arena.w * 0.42, state.arena.w * 0.42); }
+  }
   const urgentPlan = intent === "save" || intent === "kickoff" || danger01 > 0.76;
   if (!urgentPlan && car.aiPlan && state.tick < (car.aiNextThinkTick || 0)) {
     intent = car.aiPlan.intent || intent;
@@ -1554,7 +1630,7 @@ export class PhysicsHost {
         car.team = players[car.id].team || car.team;
         car.model = sanitiseVehicleModel(players[car.id].model || players[car.id].vehicle || car.model);
       }
-      const input = car.human ? normaliseInput(this.inputs[car.id]) : makeAIInput(car, state, this.meta);
+      const input = car.human ? normaliseInput(this.inputs[car.id]) : makeAIInput(car, state, this.meta, players);
       if ((car.demoTimer || 0) > 0) {
         car.demoTimer = Math.max(0, car.demoTimer - dt);
         if (car.demoTimer <= 0) respawnDemoCar(car, state);

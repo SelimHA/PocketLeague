@@ -2450,3 +2450,14 @@ body.lobby-chat-enabled:not(.game-running) #mute-voice {
   .mobile-action-pad .air-roll-touch,
   .mobile-action-pad .jump-touch { min-height: 54px; border-radius: 18px; }
 }
+
+.ai-command-toggle { right: 1rem; bottom: 13.5rem; }
+.ai-command-wheel { position: fixed; right: 4.8rem; bottom: 9.8rem; z-index: 45; width: min(78vw, 360px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; padding: .75rem; border: 1px solid rgba(125,220,255,.35); border-radius: 18px; background: rgba(5,10,22,.88); box-shadow: 0 18px 42px rgba(0,0,0,.38); backdrop-filter: blur(12px); }
+.ai-command-wheel button { min-height: 42px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; background: linear-gradient(135deg, rgba(43,130,255,.92), rgba(19,222,179,.72)); color: #fff; font-weight: 800; letter-spacing: .02em; }
+.ai-command-overlay { position: fixed; left: 50%; top: 6.3rem; transform: translateX(-50%); z-index: 46; max-width: min(92vw, 620px); padding: .65rem 1rem; border-radius: 999px; border: 1px solid rgba(125,220,255,.42); background: rgba(8,16,34,.88); color: #eaf8ff; font-weight: 800; text-align: center; box-shadow: 0 12px 36px rgba(0,0,0,.35); }
+.ai-command-settings label { margin-bottom: .65rem; }
+.modal { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 1rem; background: rgba(0,0,0,.58); }
+.modal-card { width: min(92vw, 720px); max-height: 88vh; overflow: auto; padding: 1.2rem; border-radius: 22px; border: 1px solid rgba(125,220,255,.3); background: rgba(9,16,35,.96); box-shadow: 0 24px 70px rgba(0,0,0,.45); }
+.help-card h2, .help-card h3 { margin-top: .3rem; }
+.mobile-ai-command { position: fixed; right: .75rem; bottom: 8.7rem; z-index: 48; padding: .55rem .7rem; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(20,190,220,.9); color: white; font-weight: 900; }
+@media (max-width: 760px) { .ai-command-wheel { right: .75rem; left: .75rem; bottom: 13rem; width: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); } .ai-command-toggle { bottom: 12rem; } }

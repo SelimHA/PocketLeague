@@ -210,13 +210,14 @@ const SFX = (() => {
 })();
 
 const canvas = $("#game");
-let initializeApp, getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged, getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp, query, orderByChild, limitToLast, runTransaction;
+let initializeApp, getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut, onAuthStateChanged, getDatabase, ref, get, set, push, update, onValue, remove, onDisconnect, serverTimestamp, query, orderByChild, limitToLast, runTransaction, getFunctions, httpsCallable;
 let firebaseBootPromise = null;
 let firebaseBootDone = false;
 let firebaseBootError = null;
 let firebaseReady = false;
 let auth = null;
 let db = null;
+let functions = null;
 let uid = null;
 let authUser = null;
 let accountProfile = null;
@@ -238,6 +239,7 @@ let unsubLobby = null;
 let unsubInputs = null;
 let unsubState = null;
 let unsubChat = null;
+let unsubTeamCommands = null;
 let inputTimer = 0;
 let currentChat = {};
 let chatChannel = localStorage.getItem("rlcss_chat_channel") || "game";
@@ -265,14 +267,14 @@ let voicePttTouchHeld = false;
 let audioDeviceRefreshBusy = false;
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
-const SETTINGS_VERSION = "v41-aerial";
+const SETTINGS_VERSION = "v42-ai-team-commands";
 const KEY_ACTIONS = [
   ["forward", "Drive forward"], ["backward", "Brake / reverse"], ["left", "Steer left"], ["right", "Steer right"],
   ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide / free air roll"],
   ["airRollLeft", "Air Roll Left"], ["airRollRight", "Air Roll Right"], ["airRoll", "General Air Roll"],
   ["pitchUp", "Air pitch up"], ["pitchDown", "Air pitch down"], ["yawLeft", "Air yaw left"], ["yawRight", "Air yaw right"],
   ["cam", "Ball cam"], ["reset", "Reset"],
-  ["pause", "Pause (host)"], ["chat", "Toggle chat"], ["voice", "Toggle voice"], ["mic", "Mic / push-to-talk"]
+  ["pause", "Pause (host)"], ["chat", "Toggle chat"], ["voice", "Toggle voice"], ["mic", "Mic / push-to-talk"], ["aiCommand", "AI command wheel / speak"]
 ];
 const DEFAULT_FOV = 65;
 const DEFAULT_GAME_SETTINGS = {
@@ -281,7 +283,8 @@ const DEFAULT_GAME_SETTINGS = {
   aerialSensitivity: 1,
   airControlStrength: 1,
   airRollSensitivity: 1,
-  mobileAerialControls: true
+  mobileAerialControls: true,
+  aiTeamCommands: { enabled: true, inputMode: "quick", serverAiEnabled: false, serverSttEnabled: false, language: "", showTranscript: true, showAcknowledgements: true, wheelTimeout: "medium", commandStrength: "normal", storeHistory: false, sendAmbiguousToServer: false, sendVoiceToServer: false, smarterOpponents: true }
 };
 const MUSIC_TRACKS = {
   nitro: { label: "Nitro Boost Dreams", src: "./songs/nitro-boost-dreams.mp3" },
@@ -328,7 +331,8 @@ function sanitiseGameSettings(raw = {}) {
   const matchLength = MATCH_LENGTH_OPTIONS[String(raw.matchLength)]
     ? Number(raw.matchLength)
     : clamp(Math.round(Number(raw.matchLength) || DEFAULT_GAME_SETTINGS.matchLength), 60, 900);
-  return { pitchSize, matchLength, aerialSensitivity: clamp(Number(raw.aerialSensitivity ?? 1), 0.55, 1.45), airControlStrength: clamp(Number(raw.airControlStrength ?? 1), 0.55, 1.45), airRollSensitivity: clamp(Number(raw.airRollSensitivity ?? 1), 0.55, 1.55), mobileAerialControls: raw.mobileAerialControls !== false };
+  const ai = raw.aiTeamCommands || {};
+  return { pitchSize, matchLength, aerialSensitivity: clamp(Number(raw.aerialSensitivity ?? 1), 0.55, 1.45), airControlStrength: clamp(Number(raw.airControlStrength ?? 1), 0.55, 1.45), airRollSensitivity: clamp(Number(raw.airRollSensitivity ?? 1), 0.55, 1.55), mobileAerialControls: raw.mobileAerialControls !== false, aiTeamCommands: { ...DEFAULT_GAME_SETTINGS.aiTeamCommands, ...ai, inputMode: ["quick", "push", "alwaysMatch", "alwaysLobbyMatch"].includes(ai.inputMode) ? ai.inputMode : "quick", wheelTimeout: ["short", "medium", "long"].includes(ai.wheelTimeout) ? ai.wheelTimeout : "medium", commandStrength: ["subtle", "normal", "strong"].includes(ai.commandStrength) ? ai.commandStrength : "normal" } };
 }
 function loadGameSettings() {
   try { return sanitiseGameSettings(JSON.parse(localStorage.getItem("rlcss_gameplay_settings") || "{}") || {}); }
@@ -740,6 +744,72 @@ const Music = (() => {
   return { applySettings, unlockAndMaybePlay, autoplayOnLaunch, play, pause, next, previous, togglePreview, toggleDock, updateNowPlaying };
 })();
 
+
+const AI_COMMANDS = [
+  ["DEFEND_GOAL", "Defend goal"], ["TAKE_SHOT", "Take shot"], ["ROTATE_BACK", "Rotate back"], ["CLEAR_BALL", "Clear it"],
+  ["GET_BOOST", "Get boost"], ["PASS_LEFT", "Pass left"], ["PASS_RIGHT", "Pass right"], ["GOALKEEPER_HOLD", "Goalie hold"],
+  ["TEAM_PRESS", "All push"], ["MARK_OPPONENT", "Mark attacker"], ["SPREAD_OUT", "Spread out"], ["CENTER_BALL", "Center ball"],
+  ["ATTACK_BALL", "Go for it"], ["HOLD_POSITION", "Hold position"], ["SUPPORT_ME", "Support me"]
+];
+const AI_PHRASES = [
+  [/\b(defend|defence|defense|protect).*(goal|net)?\b/i, "DEFEND_GOAL"], [/\b(stay back|goalie|goalkeeper|keeper).*\b/i, "GOALKEEPER_HOLD"],
+  [/\b(take.*shot|shoot|score)\b/i, "TAKE_SHOT"], [/\b(go for it|attack|challenge|ball)\b/i, "ATTACK_BALL"],
+  [/\brotate back|come back|fall back\b/i, "ROTATE_BACK"], [/\bclear( it| ball)?\b/i, "CLEAR_BALL"],
+  [/\bpass left|left pass\b/i, "PASS_LEFT"], [/\bpass right|right pass\b/i, "PASS_RIGHT"], [/\bboost|get boost|grab boost\b/i, "GET_BOOST"],
+  [/\ball push|press|pressure\b/i, "TEAM_PRESS"], [/\bmark|cover attacker\b/i, "MARK_OPPONENT"], [/\bspread|space out\b/i, "SPREAD_OUT"],
+  [/\bcenter|centre\b/i, "CENTER_BALL"], [/\bhold position|wait\b/i, "HOLD_POSITION"], [/\bsupport me|help me\b/i, "SUPPORT_ME"]
+];
+let aiCommandWheelOpen = false;
+let aiCommandRecorder = null;
+let aiCommandChunks = [];
+let aiCommandPressTimer = 0;
+let aiCommandPressStarted = 0;
+Object.assign(ui, {
+  aiCommandButton: $("#ai-command-button"), aiCommandWheel: $("#ai-command-wheel"), aiCommandOverlay: $("#ai-command-overlay"), mobileAiCommand: $("#mobile-ai-command"),
+  aiCommandsEnabled: $("#ai-commands-enabled"), aiCommandInputMode: $("#ai-command-input-mode"), aiCommandServerAi: $("#ai-command-server-ai"), aiCommandServerStt: $("#ai-command-server-stt"), aiCommandLanguage: $("#ai-command-language"), aiCommandTranscript: $("#ai-command-transcript"), aiCommandAcks: $("#ai-command-acks"), aiCommandTimeout: $("#ai-command-timeout"), aiCommandStrength: $("#ai-command-strength"), aiCommandStoreHistory: $("#ai-command-store-history"), aiCommandSendAmbiguous: $("#ai-command-send-ambiguous"), aiCommandSendVoice: $("#ai-command-send-voice"), aiCommandSmarterOpponents: $("#ai-command-smarter-opponents"), aiCommandHelpOpen: $("#ai-command-help-open"), aiCommandHelp: $("#ai-command-help"), aiCommandHelpClose: $("#ai-command-help-close")
+});
+function aiCommandSettings() { return gameSettings.aiTeamCommands || DEFAULT_GAME_SETTINGS.aiTeamCommands; }
+function strengthValue() { return aiCommandSettings().commandStrength === "strong" ? 0.95 : aiCommandSettings().commandStrength === "subtle" ? 0.55 : 0.75; }
+function localParseAiCommand(text = "") {
+  const clean = String(text).trim();
+  for (const [rx, intent] of AI_PHRASES) if (rx.test(clean)) return { transcript: clean, intent, target: "all", confidence: 0.9, strength: strengthValue(), durationMs: 8000 };
+  return { transcript: clean, intent: "", target: "all", confidence: 0.15, strength: strengthValue(), durationMs: 6000 };
+}
+function commandTeam() { return (currentPlayers?.[activePlayerId()]?.team || ui.team?.value || "blue") === "orange" ? "orange" : "blue"; }
+function commandSettingsForMeta() { const s = aiCommandSettings(); return { enabled: !!s.enabled && (isSinglePlayer || s.inputMode === "push"), inputMode: s.inputMode, serverAiEnabled: !!s.serverAiEnabled, voiceEnabled: s.inputMode !== "quick", serverSttEnabled: !!s.serverSttEnabled, showTranscript: s.showTranscript !== false, showAcknowledgements: s.showAcknowledgements !== false, commandStrength: s.commandStrength, smarterOpponents: s.smarterOpponents !== false, sameTeamOnly: true }; }
+function showAiCommandOverlay(text) { if (!ui.aiCommandOverlay) return; ui.aiCommandOverlay.textContent = text; ui.aiCommandOverlay.classList.remove("hidden"); clearTimeout(showAiCommandOverlay.timer); showAiCommandOverlay.timer = setTimeout(() => ui.aiCommandOverlay.classList.add("hidden"), 2600); }
+function aiServerFallbackAvailable() { return !!(functions && httpsCallable); }
+async function callAiCommandFunction(name, payload, timeoutMs = 1400) {
+  if (!aiServerFallbackAvailable()) throw new Error("AI command server fallback is unavailable.");
+  return withTimeout(httpsCallable(functions, name)(payload), timeoutMs, name);
+}
+async function issueAiCommand(input, source = "quick") {
+  const s = aiCommandSettings(); if (!s.enabled) return showAiCommandOverlay("AI Team Commands are disabled.");
+  let parsed = typeof input === "string" && !AI_COMMANDS.some(c => c[0] === input) ? localParseAiCommand(input) : { intent: input, transcript: AI_COMMANDS.find(c => c[0] === input)?.[1] || input, confidence: 1, target: "all", durationMs: 8000, strength: strengthValue() };
+  if ((!parsed.intent || parsed.confidence < 0.55) && s.serverAiEnabled && s.sendAmbiguousToServer && aiServerFallbackAvailable()) {
+    try { parsed = { ...parsed, ...(await callAiCommandFunction("parseAiTeamCommand", { text: parsed.transcript, team: commandTeam(), language: s.language || navigator.language }, 1500)).data }; } catch (err) { console.warn("Server AI command parse failed; keeping local parser result.", err); }
+  }
+  if (!parsed.intent) return showAiCommandOverlay(`Command not recognized: ${parsed.transcript || "try a quick command"}`);
+  const now = Date.now();
+  const cmd = { intent: parsed.intent, target: parsed.target || "all", team: commandTeam(), issuedBy: activePlayerId() || uid || LOCAL_UID, issuedByName: playerName, source, confidence: clamp(Number(parsed.confidence || 0.8), 0, 1), strength: clamp(Number(parsed.strength || strengthValue()), 0.1, 1), createdAt: now, expiresAt: now + clamp(Number(parsed.durationMs || 8000), 2500, 12000) };
+  if (isSinglePlayer) {
+    currentMeta = serialiseMeta({ ...currentMeta, aiTeamCommands: commandSettingsForMeta(), activeTeamCommands: { ...(currentMeta?.activeTeamCommands || {}), [cmd.team]: [cmd] } });
+    currentLobby = { ...(currentLobby || {}), meta: currentMeta };
+  } else if (db && lobbyCode) {
+    await set(push(lobbyRef(lobbyCode, `teamCommands/${cmd.team}`)), cmd).catch(err => console.warn("Command write failed", err));
+    if (currentMeta?.hostId === activePlayerId()) await update(lobbyRef(lobbyCode, "commandSettings"), commandSettingsForMeta()).catch(() => {});
+  }
+  showAiCommandOverlay(`${s.showTranscript !== false ? `Command heard: “${parsed.transcript || cmd.intent}” → ` : ""}${AI_COMMANDS.find(c => c[0] === cmd.intent)?.[1] || cmd.intent}`);
+}
+function renderAiCommandWheel() { if (!ui.aiCommandWheel) return; ui.aiCommandWheel.innerHTML = AI_COMMANDS.slice(0, 10).map(([intent, label], i) => `<button type="button" style="--i:${i}" data-ai-intent="${intent}">${escapeHtml(label)}</button>`).join(""); }
+function setAiCommandWheel(open) { aiCommandWheelOpen = !!open; renderAiCommandWheel(); ui.aiCommandWheel?.classList.toggle("hidden", !aiCommandWheelOpen); ui.aiCommandButton?.setAttribute("aria-expanded", aiCommandWheelOpen ? "true" : "false"); }
+function updateAiCommandUi() { const enabled = !!aiCommandSettings().enabled && !!currentMeta; ui.aiCommandButton?.classList.toggle("hidden", !enabled || currentMeta?.status !== "running"); ui.mobileAiCommand?.classList.toggle("hidden", !enabled || currentMeta?.status !== "running" || !isPhonePortrait()); if (!enabled) setAiCommandWheel(false); }
+function applyAiCommandSettingsToUi() { const s = aiCommandSettings(); if (ui.aiCommandsEnabled) ui.aiCommandsEnabled.checked = !!s.enabled; if (ui.aiCommandInputMode) ui.aiCommandInputMode.value = s.inputMode; if (ui.aiCommandServerAi) ui.aiCommandServerAi.checked = !!s.serverAiEnabled; if (ui.aiCommandServerStt) ui.aiCommandServerStt.checked = !!s.serverSttEnabled; if (ui.aiCommandLanguage) ui.aiCommandLanguage.value = s.language || ""; if (ui.aiCommandTranscript) ui.aiCommandTranscript.checked = s.showTranscript !== false; if (ui.aiCommandAcks) ui.aiCommandAcks.checked = s.showAcknowledgements !== false; if (ui.aiCommandTimeout) ui.aiCommandTimeout.value = s.wheelTimeout || "medium"; if (ui.aiCommandStrength) ui.aiCommandStrength.value = s.commandStrength || "normal"; if (ui.aiCommandStoreHistory) ui.aiCommandStoreHistory.checked = !!s.storeHistory; if (ui.aiCommandSendAmbiguous) ui.aiCommandSendAmbiguous.checked = !!s.sendAmbiguousToServer; if (ui.aiCommandSendVoice) ui.aiCommandSendVoice.checked = !!s.sendVoiceToServer; if (ui.aiCommandSmarterOpponents) ui.aiCommandSmarterOpponents.checked = s.smarterOpponents !== false; updateAiCommandUi(); }
+function saveAiCommandSettingsFromUi() { gameSettings.aiTeamCommands = { ...aiCommandSettings(), enabled: !!ui.aiCommandsEnabled?.checked, inputMode: ui.aiCommandInputMode?.value || "quick", serverAiEnabled: !!ui.aiCommandServerAi?.checked, serverSttEnabled: !!ui.aiCommandServerStt?.checked, language: ui.aiCommandLanguage?.value || "", showTranscript: ui.aiCommandTranscript?.checked !== false, showAcknowledgements: ui.aiCommandAcks?.checked !== false, wheelTimeout: ui.aiCommandTimeout?.value || "medium", commandStrength: ui.aiCommandStrength?.value || "normal", storeHistory: !!ui.aiCommandStoreHistory?.checked, sendAmbiguousToServer: !!ui.aiCommandSendAmbiguous?.checked, sendVoiceToServer: !!ui.aiCommandSendVoice?.checked, smarterOpponents: ui.aiCommandSmarterOpponents?.checked !== false }; queueSettingsSave(); if (currentMeta) updateMetaPatch({ aiTeamCommands: commandSettingsForMeta() }); applyAiCommandSettingsToUi(); }
+async function startAiCommandRecording() { const s = aiCommandSettings(); if (!s.enabled || s.inputMode === "quick") return; try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); aiCommandChunks = []; aiCommandRecorder = new MediaRecorder(stream); aiCommandRecorder.ondataavailable = e => { if (e.data?.size) aiCommandChunks.push(e.data); }; aiCommandRecorder.onstop = async () => { stream.getTracks().forEach(t => t.stop()); showAiCommandOverlay("Voice command recorded. Use browser transcript or quick commands; server STT is optional."); if (s.serverSttEnabled && s.sendVoiceToServer && aiServerFallbackAvailable() && aiCommandChunks.length) { const blob = new Blob(aiCommandChunks, { type: aiCommandRecorder.mimeType || "audio/webm" }); const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onerror = () => r(""); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); }); try { const res = (await callAiCommandFunction("transcribeAiTeamCommand", { audioDataUrl: dataUrl, language: s.language || navigator.language }, 1800)).data; if (res?.transcript) await issueAiCommand(res.transcript, "voice"); else showAiCommandOverlay("Voice recorded, but no command was recognized. Quick commands still work."); } catch (err) { console.warn("Server STT failed; voice command ignored safely.", err); showAiCommandOverlay("Server voice parsing unavailable. Quick commands still work."); } } }; aiCommandRecorder.start(); showAiCommandOverlay("Listening for AI team command…"); } catch (err) { showAiCommandOverlay("Microphone permission is needed for voice commands."); } }
+function stopAiCommandRecording() { if (aiCommandRecorder?.state === "recording") aiCommandRecorder.stop(); }
+
+
 ui.name.value = playerName;
 populateChoiceSelects();
 applyGameSettingsToSelectors({ forceLobbyDefaults: true });
@@ -1008,7 +1078,7 @@ function renderSettingsUi() {
 }
 
 function setSettingsTab(tab = "gameplay") {
-  const safe = ["gameplay", "camera", "audio", "songs", "keyboard", "controller", "mobile"].includes(tab) ? tab : "gameplay";
+  const safe = ["gameplay", "camera", "audio", "songs", "keyboard", "controller", "mobile", "aiCommands"].includes(tab) ? tab : "gameplay";
   activeSettingsTab = safe;
   localStorage.setItem("rlcss_settings_tab", safe);
   document.querySelectorAll("[data-settings-tab]").forEach(btn => {
@@ -1056,7 +1126,7 @@ function updateControlsHintText() {
     <div id="cam-indicator">BALL CAM: <span id="cam-state">${localBallCam ? "ON" : "OFF"}</span></div>
     <strong>${escapeHtml(keyLabel(bindings.forward))}/${escapeHtml(keyLabel(bindings.backward))}</strong>: DRIVE &amp; REVERSE &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.boost))}</strong>: BOOST<br />
     <strong>${escapeHtml(keyLabel(bindings.jump))}</strong>: JUMP &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.drift))}</strong>: DRIFT &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.cam))}</strong>: BALL CAM &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.reset))}</strong>: RESET<br />
-    <strong>${escapeHtml(keyLabel(bindings.chat))}</strong>: CHAT &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.voice))}</strong>: VOICE &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.mic))}</strong>: MIC &nbsp;|&nbsp; Controller: left stick drive, right stick pan
+    <strong>${escapeHtml(keyLabel(bindings.chat))}</strong>: CHAT &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.voice))}</strong>: VOICE &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.mic))}</strong>: MIC &nbsp;|&nbsp; <strong>${escapeHtml(keyLabel(bindings.aiCommand))}</strong>: AI CMD &nbsp;|&nbsp; Controller: left stick drive, right stick pan
   `;
   ui.camState = $("#cam-state");
 }
@@ -1099,6 +1169,14 @@ async function bootFirebase() {
     const app = initializeApp(FIREBASE_CONFIG);
     auth = getAuth(app);
     db = getDatabase(app);
+    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js").then(fnMod => {
+      ({ getFunctions, httpsCallable } = fnMod);
+      functions = getFunctions(app);
+    }).catch(err => {
+      console.warn("Firebase Functions SDK unavailable; AI command server fallback disabled.", err);
+      functions = null;
+      httpsCallable = null;
+    });
     await new Promise((resolve, reject) => {
       let settled = false;
       let triedAnonymous = false;
@@ -1607,6 +1685,7 @@ function endTournament() {
 
 function currentSoloMetaPatch() {
   return {
+    aiTeamCommands: commandSettingsForMeta(),
     mode: ui.mode?.value || DEFAULT_META.mode,
     theme: ui.theme?.value || DEFAULT_META.theme,
     teamSize: Number(ui.teamSize?.value || DEFAULT_META.teamSize),
@@ -1764,7 +1843,7 @@ function startSoloMatch() {
     model: ui.vehicle?.value || currentPlayers[localId]?.model || "default",
     ready: true
   };
-  currentMeta = serialiseMeta({ ...currentMeta, status: "running", startedAt: Date.now(), updatedAt: Date.now() });
+  currentMeta = serialiseMeta({ ...currentMeta, aiTeamCommands: commandSettingsForMeta(), status: "running", startedAt: Date.now(), updatedAt: Date.now() });
   const initial = makeInitialState(currentMeta, currentPlayers);
   initial.kickoffTimer = 5;
   latestInputs = { [localId]: localInput() };
@@ -1807,6 +1886,7 @@ async function enterLobby(code) {
   });
   unsubInputs = onValue(lobbyRef(code, "inputs"), snap => { latestInputs = snap.val() || {}; });
   unsubState = onValue(lobbyRef(code, "state"), snap => { if (snap.exists()) latestState = snap.val(); });
+  unsubTeamCommands = onValue(lobbyRef(code, "teamCommands"), snap => { if (currentMeta) currentMeta = serialiseMeta({ ...currentMeta, activeTeamCommands: snap.val() || {}, aiTeamCommands: currentLobby?.commandSettings || currentMeta.aiTeamCommands }); });
   unsubChat = onValue(lobbyRef(code, "chat"), snap => { currentChat = snap.val() || {}; renderChat(); });
   clearInterval(inputTimer);
   inputTimer = setInterval(sendInput, 33);
@@ -1818,7 +1898,8 @@ function cleanupLobbyListeners() {
   if (typeof unsubInputs === "function") unsubInputs();
   if (typeof unsubState === "function") unsubState();
   if (typeof unsubChat === "function") unsubChat();
-  unsubLobby = unsubInputs = unsubState = unsubChat = null;
+  if (typeof unsubTeamCommands === "function") unsubTeamCommands();
+  unsubLobby = unsubInputs = unsubState = unsubChat = unsubTeamCommands = null;
   if (inputTimer) clearInterval(inputTimer);
   inputTimer = 0;
   stopHostLoop();
@@ -1883,6 +1964,7 @@ function renderLobby() {
   renderChat();
   if (voiceActive) reconcileVoicePeers();
   updateVoiceUi();
+  updateAiCommandUi();
   if (!document.body.classList.contains("game-running") && document.body.classList.contains("using-controller")) {
     setTimeout(focusFirstMenuElement, 0);
   }
@@ -2058,6 +2140,7 @@ function updateGameVisibility() {
   }
   if (ui.chatPanel) ui.chatPanel.classList.toggle("hidden", !lobbyChatActive || !chatOpen);
   updateVoiceUi();
+  updateAiCommandUi();
   ui.boostLabel.classList.toggle("hidden", !running);
   ui.boostBox.classList.toggle("hidden", !running);
   ui.controlsHint.classList.toggle("hidden", !running || isPhonePortrait());
@@ -2097,6 +2180,7 @@ function startHostLoop() {
     let steps = 0;
     const maxSteps = isPhonePortrait() ? 5 : 8;
     while (acc >= fixed && steps < maxSteps) {
+      if (currentLobby?.teamCommands) currentMeta = serialiseMeta({ ...currentMeta, activeTeamCommands: currentLobby.teamCommands, aiTeamCommands: currentLobby.commandSettings || currentMeta.aiTeamCommands });
       hostSim.syncMeta(currentMeta, currentPlayers);
       const localId = activePlayerId();
       if (isSinglePlayer && localId) latestInputs = { [localId]: localInput() };
@@ -2428,6 +2512,9 @@ function pollController() {
   latchButton("pause", buttonPressed(pad, controllerSettings.pauseButton), () => togglePause());
   latchButton("chat", buttonPressed(pad, controllerSettings.chatButton), () => toggleChatOpen());
   latchButton("voice", buttonPressed(pad, controllerSettings.voiceButton), () => toggleVoice());
+  const aiCommandPressed = !!pad.buttons?.[12]?.pressed;
+  if (aiCommandPressed && !controllerLatches.aiCommandButton) { controllerLatches.aiCommandButton = true; aiCommandPressStarted = Date.now(); aiCommandPressTimer = setTimeout(() => startAiCommandRecording(), 320); }
+  if (!aiCommandPressed && controllerLatches.aiCommandButton) { controllerLatches.aiCommandButton = false; clearTimeout(aiCommandPressTimer); if (Date.now() - aiCommandPressStarted < 320) setAiCommandWheel(!aiCommandWheelOpen); stopAiCommandRecording(); }
   const micPressed = buttonPressed(pad, controllerSettings.micButton);
   if (isPushToTalkMode()) {
     setVoicePttHeld("controller", micPressed);
@@ -2815,6 +2902,7 @@ function updateVoiceTransmitState() {
   const shouldTransmit = voiceActive && !voiceMuted && (!isPushToTalkMode() || isVoicePttHeld());
   if (voiceLocalStream) voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = shouldTransmit; });
   updateVoiceUi();
+  updateAiCommandUi();
   if (voiceActive) publishVoicePresence();
 }
 
@@ -2934,6 +3022,7 @@ function setupVoiceSubscriptions() {
       voicePresence = snap.val() || {};
       reconcileVoicePeers();
       updateVoiceUi();
+  updateAiCommandUi();
     });
   }
   if (!voiceSignalUnsub) {
@@ -3007,6 +3096,7 @@ async function startVoice() {
   voiceConnecting = true;
   setStatus("Requesting microphone permission… allow access in your browser popup.");
   updateVoiceUi();
+  updateAiCommandUi();
   try {
     voiceLocalStream = await requestVoiceStreamWithFallback();
     voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = false; });
@@ -3025,12 +3115,14 @@ async function startVoice() {
   } finally {
     voiceConnecting = false;
     updateVoiceUi();
+  updateAiCommandUi();
   }
 }
 
 async function stopVoice(silent = false) {
   if (!voiceActive && !voiceConnecting && !voiceLocalStream) {
     updateVoiceUi();
+  updateAiCommandUi();
     return;
   }
   const code = lobbyCode;
@@ -3049,6 +3141,7 @@ async function stopVoice(silent = false) {
   }
   if (!silent) setStatus("Voice chat left.");
   updateVoiceUi();
+  updateAiCommandUi();
 }
 
 function stopLocalVoiceTracks() {
@@ -3071,6 +3164,7 @@ function setVoiceMuted(next) {
   updateVoiceTransmitState();
   publishVoicePresence();
   updateVoiceUi();
+  updateAiCommandUi();
 }
 
 function toggleVoiceMuted() {
@@ -3125,6 +3219,7 @@ async function createVoicePeer(remoteId, makeOffer = false) {
       }, pc.connectionState === "disconnected" ? 4000 : 400);
     }
     updateVoiceUi();
+  updateAiCommandUi();
   };
 
   if (makeOffer) {
@@ -3133,6 +3228,7 @@ async function createVoicePeer(remoteId, makeOffer = false) {
     await sendVoiceSignal(remoteId, { type: "offer", sdp: pc.localDescription.toJSON() });
   }
   updateVoiceUi();
+  updateAiCommandUi();
   return peer;
 }
 
@@ -3181,6 +3277,7 @@ function closeVoicePeer(remoteId, keepPresence = false) {
   voicePeers.delete(remoteId);
   if (!keepPresence && voicePresence?.[remoteId]) delete voicePresence[remoteId];
   updateVoiceUi();
+  updateAiCommandUi();
 }
 
 function closeAllVoicePeers() {
@@ -3574,6 +3671,7 @@ window.addEventListener("keydown", e => {
     toggleVoice();
     return;
   }
+  if (e.code === bindings.aiCommand) { e.preventDefault(); aiCommandPressStarted = Date.now(); aiCommandPressTimer = setTimeout(() => startAiCommandRecording(), 260); return; }
   if (e.code === bindings.mic) {
     if (isPushToTalkMode()) {
       e.preventDefault();
@@ -3601,9 +3699,17 @@ window.addEventListener("keyup", e => {
   const tag = (e.target?.tagName || "").toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select") return;
   keys[e.code] = false;
+  if (e.code === bindings.aiCommand) { clearTimeout(aiCommandPressTimer); if (Date.now() - aiCommandPressStarted < 260) setAiCommandWheel(!aiCommandWheelOpen); stopAiCommandRecording(); }
   if (e.code === bindings.mic && isPushToTalkMode()) setVoicePttHeld("keyboard", false);
   if (e.code === bindings.cam) camKeyLatch = false;
 });
+if (ui.aiCommandWheel) ui.aiCommandWheel.addEventListener("click", e => { const btn = e.target.closest("[data-ai-intent]"); if (btn) { issueAiCommand(btn.dataset.aiIntent, "quick"); setAiCommandWheel(false); } });
+[ui.aiCommandsEnabled, ui.aiCommandInputMode, ui.aiCommandServerAi, ui.aiCommandServerStt, ui.aiCommandLanguage, ui.aiCommandTranscript, ui.aiCommandAcks, ui.aiCommandTimeout, ui.aiCommandStrength, ui.aiCommandStoreHistory, ui.aiCommandSendAmbiguous, ui.aiCommandSendVoice, ui.aiCommandSmarterOpponents].forEach(el => el && el.addEventListener("change", saveAiCommandSettingsFromUi));
+if (ui.aiCommandHelpOpen) ui.aiCommandHelpOpen.addEventListener("click", () => ui.aiCommandHelp?.classList.remove("hidden"));
+if (ui.aiCommandHelpClose) ui.aiCommandHelpClose.addEventListener("click", () => ui.aiCommandHelp?.classList.add("hidden"));
+if (ui.aiCommandButton) { ui.aiCommandButton.addEventListener("click", () => setAiCommandWheel(!aiCommandWheelOpen)); ui.aiCommandButton.addEventListener("pointerdown", () => { aiCommandPressStarted = Date.now(); aiCommandPressTimer = setTimeout(() => startAiCommandRecording(), 320); }); ui.aiCommandButton.addEventListener("pointerup", () => { clearTimeout(aiCommandPressTimer); stopAiCommandRecording(); }); }
+if (ui.mobileAiCommand) { ui.mobileAiCommand.addEventListener("click", () => setAiCommandWheel(!aiCommandWheelOpen)); ui.mobileAiCommand.addEventListener("pointerdown", () => { aiCommandPressTimer = setTimeout(() => startAiCommandRecording(), 320); }); ui.mobileAiCommand.addEventListener("pointerup", () => { clearTimeout(aiCommandPressTimer); stopAiCommandRecording(); }); }
+
 window.addEventListener("gamepadconnected", () => { renderSettingsUi(); setSettingsSyncStatus("Controller detected."); });
 window.addEventListener("gamepaddisconnected", () => { renderSettingsUi(); setSettingsSyncStatus("Controller disconnected."); });
 ["pointerdown", "touchstart", "click"].forEach(type => window.addEventListener(type, () => { SFX.resume(); Music.unlockAndMaybePlay(); }, { passive: true }));
