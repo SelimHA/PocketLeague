@@ -265,7 +265,7 @@ let voicePttTouchHeld = false;
 let audioDeviceRefreshBusy = false;
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
-const SETTINGS_VERSION = "v44-modes";
+const SETTINGS_VERSION = "v41-aerial";
 const KEY_ACTIONS = [
   ["forward", "Drive forward"], ["backward", "Brake / reverse"], ["left", "Steer left"], ["right", "Steer right"],
   ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide / free air roll"],
@@ -278,7 +278,6 @@ const DEFAULT_FOV = 65;
 const DEFAULT_GAME_SETTINGS = {
   pitchSize: DEFAULT_META.pitchSize || "standard",
   matchLength: DEFAULT_META.matchLength || 300,
-  halfTimeEnabled: false, hydrationEnabled: false, overtimeEnabled: false, goldenGoal: true, overtimeDuration: 180,
   aerialSensitivity: 1,
   airControlStrength: 1,
   airRollSensitivity: 1,
@@ -329,7 +328,7 @@ function sanitiseGameSettings(raw = {}) {
   const matchLength = MATCH_LENGTH_OPTIONS[String(raw.matchLength)]
     ? Number(raw.matchLength)
     : clamp(Math.round(Number(raw.matchLength) || DEFAULT_GAME_SETTINGS.matchLength), 60, 900);
-  return { pitchSize, matchLength, halfTimeEnabled: !!raw.halfTimeEnabled, hydrationEnabled: !!raw.hydrationEnabled, overtimeEnabled: !!raw.overtimeEnabled, goldenGoal: raw.goldenGoal !== false, overtimeDuration: raw.overtimeDuration === "unlimited" ? "unlimited" : clamp(Number(raw.overtimeDuration) || 180, 60, 300), aerialSensitivity: clamp(Number(raw.aerialSensitivity ?? 1), 0.55, 1.45), airControlStrength: clamp(Number(raw.airControlStrength ?? 1), 0.55, 1.45), airRollSensitivity: clamp(Number(raw.airRollSensitivity ?? 1), 0.55, 1.55), mobileAerialControls: raw.mobileAerialControls !== false };
+  return { pitchSize, matchLength, aerialSensitivity: clamp(Number(raw.aerialSensitivity ?? 1), 0.55, 1.45), airControlStrength: clamp(Number(raw.airControlStrength ?? 1), 0.55, 1.45), airRollSensitivity: clamp(Number(raw.airRollSensitivity ?? 1), 0.55, 1.55), mobileAerialControls: raw.mobileAerialControls !== false };
 }
 function loadGameSettings() {
   try { return sanitiseGameSettings(JSON.parse(localStorage.getItem("rlcss_gameplay_settings") || "{}") || {}); }

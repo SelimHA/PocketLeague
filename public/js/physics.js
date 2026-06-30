@@ -1946,7 +1946,7 @@ export function compactState(state) {
       x: round(c.x), y: round(c.y), z: round(c.z),
       vx: round(c.vx), vy: round(c.vy), vz: round(c.vz),
       yaw: round(c.yaw), yawVel: round(c.yawVel), pitchVel: round(c.pitchVel || 0), rollVel: round(c.rollVel || 0), pitch: round(c.pitch || 0), roll: round(c.roll || 0), grounded: !!c.grounded, doubleJumpUsed: !!c.doubleJumpUsed,
-      boost: Math.round(c.boost), boosting: !!c.boosting, boostHeld: round(c.boostHeld || 0), drifting: !!c.drifting, demoed: !!c.demoed, demoTimer: round(c.demoTimer || 0),
+      boost: Math.round(c.boost), boosting: !!c.boosting, drifting: !!c.drifting,
       boostPickup: round(c.boostPickup || 0), cueCooldown: round(c.cueCooldown || 0), bumpCooldown: round(c.bumpCooldown || 0),
       lastTouch: c.lastTouch || 0, justJumped: !!c.justJumped, jumpEventTick: c.jumpEventTick || 0, doubleJumpEventTick: c.doubleJumpEventTick || 0, slotIndex: c.slotIndex
     };
