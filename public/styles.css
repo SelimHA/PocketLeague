@@ -2339,3 +2339,48 @@ body.lobby-chat-enabled:not(.game-running) #mute-voice {
 body.game-running #game-mode-card,
 body.game-running #tournament-card { display: none !important; }
 body.game-running #break-overlay:not(.hidden) { display: grid !important; }
+
+/* V45: ergonomic phone aerial pad — bottom slide lane is AIR L → JUMP → AIR R → BOOST. */
+@media (orientation: portrait) and (pointer: coarse) {
+  .mobile-action-pad {
+    grid-template-columns: repeat(4, minmax(44px, 1fr));
+    grid-template-rows: .62fr 1fr;
+    gap: 7px;
+  }
+  .mobile-action-pad .action-drift {
+    grid-column: 1 / 5;
+    grid-row: 1;
+    min-height: 46px;
+    border-radius: 18px;
+  }
+  .mobile-action-pad .action-air-left {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 76px;
+    border-radius: 22px;
+  }
+  .mobile-action-pad .action-jump {
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 76px;
+    border-radius: 22px;
+  }
+  .mobile-action-pad .action-air-right {
+    grid-column: 3;
+    grid-row: 2;
+    min-height: 76px;
+    border-radius: 22px;
+  }
+  .mobile-action-pad .action-boost {
+    grid-column: 4;
+    grid-row: 2;
+    min-height: 76px;
+    border-radius: 24px;
+  }
+  .mobile-aerial-disabled .mobile-action-pad {
+    grid-template-columns: repeat(3, minmax(56px, 1fr));
+  }
+  .mobile-aerial-disabled .mobile-action-pad .action-drift { grid-column: 1 / 4; grid-row: 1; }
+  .mobile-aerial-disabled .mobile-action-pad .action-jump { grid-column: 1; grid-row: 2; }
+  .mobile-aerial-disabled .mobile-action-pad .action-boost { grid-column: 2 / 4; grid-row: 2; }
+}
