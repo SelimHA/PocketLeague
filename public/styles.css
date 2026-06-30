@@ -1850,3 +1850,166 @@ body.game-running:not(.settings-open) .menu-music-panel {
   .voice-test-card { grid-template-columns: 1fr; }
   .voice-test-card .small-action { width: 100%; }
 }
+
+/* V40 audio settings + startup music loader + voice device controls */
+.audio-settings-grid {
+  display: grid;
+  gap: 14px;
+}
+.audio-subsection {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,.055);
+  border: 1px solid rgba(255,255,255,.11);
+}
+.audio-subsection h4 {
+  margin: 0;
+  color: rgba(255,255,255,.9);
+  font-size: 13px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.audio-device-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.voice-test-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+.voice-test-card div {
+  display: grid;
+  gap: 3px;
+}
+.voice-test-card span {
+  color: rgba(255,255,255,.66);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.music-control-btn.loading {
+  position: relative;
+  color: transparent;
+}
+.music-control-btn.loading::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.28);
+  border-top-color: white;
+  animation: musicSpin .75s linear infinite;
+}
+@keyframes musicSpin { to { transform: rotate(360deg); } }
+body.music-loading .menu-music-panel {
+  border-color: rgba(255,196,0,.32);
+  box-shadow: 0 12px 36px rgba(0,0,0,.32), 0 0 18px rgba(255,196,0,.08), inset 0 0 24px rgba(255,255,255,.04);
+}
+#mute-voice.voice-talking {
+  border-color: rgba(66,255,159,.55);
+  background: rgba(66,255,159,.20);
+  box-shadow: 0 0 16px rgba(66,255,159,.18);
+}
+
+@media (min-width: 840px) {
+  .audio-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .audio-subsection:nth-child(2),
+  .audio-devices-section {
+    grid-column: span 2;
+  }
+}
+
+@media (pointer: coarse) and (orientation: portrait), (max-width: 720px) {
+  .audio-subsection {
+    padding: 12px;
+    border-radius: 14px;
+  }
+  .voice-test-card {
+    grid-template-columns: 1fr;
+  }
+  .audio-device-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .audio-settings-section select,
+  .audio-settings-section input[type="range"],
+  .audio-settings-section button {
+    width: 100%;
+  }
+}
+
+
+/* V41: songs tab, profile display-name lock, and voice monitor polish */
+.signed-player-name.hidden,
+#player-name-label.hidden { display: none !important; }
+.signed-player-name {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  color: white;
+  background: linear-gradient(135deg, rgba(82,255,207,.14), rgba(18,185,255,.08));
+  border: 1px solid rgba(82,255,207,.22);
+  text-align: left;
+}
+.signed-player-name span, .signed-player-name small {
+  color: rgba(247,251,255,.62);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.signed-player-name strong {
+  font-size: 20px;
+  line-height: 1.1;
+}
+.account-profile-fields #save-display-name-account { width: fit-content; }
+.songs-settings-section .audio-settings-grid,
+.songs-settings-grid { grid-template-columns: 1fr !important; }
+.song-picker-section { grid-column: 1 / -1; }
+.voice-level-meter {
+  height: 5px;
+  margin: 5px 0 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,.12);
+}
+.voice-level-meter i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #52ffcf, #ffe46a);
+  box-shadow: 0 0 10px rgba(82,255,207,.45);
+}
+.active-speaker.self span {
+  background: #b8e8ff;
+  box-shadow: 0 0 12px rgba(184,232,255,.75);
+}
+.active-speaker.self.talking span {
+  background: #52ffcf;
+  box-shadow: 0 0 16px rgba(82,255,207,.95);
+}
+@media (min-width: 840px) {
+  .settings-tabs { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .audio-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .audio-devices-section { grid-column: span 2; }
+  .audio-subsection:nth-child(2) { grid-column: auto; }
+}
+@media (pointer: coarse) and (orientation: portrait), (max-width: 720px) {
+  .settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .signed-player-name { padding: 10px 12px; border-radius: 14px; }
+  .signed-player-name strong { font-size: 18px; }
+  .account-profile-fields #save-display-name-account { width: 100%; }
+}

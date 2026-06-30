@@ -27,9 +27,9 @@ const LOCAL_UID = "LOCAL_PLAYER";
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const ui = {
   setup: $("#setup-card"), lobby: $("#lobby-card"), accountCard: $("#account-card"), leaderboardCard: $("#leaderboard-card"), settingsCard: $("#settings-card"), firebaseWarning: $("#firebase-warning"),
-  name: $("#player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
-  accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountSubtitle: $("#account-subtitle"), accountAuthFields: $("#account-auth-fields"), accountProfileFields: $("#account-profile-fields"), accountProfileName: $("#account-profile-name"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), accountNewPassword: $("#account-new-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), changePasswordAccount: $("#change-password-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
-  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), voiceTestPlayback: $("#voice-test-playback"), voiceTestStatus: $("#voice-test-status"), voiceSpeakerMode: $("#voice-speaker-mode"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
+  name: $("#player-name"), nameLabel: $("#player-name-label"), signedPlayerName: $("#signed-player-name"), single: $("#single-player"), create: $("#create-lobby"), joinCode: $("#join-code"), join: $("#join-lobby"),
+  accountStatus: $("#account-status"), openAccount: $("#open-account"), closeAccount: $("#close-account"), accountSubtitle: $("#account-subtitle"), accountAuthFields: $("#account-auth-fields"), accountProfileFields: $("#account-profile-fields"), accountProfileName: $("#account-profile-name"), accountDisplayName: $("#account-display-name"), saveDisplayNameAccount: $("#save-display-name-account"), accountUsername: $("#account-username"), accountPassword: $("#account-password"), accountNewPassword: $("#account-new-password"), createAccount: $("#create-account"), signInAccount: $("#sign-in-account"), changePasswordAccount: $("#change-password-account"), signOutAccount: $("#sign-out-account"), accountMessage: $("#account-message"),
+  openSettings: $("#open-settings"), closeSettings: $("#close-settings"), settingsPitchSize: $("#settings-pitch-size"), settingsMatchLength: $("#settings-match-length"), settingsSyncStatus: $("#settings-sync-status"), keybindList: $("#keybind-list"), resetKeybinds: $("#reset-keybinds"), fovRange: $("#fov-range"), fovValue: $("#fov-value"), gameVolume: $("#game-volume"), gameVolumeValue: $("#game-volume-value"), musicVolume: $("#music-volume"), musicVolumeValue: $("#music-volume-value"), musicEnabled: $("#music-enabled"), voiceTestPlayback: $("#voice-test-playback"), voiceTestStatus: $("#voice-test-status"), voiceSpeakerMode: $("#voice-speaker-mode"), voiceActivationMode: $("#voice-activation-mode"), voiceVolume: $("#voice-volume"), voiceVolumeValue: $("#voice-volume-value"), voiceInputDevice: $("#voice-input-device"), voiceOutputDevice: $("#voice-output-device"), refreshAudioDevices: $("#refresh-audio-devices"), audioDeviceStatus: $("#audio-device-status"), musicTrackSelect: $("#music-track-select"), musicTrackToggles: $("#music-track-toggles"), previewMusic: $("#preview-music"), previousMusic: $("#previous-music"), nextMusic: $("#next-music"), musicNowPlaying: $("#music-now-playing"), menuMusicDock: $("#menu-music-dock"), menuMusicToggle: $("#menu-music-toggle"), menuMusicPanel: $("#menu-music-panel"), menuMusicPrev: $("#menu-music-prev"), menuMusicPlay: $("#menu-music-play"), menuMusicNext: $("#menu-music-next"), menuMusicTitle: $("#menu-music-title"), controllerEnabled: $("#controller-enabled"), controllerDeadzone: $("#controller-deadzone"), controllerDeadzoneValue: $("#controller-deadzone-value"), controllerPanSensitivity: $("#controller-pan-sensitivity"), controllerPanSensitivityValue: $("#controller-pan-sensitivity-value"), controllerStatus: $("#controller-status"), controllerWaitCard: $("#controller-wait-card"), controllerOptions: $("#controller-options"), controllerSettingsSection: $("#controller-settings-section"), controllerBindList: $("#controller-bind-list"), resetController: $("#reset-controller"), openLeaderboard: $("#open-leaderboard"), closeLeaderboard: $("#close-leaderboard"), leaderboardList: $("#leaderboard-list"),
   connection: $("#connection-status"), lobbyCode: $("#lobby-code-label"), lobbyStatus: $("#lobby-status"), copy: $("#copy-code"),
   mode: $("#mode-select"), theme: $("#theme-select"), teamSize: $("#team-size-select"), pitchSize: $("#pitch-size-select"), matchLength: $("#match-length-select"), difficulty: $("#difficulty-select"), playstyle: $("#playstyle-select"), aiStrategy: $("#team-strategy-select"), advancedAiList: $("#advanced-ai-list"), chatScope: $("#chat-scope-select"), voiceScope: $("#voice-scope-select"),
   maxHumans: $("#max-humans-label"), team: $("#team-select"), role: $("#role-select"), vehicle: $("#vehicle-select"), ready: $("#ready-btn"),
@@ -259,13 +259,17 @@ let voiceAnalysers = new Map();
 let voiceActivityTimer = 0;
 let voiceTalkers = {};
 let voiceSelfTestBusy = false;
+let voicePttKeyboardHeld = false;
+let voicePttControllerHeld = false;
+let voicePttTouchHeld = false;
+let audioDeviceRefreshBusy = false;
 let localBallCam = (localStorage.getItem("rlcss_ball_cam") ?? localStorage.getItem("pl_ball_cam")) === "1";
 const keys = {};
-const SETTINGS_VERSION = "v39";
+const SETTINGS_VERSION = "v40";
 const KEY_ACTIONS = [
   ["forward", "Drive forward"], ["backward", "Brake / reverse"], ["left", "Steer left"], ["right", "Steer right"],
   ["boost", "Boost"], ["jump", "Jump / double jump"], ["drift", "Drift / powerslide"], ["cam", "Ball cam"], ["reset", "Reset"],
-  ["pause", "Pause (host)"], ["chat", "Toggle chat"], ["voice", "Toggle voice"], ["mic", "Mute mic"]
+  ["pause", "Pause (host)"], ["chat", "Toggle chat"], ["voice", "Toggle voice"], ["mic", "Mic / push-to-talk"]
 ];
 const DEFAULT_FOV = 65;
 const DEFAULT_GAME_SETTINGS = {
@@ -289,6 +293,10 @@ const DEFAULT_AUDIO_SETTINGS = {
   musicVolume: 0.45,
   musicEnabled: true,
   voiceSpeakerMode: "always",
+  voiceActivationMode: "open",
+  voiceVolume: 0.85,
+  voiceInputDeviceId: "",
+  voiceOutputDeviceId: "",
   musicTrack: "shuffle",
   enabledTracks: defaultTrackEnablement()
 };
@@ -324,11 +332,16 @@ function sanitiseAudioSettings(raw = {}) {
   for (const key of MUSIC_ORDER) enabledTracks[key] = incomingEnabled[key] !== false;
   const track = raw.musicTrack === "shuffle" || MUSIC_TRACKS[raw.musicTrack] ? raw.musicTrack : DEFAULT_AUDIO_SETTINGS.musicTrack;
   const voiceSpeakerMode = ["always", "menus", "off"].includes(raw.voiceSpeakerMode) ? raw.voiceSpeakerMode : DEFAULT_AUDIO_SETTINGS.voiceSpeakerMode;
+  const voiceActivationMode = ["open", "push"].includes(raw.voiceActivationMode) ? raw.voiceActivationMode : DEFAULT_AUDIO_SETTINGS.voiceActivationMode;
   return {
     gameVolume: clamp(Number(raw.gameVolume ?? raw.sfxVolume ?? DEFAULT_AUDIO_SETTINGS.gameVolume), 0, 1),
     musicVolume: clamp(Number(raw.musicVolume ?? DEFAULT_AUDIO_SETTINGS.musicVolume), 0, 1),
     musicEnabled: raw.musicEnabled !== false,
     voiceSpeakerMode,
+    voiceActivationMode,
+    voiceVolume: clamp(Number(raw.voiceVolume ?? DEFAULT_AUDIO_SETTINGS.voiceVolume), 0, 1),
+    voiceInputDeviceId: typeof raw.voiceInputDeviceId === "string" ? raw.voiceInputDeviceId : "",
+    voiceOutputDeviceId: typeof raw.voiceOutputDeviceId === "string" ? raw.voiceOutputDeviceId : "",
     musicTrack: track,
     enabledTracks
   };
@@ -411,12 +424,15 @@ let touchDevice = matchMedia("(pointer: coarse)").matches;
 
 const Music = (() => {
   let audio = null;
-  let unlocked = false;
   let currentTrack = "";
   let recentTracks = [];
   let playedHistory = [];
   let userPaused = false;
-  let launchAutoplayPrimed = false;
+  let isLoading = false;
+  let hasTriedLaunchAutoplay = false;
+  let playRequestId = 0;
+  let playInFlight = false;
+  let unlockQueued = false;
 
   function init() {
     if (audio) return audio;
@@ -427,8 +443,12 @@ const Music = (() => {
     audio.setAttribute("playsinline", "");
     audio.crossOrigin = "anonymous";
     audio.addEventListener("ended", () => next(true));
-    audio.addEventListener("error", () => updateNowPlaying("Music file could not be loaded."));
-    applySettings(false);
+    audio.addEventListener("waiting", () => setLoading(true));
+    audio.addEventListener("loadstart", () => setLoading(true));
+    audio.addEventListener("canplay", () => { if (!playInFlight) setLoading(false); });
+    audio.addEventListener("playing", () => { playInFlight = false; setLoading(false); updateNowPlaying(); });
+    audio.addEventListener("pause", () => updateNowPlaying());
+    audio.addEventListener("error", () => { setLoading(false); updateNowPlaying("Music file could not be loaded."); });
     return audio;
   }
 
@@ -465,6 +485,13 @@ const Music = (() => {
     return currentTrack;
   }
 
+  function setLoading(next) {
+    isLoading = !!next;
+    document.body.classList.toggle("music-loading", isLoading);
+    if (ui.menuMusicPlay) ui.menuMusicPlay.classList.toggle("loading", isLoading);
+    updateNowPlaying();
+  }
+
   function setSource(trackKey, { remember = true } = {}) {
     const safe = choosePlayableTrack(trackKey);
     init();
@@ -472,6 +499,7 @@ const Music = (() => {
       currentTrack = "";
       audio.removeAttribute("src");
       audio.load();
+      setLoading(false);
       updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
       return false;
     }
@@ -483,9 +511,33 @@ const Music = (() => {
     currentTrack = safe;
     audio.src = MUSIC_TRACKS[safe].src;
     audio.currentTime = 0;
+    setLoading(true);
     audio.load();
-    updateNowPlaying();
+    updateNowPlaying("Loading first song…");
     return true;
+  }
+
+  async function waitUntilCanPlay(timeoutMs = 8000) {
+    init();
+    if (!audio.src) return false;
+    if (audio.readyState >= 3) return true;
+    await new Promise(resolve => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        audio.removeEventListener("canplay", finish);
+        audio.removeEventListener("canplaythrough", finish);
+        audio.removeEventListener("error", finish);
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(finish, timeoutMs);
+      audio.addEventListener("canplay", finish, { once: true });
+      audio.addEventListener("canplaythrough", finish, { once: true });
+      audio.addEventListener("error", finish, { once: true });
+    });
+    return audio.readyState >= 2;
   }
 
   function applySettings(tryPlay = true) {
@@ -493,88 +545,114 @@ const Music = (() => {
     audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
     audio.loop = false;
     if (!audioSettings.musicEnabled || audioSettings.musicVolume <= 0) {
+      userPaused = true;
       audio.pause();
+      setLoading(false);
       updateNowPlaying(audioSettings.musicEnabled ? "Music volume is at 0%." : "Music is disabled.");
       return;
     }
     const selected = chooseTrack(false);
     if (!selected) {
+      userPaused = true;
       audio.pause();
+      setLoading(false);
       updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
       return;
     }
     setSource(selected, { remember: false });
-    updateNowPlaying();
-    if (tryPlay && unlocked) play();
+    if (tryPlay && !userPaused) play();
   }
 
   function unlockAndMaybePlay() {
-    if (unlocked) return;
-    unlocked = true;
-    if (audio && launchAutoplayPrimed && !audio.paused && !userPaused) {
-      audio.muted = false;
-      audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
-      updateNowPlaying();
-      return;
-    }
-    if (audioSettings.musicEnabled && !userPaused) play();
+    unlockQueued = true;
+    if (audioSettings.musicEnabled && !userPaused) play({ requireGesture: true });
   }
 
-  function play() {
+  async function play({ mutedStart = false, requireGesture = false } = {}) {
     userPaused = false;
     init();
-    if (!audioSettings.musicEnabled || audioSettings.musicVolume <= 0) return;
+    if (!audioSettings.musicEnabled || audioSettings.musicVolume <= 0) {
+      setLoading(false);
+      updateNowPlaying(audioSettings.musicEnabled ? "Music volume is at 0%." : "Music is disabled.");
+      return false;
+    }
     const selected = chooseTrack(false);
-    if (!selected) return updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
+    if (!selected) {
+      setLoading(false);
+      updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
+      return false;
+    }
     setSource(selected, { remember: false });
-    audio.muted = false;
-    audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
-    const promise = audio.play?.();
-    if (promise?.catch) promise.catch(() => {
-      // Browsers can still block audible autoplay. Keep the first-tap fallback
-      // ready and make the status actionable instead of silently failing.
-      updateNowPlaying("Autoplay blocked — tap anywhere once to start music.");
-    });
-    updateNowPlaying();
+    const requestId = ++playRequestId;
+    playInFlight = true;
+    setLoading(true);
+    await waitUntilCanPlay();
+    if (requestId !== playRequestId || userPaused) { if (requestId === playRequestId) { playInFlight = false; setLoading(false); } return false; }
+    audio.volume = mutedStart ? 0 : clamp(Number(audioSettings.musicVolume), 0, 1);
+    audio.muted = !!mutedStart;
+    try {
+      await audio.play();
+      if (requestId !== playRequestId || userPaused) { if (requestId === playRequestId) { playInFlight = false; setLoading(false); } return false; }
+      playInFlight = false;
+      if (mutedStart) {
+        window.setTimeout(() => {
+          if (!audio || userPaused || !audioSettings.musicEnabled) return;
+          audio.muted = false;
+          audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
+          updateNowPlaying();
+        }, 250);
+      }
+      setLoading(false);
+      updateNowPlaying();
+      return true;
+    } catch (err) {
+      playInFlight = false;
+      setLoading(false);
+      if (requireGesture || hasTriedLaunchAutoplay) updateNowPlaying("Tap play once to start music.");
+      else updateNowPlaying("Autoplay blocked — tap anywhere once to start music.");
+      return false;
+    }
   }
 
   function pause() {
     userPaused = true;
+    playRequestId += 1;
+    playInFlight = false;
+    setLoading(false);
     if (audio) audio.pause();
     updateNowPlaying("Music paused.");
   }
 
   function togglePreview() {
     init();
-    unlocked = true;
     if (!audioSettings.musicEnabled) {
       audioSettings.musicEnabled = true;
       saveAudioSettingsLocal();
       renderSettingsUi();
     }
-    if (audio.paused) play();
+    if (isLoading || audio.paused || userPaused) play({ requireGesture: true });
     else pause();
   }
 
   function next(fromEnded = false) {
     init();
-    unlocked = true;
     const selected = chooseRandomNext();
     if (!selected) {
+      userPaused = true;
       audio.pause();
+      setLoading(false);
       updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
       return;
     }
     setSource(selected, { remember: true });
-    if (audioSettings.musicEnabled) play();
+    if (audioSettings.musicEnabled && !userPaused) play({ requireGesture: !fromEnded });
   }
 
   function previous() {
     init();
-    unlocked = true;
     if (audio && currentTrack && audio.currentTime > 5) {
       audio.currentTime = 0;
-      if (audioSettings.musicEnabled) play();
+      if (audioSettings.musicEnabled) play({ requireGesture: true });
       updateNowPlaying();
       return;
     }
@@ -590,17 +668,22 @@ const Music = (() => {
       return;
     }
     setSource(previousKey, { remember: false });
-    if (audioSettings.musicEnabled) play();
+    if (audioSettings.musicEnabled) play({ requireGesture: true });
   }
 
   function updateNowPlaying(message = "") {
     const enabled = enabledKeys();
     const label = MUSIC_TRACKS[currentTrack]?.label || (enabled.length ? "Music ready" : "No enabled songs");
-    const text = message || `Now playing: ${label}`;
+    const text = message || (isLoading ? `Loading: ${label}` : `Now playing: ${label}`);
     if (ui.musicNowPlaying) ui.musicNowPlaying.textContent = text;
-    if (ui.menuMusicTitle) ui.menuMusicTitle.textContent = message ? message.replace(/^Now playing:\s*/i, "") : label;
-    if (ui.previewMusic) ui.previewMusic.textContent = audio && !audio.paused ? "Pause music" : "Preview music";
-    if (ui.menuMusicPlay) ui.menuMusicPlay.textContent = audio && !audio.paused ? "❚❚" : "▶";
+    if (ui.menuMusicTitle) ui.menuMusicTitle.textContent = message ? message.replace(/^Now playing:\s*/i, "") : (isLoading ? `Loading: ${label}` : label);
+    const playing = !!(audio && !audio.paused && !userPaused);
+    if (ui.previewMusic) ui.previewMusic.textContent = isLoading ? "Loading music…" : (playing ? "Pause music" : "Preview music");
+    if (ui.menuMusicPlay) {
+      ui.menuMusicPlay.textContent = isLoading ? "◌" : (playing ? "❚❚" : "▶");
+      ui.menuMusicPlay.title = isLoading ? "Loading music" : (playing ? "Pause music" : "Play music");
+      ui.menuMusicPlay.setAttribute("aria-label", ui.menuMusicPlay.title);
+    }
   }
 
   function toggleDock() {
@@ -609,46 +692,19 @@ const Music = (() => {
   }
 
   function autoplayOnLaunch() {
+    if (hasTriedLaunchAutoplay) return;
+    hasTriedLaunchAutoplay = true;
     init();
     if (!audioSettings.musicEnabled || audioSettings.musicVolume <= 0 || userPaused) return;
     const selected = chooseTrack(false);
     if (!selected) return updateNowPlaying("No enabled songs. Enable a track in Audio settings.");
     setSource(selected, { remember: false });
-
-    // Best-effort audible autoplay first. If the browser blocks it, fall back to
-    // muted autoplay priming: muted autoplay is widely allowed, then we unmute
-    // shortly afterwards. If a browser still blocks audio, the existing global
-    // pointer/key/touch handlers start it on the first user interaction.
-    audio.muted = false;
-    audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
-    const audible = audio.play?.();
-    if (audible?.then) {
-      audible.then(() => {
-        launchAutoplayPrimed = true;
-        updateNowPlaying();
-      }).catch(() => {
-        if (userPaused || !audioSettings.musicEnabled) return;
-        audio.muted = true;
-        audio.volume = 0;
-        const muted = audio.play?.();
-        if (muted?.then) {
-          muted.then(() => {
-            launchAutoplayPrimed = true;
-            window.setTimeout(() => {
-              if (userPaused || !audioSettings.musicEnabled || !audio) return;
-              audio.volume = clamp(Number(audioSettings.musicVolume), 0, 1);
-              audio.muted = false;
-              updateNowPlaying();
-            }, 350);
-          }).catch(() => updateNowPlaying("Autoplay blocked — tap anywhere once to start music."));
-        } else {
-          updateNowPlaying();
-        }
-      });
-    } else {
-      launchAutoplayPrimed = true;
-      updateNowPlaying();
-    }
+    // Load the first track before attempting playback so the menu shows a real
+    // loading state instead of a stale Play button. Browsers that block audible
+    // autoplay will still be started by the first tap/key via unlockAndMaybePlay.
+    play({ mutedStart: false }).then(ok => {
+      if (!ok && !userPaused) play({ mutedStart: true });
+    });
   }
 
   return { applySettings, unlockAndMaybePlay, autoplayOnLaunch, play, pause, next, previous, togglePreview, toggleDock, updateNowPlaying };
@@ -774,6 +830,7 @@ function applyLoadedSettings(raw = {}) {
     gameSettings = sanitiseGameSettings(raw.gameplay || raw.gameSettings || {});
     audioSettings = sanitiseAudioSettings(raw.audio || raw.audioSettings || audioSettings);
     SFX.setVolume(audioSettings.gameVolume);
+    applyAllVoiceAudioSettings();
     Music.applySettings(false);
     if (raw.ui?.settingsTab) activeSettingsTab = raw.ui.settingsTab;
     saveLocalSettings();
@@ -841,6 +898,11 @@ function renderSettingsUi() {
   if (ui.musicVolumeValue) ui.musicVolumeValue.textContent = `${Math.round(audioSettings.musicVolume * 100)}%`;
   if (ui.musicEnabled) ui.musicEnabled.checked = audioSettings.musicEnabled;
   if (ui.voiceSpeakerMode) ui.voiceSpeakerMode.value = audioSettings.voiceSpeakerMode || DEFAULT_AUDIO_SETTINGS.voiceSpeakerMode;
+  if (ui.voiceActivationMode) ui.voiceActivationMode.value = audioSettings.voiceActivationMode || DEFAULT_AUDIO_SETTINGS.voiceActivationMode;
+  if (ui.voiceVolume) ui.voiceVolume.value = String(audioSettings.voiceVolume ?? DEFAULT_AUDIO_SETTINGS.voiceVolume);
+  if (ui.voiceVolumeValue) ui.voiceVolumeValue.textContent = `${Math.round((audioSettings.voiceVolume ?? DEFAULT_AUDIO_SETTINGS.voiceVolume) * 100)}%`;
+  if (ui.voiceInputDevice && ui.voiceInputDevice.options.length) ui.voiceInputDevice.value = audioSettings.voiceInputDeviceId || "";
+  if (ui.voiceOutputDevice && ui.voiceOutputDevice.options.length) ui.voiceOutputDevice.value = audioSettings.voiceOutputDeviceId || "";
   renderActiveSpeakers();
   if (ui.musicTrackSelect) {
     ui.musicTrackSelect.value = audioSettings.musicTrack;
@@ -900,7 +962,7 @@ function renderSettingsUi() {
 }
 
 function setSettingsTab(tab = "gameplay") {
-  const safe = ["gameplay", "camera", "audio", "keyboard", "controller"].includes(tab) ? tab : "gameplay";
+  const safe = ["gameplay", "camera", "audio", "songs", "keyboard", "controller"].includes(tab) ? tab : "gameplay";
   activeSettingsTab = safe;
   localStorage.setItem("rlcss_settings_tab", safe);
   document.querySelectorAll("[data-settings-tab]").forEach(btn => {
@@ -913,6 +975,7 @@ function setSettingsTab(tab = "gameplay") {
     pane.classList.toggle("active", active);
     pane.hidden = !active;
   });
+  if (safe === "audio") refreshAudioDevices({ requestPermission: false }).catch(() => {});
 }
 
 function openSettingsPanel(fromPause = false) {
@@ -1084,36 +1147,46 @@ function accountName() {
 function updateAccountUi() {
   const signedIn = isAccountUser();
   const anon = !!authUser?.isAnonymous;
-  const name = accountName();
+  const display = accountName();
+  const username = accountProfile?.username || normalizeUsername(display);
   if (ui.accountStatus) {
     ui.accountStatus.textContent = signedIn
-      ? `Signed in: ${name}`
+      ? `Signed in: ${display}`
       : (anon ? "Playing as guest" : "Offline / guest only");
   }
   if (ui.openAccount) ui.openAccount.textContent = signedIn ? "Profile" : "Create / Sign in";
   if (ui.openAccount) ui.openAccount.classList.toggle("account-cta", !signedIn);
-  if (ui.accountSubtitle) ui.accountSubtitle.textContent = signedIn ? "Profile" : "Create an account for leaderboard stats, or keep playing as guest.";
+  if (ui.accountSubtitle) ui.accountSubtitle.textContent = signedIn ? "Manage your profile." : "Create an account for leaderboard stats, or keep playing as guest.";
   if (ui.accountAuthFields) ui.accountAuthFields.classList.toggle("hidden", signedIn);
   if (ui.accountProfileFields) ui.accountProfileFields.classList.toggle("hidden", !signedIn);
-  if (ui.accountProfileName) ui.accountProfileName.textContent = name;
+  if (ui.accountProfileName) ui.accountProfileName.textContent = username || "player";
+  if (ui.accountDisplayName && signedIn && document.activeElement !== ui.accountDisplayName) ui.accountDisplayName.value = display;
   if (ui.createAccount) ui.createAccount.classList.toggle("hidden", signedIn);
   if (ui.signInAccount) ui.signInAccount.classList.toggle("hidden", signedIn);
   if (ui.accountUsername) ui.accountUsername.disabled = signedIn;
   if (ui.accountPassword) ui.accountPassword.disabled = signedIn;
   if (ui.signOutAccount) ui.signOutAccount.classList.toggle("hidden", !signedIn);
   if (ui.changePasswordAccount) ui.changePasswordAccount.classList.toggle("hidden", !signedIn);
+  if (ui.saveDisplayNameAccount) ui.saveDisplayNameAccount.classList.toggle("hidden", !signedIn);
+  if (ui.nameLabel) ui.nameLabel.classList.toggle("hidden", signedIn);
+  if (ui.name) ui.name.disabled = signedIn;
+  if (ui.signedPlayerName) {
+    ui.signedPlayerName.classList.toggle("hidden", !signedIn);
+    const strong = ui.signedPlayerName.querySelector("strong");
+    if (strong) strong.textContent = display;
+  }
+  document.body.classList.toggle("account-signed-in", signedIn);
   if (ui.accountMessage && !ui.accountMessage.dataset.busy) {
     ui.accountMessage.textContent = signedIn
       ? ""
       : (authUser ? "Guest play still works. Accounts save leaderboard stats and cloud settings." : "Connect Firebase to create accounts and save leaderboard stats.");
   }
   if (signedIn) {
-    playerName = sanitizeName(name);
+    playerName = sanitizeName(display);
     localStorage.setItem("rlcss_online_name", playerName);
-    if (ui.name && (!ui.name.value || ui.name.value === "Player" || ui.name.value !== playerName)) ui.name.value = playerName;
+    if (ui.name) ui.name.value = playerName;
   }
 }
-
 function profileRef(id = uid) {
   return ref(db, `profiles/${id}`);
 }
@@ -1139,9 +1212,9 @@ async function refreshAccountProfile() {
   return accountProfile;
 }
 
-async function saveProfile(username) {
+async function saveProfile(username, displayNameInput = "") {
   const clean = normalizeUsername(username);
-  const displayName = sanitizeName(username);
+  const displayName = sanitizeName(displayNameInput || accountProfile?.displayName || username);
   if (!clean || clean.length < 3) throw new Error("Username must be 3–18 letters, numbers, _ or -.");
   const payload = {
     username: clean,
@@ -1157,6 +1230,24 @@ async function saveProfile(username) {
   if (ui.name) ui.name.value = playerName;
   updateAccountUi();
   queueSettingsSave();
+}
+
+async function saveDisplayName() {
+  if (!isAccountUser() || !db || !uid) return setAccountMessage("Sign in first.");
+  const displayName = sanitizeName(ui.accountDisplayName?.value || accountName());
+  if (!displayName || displayName.length < 2) return setAccountMessage("Display name must be 2–18 characters.");
+  setAccountMessage("Saving display name…", true);
+  await update(profileRef(uid), { displayName, updatedAt: serverTimestamp() });
+  accountProfile = { ...(accountProfile || {}), displayName, updatedAt: Date.now() };
+  playerName = displayName;
+  localStorage.setItem("rlcss_online_name", playerName);
+  if (ui.name) ui.name.value = playerName;
+  if (lobbyCode && uid) await updateLocalPlayer({ name: playerName });
+  await update(leaderboardRef(uid), { displayName }).catch(() => {});
+  await publishVoicePresence().catch(() => {});
+  updateAccountUi();
+  renderLobby();
+  setAccountMessage("Display name saved.");
 }
 
 function setAccountMessage(text, busy = false) {
@@ -1232,7 +1323,7 @@ async function initialiseOwnLeaderboard(username = accountName()) {
   await set(leaderboardRef(uid), {
     uid,
     username: normalizeUsername(username),
-    displayName: sanitizeName(username),
+    displayName: accountName(),
     points: 0,
     wins: 0,
     draws: 0,
@@ -2057,7 +2148,7 @@ function navButtonEdge(name, pressed) {
 function settingsTabDelta(delta) {
   if (pendingControllerBind || pendingKeyBind) return false;
   if (!ui.settingsCard || ui.settingsCard.classList.contains("hidden")) return false;
-  const tabs = ["gameplay", "camera", "audio", "keyboard", "controller"];
+  const tabs = ["gameplay", "camera", "audio", "songs", "keyboard", "controller"];
   const idx = Math.max(0, tabs.indexOf(activeSettingsTab));
   setSettingsTab(tabs[(idx + delta + tabs.length) % tabs.length]);
   return true;
@@ -2101,7 +2192,7 @@ function pollController() {
   const pad = getFirstGamepad();
   controllerInput = { throttle: 0, steer: 0, boost: false, jump: false, drift: false, reset: false };
   controllerLook = { x: 0, y: 0, active: false };
-  if (!pad) return controllerInput;
+  if (!pad) { setVoicePttHeld("controller", false); return controllerInput; }
   if (pendingControllerBind || pendingKeyBind) return controllerInput;
 
   const steerAxis = axisValue(pad, controllerSettings.steerAxis);
@@ -2134,7 +2225,12 @@ function pollController() {
   latchButton("pause", buttonPressed(pad, controllerSettings.pauseButton), () => togglePause());
   latchButton("chat", buttonPressed(pad, controllerSettings.chatButton), () => toggleChatOpen());
   latchButton("voice", buttonPressed(pad, controllerSettings.voiceButton), () => toggleVoice());
-  latchButton("mic", buttonPressed(pad, controllerSettings.micButton), () => toggleVoiceMuted());
+  const micPressed = buttonPressed(pad, controllerSettings.micButton);
+  if (isPushToTalkMode()) {
+    setVoicePttHeld("controller", micPressed);
+  } else {
+    latchButton("mic", micPressed, () => toggleVoiceMuted());
+  }
 
   return controllerInput;
 }
@@ -2277,7 +2373,9 @@ function localVoicePlayer() {
 }
 
 function canUseVoice() {
-  return !!(navigator.mediaDevices?.getUserMedia && window.RTCPeerConnection && db && uid && lobbyCode && !isSinglePlayer && currentMeta?.status === "running" && currentMeta?.voiceScope !== "off");
+  const status = currentMeta?.status || "";
+  const inOnlineLobbyOrMatch = !!(lobbyCode && !isSinglePlayer && (status === "waiting" || status === "running"));
+  return !!(navigator.mediaDevices?.getUserMedia && window.RTCPeerConnection && db && uid && inOnlineLobbyOrMatch && currentMeta?.voiceScope !== "off");
 }
 
 function voiceIceConfig() {
@@ -2318,24 +2416,32 @@ function voiceDisplayFor(id) {
 
 function renderActiveSpeakers() {
   if (!ui.activeSpeakers) return;
-  const talkers = Object.entries(voiceTalkers || {})
+  const entries = Object.entries(voiceTalkers || {});
+  const localInfo = voiceActive ? (voiceTalkers.local || { talking: false, level: 0 }) : null;
+  const talkers = entries
     .filter(([, info]) => info && info.talking)
     .map(([id, info]) => ({ id, ...voiceDisplayFor(id), level: info.level || 0 }))
     .filter(t => !t.muted)
     .sort((a, b) => b.level - a.level)
     .slice(0, 4);
-  const show = shouldShowActiveSpeakerOverlay() && talkers.length > 0;
+  const mode = audioSettings.voiceSpeakerMode || DEFAULT_AUDIO_SETTINGS.voiceSpeakerMode;
+  const showMonitor = voiceActive && mode !== "off" && isDesktopVoiceOverlayAvailable() && (mode !== "menus" || !document.body.classList.contains("game-running") || document.body.classList.contains("settings-open"));
+  const show = showMonitor && (talkers.length > 0 || localInfo);
   ui.activeSpeakers.classList.toggle("hidden", !show);
   if (!show) {
     ui.activeSpeakers.innerHTML = "";
     return;
   }
+  const localLevel = clamp(Number(localInfo?.level || 0), 0, 0.28);
+  const localPercent = Math.round((localLevel / 0.28) * 100);
+  const transmitting = voiceActive && !voiceMuted && (!isPushToTalkMode() || isVoicePttHeld());
   ui.activeSpeakers.innerHTML = `
-    <div class="active-speakers-title">Talking</div>
-    ${talkers.map(t => `<div class="active-speaker ${t.team}"><span></span>${escapeHtml(t.name)}</div>`).join("")}
+    <div class="active-speakers-title">Voice ${transmitting ? "live" : "monitor"}</div>
+    <div class="active-speaker self ${localInfo?.talking && transmitting ? "talking" : ""}"><span></span>${escapeHtml(transmitting ? "You" : "You muted / PTT off")}</div>
+    <div class="voice-level-meter" aria-hidden="true"><i style="width:${localPercent}%"></i></div>
+    ${talkers.filter(t => t.id !== "local").map(t => `<div class="active-speaker ${t.team}"><span></span>${escapeHtml(t.name)}</div>`).join("")}
   `;
 }
-
 function getVoiceAnalysisContext() {
   if (!voiceAnalysisCtx) {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -2399,6 +2505,104 @@ function ensureVoiceActivityLoop() {
   }, 160);
 }
 
+
+function selectedAudioInputConstraint() {
+  const deviceId = audioSettings.voiceInputDeviceId || "";
+  return {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {})
+  };
+}
+
+async function applyVoiceOutputDevice(audioEl) {
+  if (!audioEl || typeof audioEl.setSinkId !== "function") return false;
+  try {
+    await audioEl.setSinkId(audioSettings.voiceOutputDeviceId || "");
+    return true;
+  } catch (err) {
+    console.warn("Could not set voice output device", err);
+    return false;
+  }
+}
+
+function applyAllVoiceAudioSettings() {
+  const volume = clamp(Number(audioSettings.voiceVolume ?? DEFAULT_AUDIO_SETTINGS.voiceVolume), 0, 1);
+  for (const peer of voicePeers.values()) {
+    if (peer.audio) peer.audio.volume = volume;
+  }
+}
+
+async function refreshAudioDevices({ requestPermission = false } = {}) {
+  if (!navigator.mediaDevices?.enumerateDevices) {
+    if (ui.audioDeviceStatus) ui.audioDeviceStatus.textContent = "This browser cannot list audio devices.";
+    return;
+  }
+  if (audioDeviceRefreshBusy) return;
+  audioDeviceRefreshBusy = true;
+  if (ui.refreshAudioDevices) ui.refreshAudioDevices.disabled = true;
+  if (ui.audioDeviceStatus) ui.audioDeviceStatus.textContent = requestPermission ? "Requesting mic permission…" : "Scanning audio devices…";
+  let tempStream = null;
+  try {
+    if (requestPermission && navigator.mediaDevices.getUserMedia) {
+      tempStream = await navigator.mediaDevices.getUserMedia({ audio: selectedAudioInputConstraint(), video: false });
+    }
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const inputs = devices.filter(device => device.kind === "audioinput");
+    const outputs = devices.filter(device => device.kind === "audiooutput");
+    const option = (device, index, fallback) => `<option value="${escapeHtml(device.deviceId)}">${escapeHtml(device.label || `${fallback} ${index + 1}`)}</option>`;
+    if (ui.voiceInputDevice) {
+      ui.voiceInputDevice.innerHTML = `<option value="">Default microphone</option>` + inputs.map((device, i) => option(device, i, "Microphone")).join("");
+      const hasInput = !audioSettings.voiceInputDeviceId || inputs.some(device => device.deviceId === audioSettings.voiceInputDeviceId);
+      if (!hasInput) audioSettings.voiceInputDeviceId = "";
+      ui.voiceInputDevice.value = audioSettings.voiceInputDeviceId || "";
+    }
+    if (ui.voiceOutputDevice) {
+      ui.voiceOutputDevice.innerHTML = `<option value="">Default speaker/headphones</option>` + outputs.map((device, i) => option(device, i, "Output")).join("");
+      const supported = typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
+      const hasOutput = !audioSettings.voiceOutputDeviceId || outputs.some(device => device.deviceId === audioSettings.voiceOutputDeviceId);
+      if (!hasOutput) audioSettings.voiceOutputDeviceId = "";
+      ui.voiceOutputDevice.value = audioSettings.voiceOutputDeviceId || "";
+      ui.voiceOutputDevice.disabled = !supported || !outputs.length;
+    }
+    if (ui.audioDeviceStatus) {
+      const outputText = (typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype)
+        ? `${outputs.length || 1} output option${(outputs.length || 1) === 1 ? "" : "s"}`
+        : "output selection not supported here";
+      ui.audioDeviceStatus.textContent = `${inputs.length || 1} mic option${(inputs.length || 1) === 1 ? "" : "s"}; ${outputText}.`;
+    }
+  } catch (err) {
+    console.warn("Audio device refresh failed", err);
+    if (ui.audioDeviceStatus) ui.audioDeviceStatus.textContent = `Could not access audio devices: ${err.message || err}`;
+  } finally {
+    if (tempStream) tempStream.getTracks().forEach(track => track.stop());
+    audioDeviceRefreshBusy = false;
+    if (ui.refreshAudioDevices) ui.refreshAudioDevices.disabled = false;
+  }
+}
+
+function isPushToTalkMode() {
+  return (audioSettings.voiceActivationMode || DEFAULT_AUDIO_SETTINGS.voiceActivationMode) === "push";
+}
+
+function isVoicePttHeld() {
+  return !!(voicePttKeyboardHeld || voicePttControllerHeld || voicePttTouchHeld);
+}
+
+function updateVoiceTransmitState() {
+  const shouldTransmit = voiceActive && !voiceMuted && (!isPushToTalkMode() || isVoicePttHeld());
+  if (voiceLocalStream) voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = shouldTransmit; });
+  updateVoiceUi();
+}
+
+function setVoicePttHeld(source, held) {
+  const next = !!held;
+  if (source === "keyboard") voicePttKeyboardHeld = next;
+  else if (source === "controller") voicePttControllerHeld = next;
+  else if (source === "touch") voicePttTouchHeld = next;
+  updateVoiceTransmitState();
+}
 async function runVoiceSelfTest() {
   if (voiceSelfTestBusy) return;
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -2411,7 +2615,7 @@ async function runVoiceSelfTest() {
   let stream = null;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: selectedAudioInputConstraint(),
       video: false
     });
     if (!window.MediaRecorder) {
@@ -2437,7 +2641,8 @@ async function runVoiceSelfTest() {
     const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
     const url = URL.createObjectURL(blob);
     const playback = new Audio(url);
-    playback.volume = clamp(Number(audioSettings.gameVolume || DEFAULT_AUDIO_SETTINGS.gameVolume), 0.15, 1);
+    playback.volume = clamp(Number(audioSettings.voiceVolume ?? DEFAULT_AUDIO_SETTINGS.voiceVolume), 0, 1);
+    await applyVoiceOutputDevice(playback);
     if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = "Playing back your mic sample…";
     await playback.play().catch(err => {
       if (ui.voiceTestStatus) ui.voiceTestStatus.textContent = "Recorded OK. Tap the test button again if playback was blocked.";
@@ -2457,7 +2662,8 @@ async function runVoiceSelfTest() {
 }
 
 function updateVoiceUi() {
-  const runningOnline = !!(!isSinglePlayer && currentMeta?.status === "running" && lobbyCode);
+  const status = currentMeta?.status || "";
+  const runningOnline = !!(!isSinglePlayer && lobbyCode && (status === "waiting" || status === "running"));
   const disabledByHost = currentMeta?.voiceScope === "off";
   const show = runningOnline && !disabledByHost;
   if (ui.toggleVoice) {
@@ -2468,13 +2674,17 @@ function updateVoiceUi() {
     ui.toggleVoice.setAttribute("aria-pressed", voiceActive ? "true" : "false");
     const count = Math.max(0, voicePeers.size);
     ui.toggleVoice.textContent = voiceActive ? `Voice ${voiceScopeLabel()} ${count ? count + 1 : 1}` : "Voice";
-    ui.toggleVoice.title = disabledByHost ? "Voice chat disabled by host" : "Join/leave voice chat (V)";
+    ui.toggleVoice.title = disabledByHost ? "Voice chat disabled by host" : "Join/leave voice chat (V). Works in lobbies and matches.";
   }
   if (ui.muteVoice) {
+    const pushMode = isPushToTalkMode();
+    const transmitting = !!(voiceActive && !voiceMuted && (!pushMode || isVoicePttHeld()));
     ui.muteVoice.classList.toggle("hidden", !show || !voiceActive);
-    ui.muteVoice.classList.toggle("voice-muted", voiceMuted);
-    ui.muteVoice.setAttribute("aria-pressed", voiceMuted ? "true" : "false");
-    ui.muteVoice.textContent = voiceMuted ? "Mic Off" : "Mic On";
+    ui.muteVoice.classList.toggle("voice-muted", voiceMuted || (pushMode && !isVoicePttHeld()));
+    ui.muteVoice.classList.toggle("voice-talking", transmitting);
+    ui.muteVoice.setAttribute("aria-pressed", transmitting ? "true" : "false");
+    ui.muteVoice.textContent = pushMode ? (transmitting ? "Talking" : "Hold Mic") : (voiceMuted ? "Mic Off" : "Mic On");
+    ui.muteVoice.title = pushMode ? "Hold to talk. Uses your Mic / push-to-talk keyboard or controller binding too." : "Mute/unmute microphone (M)";
   }
   if (disabledByHost && voiceActive) stopVoice(true);
   renderActiveSpeakers();
@@ -2486,7 +2696,8 @@ async function publishVoicePresence() {
   await set(voiceRef(lobbyCode, `presence/${uid}`), {
     name: sanitizeName(local.name || playerName || ui.name?.value),
     team: local.team === "orange" ? "orange" : "blue",
-    muted: !!voiceMuted,
+    muted: !!voiceMuted || (isPushToTalkMode() && !isVoicePttHeld()),
+    activation: audioSettings.voiceActivationMode || DEFAULT_AUDIO_SETTINGS.voiceActivationMode,
     updatedAt: serverTimestamp(),
     clientTime: Date.now()
   }).catch(err => console.warn("Voice presence update failed", err));
@@ -2550,19 +2761,20 @@ function reconcileVoicePeers() {
 async function startVoice() {
   if (voiceActive || voiceConnecting) return;
   if (!canUseVoice()) {
-    setStatus(currentMeta?.voiceScope === "off" ? "Voice chat is disabled by the host." : "Voice needs an online running match, HTTPS, and microphone permission.");
+    setStatus(currentMeta?.voiceScope === "off" ? "Voice chat is disabled by the host." : "Voice needs an online lobby or match, HTTPS, and microphone permission.");
     return;
   }
   voiceConnecting = true;
   updateVoiceUi();
   try {
     voiceLocalStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: selectedAudioInputConstraint(),
       video: false
     });
-    voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = !voiceMuted; });
+    voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = false; });
     attachVoiceAnalyser("local", voiceLocalStream);
     voiceActive = true;
+    updateVoiceTransmitState();
     setupVoiceSubscriptions();
     await publishVoicePresence();
     reconcileVoicePeers();
@@ -2604,7 +2816,11 @@ function stopLocalVoiceTracks() {
   detachVoiceAnalyser("local");
   if (voiceLocalStream) voiceLocalStream.getTracks().forEach(track => track.stop());
   voiceLocalStream = null;
+  voicePttKeyboardHeld = false;
+  voicePttControllerHeld = false;
+  voicePttTouchHeld = false;
 }
+
 
 function toggleVoice() {
   return voiceActive ? stopVoice() : startVoice();
@@ -2613,7 +2829,7 @@ function toggleVoice() {
 function setVoiceMuted(next) {
   voiceMuted = !!next;
   localStorage.setItem("rlcss_voice_muted", voiceMuted ? "1" : "0");
-  if (voiceLocalStream) voiceLocalStream.getAudioTracks().forEach(track => { track.enabled = !voiceMuted; });
+  updateVoiceTransmitState();
   publishVoicePresence();
   updateVoiceUi();
 }
@@ -2652,11 +2868,13 @@ async function createVoicePeer(remoteId, makeOffer = false) {
       audio.autoplay = true;
       audio.playsInline = true;
       audio.dataset.voicePeer = remoteId;
+      audio.volume = clamp(Number(audioSettings.voiceVolume ?? DEFAULT_AUDIO_SETTINGS.voiceVolume), 0, 1);
       audio.style.display = "none";
       document.body.appendChild(audio);
       peer.audio = audio;
     }
     peer.audio.srcObject = stream;
+    applyVoiceOutputDevice(peer.audio);
     attachVoiceAnalyser(remoteId, stream);
     peer.audio.play?.().catch(() => {});
   };
@@ -2779,6 +2997,7 @@ function showMenuPanel(which = "setup") {
     startLeaderboardListener();
   }
   if (showAccount && ui.accountUsername && !ui.accountUsername.value) ui.accountUsername.value = normalizeUsername(ui.name?.value || accountProfile?.username || "");
+  if (showAccount && ui.accountDisplayName && isAccountUser()) ui.accountDisplayName.value = accountName();
   if (showAccount) updateAccountUi();
   if (showSettings) { renderSettingsUi(); setSettingsTab(activeSettingsTab); }
   setTimeout(focusFirstMenuElement, 0);
@@ -2789,6 +3008,14 @@ ui.single.addEventListener("click", safeUi(startSinglePlayer, "Single player set
 ui.create.addEventListener("click", safeUi(createLobby, "Create lobby"));
 ui.join.addEventListener("click", safeUi(joinLobby, "Join lobby"));
 ui.joinCode.addEventListener("input", () => ui.joinCode.value = ui.joinCode.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+if (ui.name) ui.name.addEventListener("input", () => {
+  if (isAccountUser()) {
+    ui.name.value = accountName();
+    return;
+  }
+  playerName = sanitizeName(ui.name.value);
+  localStorage.setItem("rlcss_online_name", playerName);
+});
 if (ui.openAccount) ui.openAccount.addEventListener("click", () => showMenuPanel("account"));
 if (ui.closeAccount) ui.closeAccount.addEventListener("click", () => showMenuPanel("setup"));
 if (ui.openSettings) ui.openSettings.addEventListener("click", () => openSettingsPanel(false));
@@ -2799,8 +3026,10 @@ if (ui.closeLeaderboard) ui.closeLeaderboard.addEventListener("click", () => sho
 if (ui.createAccount) ui.createAccount.addEventListener("click", safeUi(createAccount, "Create account"));
 if (ui.signInAccount) ui.signInAccount.addEventListener("click", safeUi(signInAccount, "Sign in account"));
 if (ui.changePasswordAccount) ui.changePasswordAccount.addEventListener("click", safeUi(changeAccountPassword, "Change password"));
+if (ui.saveDisplayNameAccount) ui.saveDisplayNameAccount.addEventListener("click", safeUi(saveDisplayName, "Save display name"));
 if (ui.signOutAccount) ui.signOutAccount.addEventListener("click", safeUi(signOutAccount, "Sign out account"));
 if (ui.accountUsername) ui.accountUsername.addEventListener("input", () => { ui.accountUsername.value = normalizeUsername(ui.accountUsername.value); });
+if (ui.accountDisplayName) ui.accountDisplayName.addEventListener("input", () => { ui.accountDisplayName.value = sanitizeName(ui.accountDisplayName.value); });
 if (ui.keybindList) ui.keybindList.addEventListener("click", e => {
   const btn = e.target.closest("[data-bind-action]");
   if (!btn) return;
@@ -2841,6 +3070,7 @@ function saveAudioSettingsLocal() {
 function commitAudioSettings({ play = true } = {}) {
   saveAudioSettingsLocal();
   SFX.setVolume(audioSettings.gameVolume);
+  applyAllVoiceAudioSettings();
   Music.applySettings(play);
   renderSettingsUi();
   queueSettingsSave();
@@ -2860,11 +3090,33 @@ if (ui.musicEnabled) ui.musicEnabled.addEventListener("change", () => {
   audioSettings.musicEnabled = !!ui.musicEnabled.checked;
   commitAudioSettings({ play: true });
 });
+if (ui.voiceVolume) ui.voiceVolume.addEventListener("input", () => {
+  audioSettings.voiceVolume = clamp(Number(ui.voiceVolume.value), 0, 1);
+  if (ui.voiceVolumeValue) ui.voiceVolumeValue.textContent = `${Math.round(audioSettings.voiceVolume * 100)}%`;
+  commitAudioSettings({ play: false });
+});
 if (ui.voiceSpeakerMode) ui.voiceSpeakerMode.addEventListener("change", () => {
   audioSettings.voiceSpeakerMode = ui.voiceSpeakerMode.value;
   commitAudioSettings({ play: false });
   renderActiveSpeakers();
 });
+if (ui.voiceActivationMode) ui.voiceActivationMode.addEventListener("change", () => {
+  audioSettings.voiceActivationMode = ui.voiceActivationMode.value;
+  commitAudioSettings({ play: false });
+  updateVoiceTransmitState();
+});
+if (ui.voiceInputDevice) ui.voiceInputDevice.addEventListener("change", () => {
+  audioSettings.voiceInputDeviceId = ui.voiceInputDevice.value || "";
+  commitAudioSettings({ play: false });
+  if (voiceActive) setStatus("Mic device changed. Rejoin voice chat to use the new microphone.");
+});
+if (ui.voiceOutputDevice) ui.voiceOutputDevice.addEventListener("change", () => {
+  audioSettings.voiceOutputDeviceId = ui.voiceOutputDevice.value || "";
+  commitAudioSettings({ play: false });
+  for (const peer of voicePeers.values()) if (peer.audio) { applyVoiceOutputDevice(peer.audio); peer.audio.volume = clamp(Number(audioSettings.voiceVolume ?? DEFAULT_AUDIO_SETTINGS.voiceVolume), 0, 1); }
+});
+if (ui.refreshAudioDevices) ui.refreshAudioDevices.addEventListener("click", safeUi(() => refreshAudioDevices({ requestPermission: true }), "Refresh audio devices"));
+if (navigator.mediaDevices?.addEventListener) navigator.mediaDevices.addEventListener("devicechange", () => refreshAudioDevices({ requestPermission: false }).catch(() => {}));
 if (ui.voiceTestPlayback) ui.voiceTestPlayback.addEventListener("click", safeUi(runVoiceSelfTest, "Voice playback test"));
 if (ui.musicTrackSelect) ui.musicTrackSelect.addEventListener("change", () => {
   audioSettings.musicTrack = ui.musicTrackSelect.value;
@@ -2934,7 +3186,24 @@ if (ui.pauseResume) ui.pauseResume.addEventListener("click", safeUi(togglePause,
 if (ui.pauseOpenSettings) ui.pauseOpenSettings.addEventListener("click", () => openSettingsPanel(true));
 if (ui.toggleChat) ui.toggleChat.addEventListener("click", safeUi(toggleChatOpen, "Toggle chat"));
 if (ui.toggleVoice) ui.toggleVoice.addEventListener("click", safeUi(toggleVoice, "Toggle voice"));
-if (ui.muteVoice) ui.muteVoice.addEventListener("click", safeUi(toggleVoiceMuted, "Toggle microphone"));
+if (ui.muteVoice) {
+  ui.muteVoice.addEventListener("click", safeUi(() => {
+    if (!isPushToTalkMode()) toggleVoiceMuted();
+  }, "Toggle microphone"));
+  ui.muteVoice.addEventListener("pointerdown", e => {
+    if (!isPushToTalkMode()) return;
+    e.preventDefault();
+    ui.muteVoice.setPointerCapture?.(e.pointerId);
+    setVoicePttHeld("touch", true);
+  });
+  const releasePtt = e => {
+    if (!isPushToTalkMode()) return;
+    setVoicePttHeld("touch", false);
+  };
+  ui.muteVoice.addEventListener("pointerup", releasePtt);
+  ui.muteVoice.addEventListener("pointercancel", releasePtt);
+  ui.muteVoice.addEventListener("pointerleave", releasePtt);
+}
 ui.ready.addEventListener("click", () => {
   if (isSinglePlayer) startSoloMatch();
   else updateLocalPlayer({ ready: !(currentPlayers[activePlayerId()]?.ready) });
@@ -3042,7 +3311,12 @@ window.addEventListener("keydown", e => {
     return;
   }
   if (e.code === bindings.mic) {
-    toggleVoiceMuted();
+    if (isPushToTalkMode()) {
+      e.preventDefault();
+      setVoicePttHeld("keyboard", true);
+    } else {
+      toggleVoiceMuted();
+    }
     return;
   }
   if (e.code === "Enter" && currentMeta?.status === "running") {
@@ -3063,6 +3337,7 @@ window.addEventListener("keyup", e => {
   const tag = (e.target?.tagName || "").toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select") return;
   keys[e.code] = false;
+  if (e.code === bindings.mic && isPushToTalkMode()) setVoicePttHeld("keyboard", false);
   if (e.code === bindings.cam) camKeyLatch = false;
 });
 window.addEventListener("gamepadconnected", () => { renderSettingsUi(); setSettingsSyncStatus("Controller detected."); });

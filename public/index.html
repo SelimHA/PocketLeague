@@ -60,7 +60,7 @@
 
   <main id="ui-root" class="ui-root">
     <section id="setup-card" class="panel menu-panel">
-      <div class="menu-kicker">V39 Voice Audio Patch</div>
+      <div class="menu-kicker">V41 Voice/Profile Patch</div>
       <h1>RLCSS</h1>
       <p class="menu-subtitle">Rocket-style car football with richer arenas, voice/text chat, leaderboards, custom matches and full desktop controller support, AI music, menu music controls, and audio settings.</p>
       <div class="ai-music-badge" aria-label="AI music notice">♫ AI-generated soundtrack included</div>
@@ -71,10 +71,15 @@
       <div id="firebase-warning" class="warning hidden">
         Firebase is not configured yet. Fill <code>public/js/config.js</code> with your Firebase web app config, then deploy.
       </div>
-      <label>
+      <label id="player-name-label">
         Player name
         <input id="player-name" maxlength="18" placeholder="Player" autocomplete="nickname" />
       </label>
+      <div id="signed-player-name" class="signed-player-name hidden" aria-live="polite">
+        <span>Player name</span>
+        <strong>Player</strong>
+        <small>Using your account display name</small>
+      </div>
       <div class="account-strip" aria-live="polite">
         <span id="account-status">Playing as guest</span>
         <button id="open-account" type="button" class="secondary small-action account-cta">Create / Sign in</button>
@@ -121,9 +126,14 @@
       </div>
       <div id="account-profile-fields" class="account-profile-fields hidden">
         <div class="profile-chip">
-          <span>Signed in as</span>
-          <strong id="account-profile-name">Player</strong>
+          <span>Username</span>
+          <strong id="account-profile-name">player</strong>
         </div>
+        <label>
+          Display name
+          <input id="account-display-name" maxlength="18" placeholder="Display name" autocomplete="nickname" />
+        </label>
+        <button id="save-display-name-account" type="button" class="primary small-action">Save Display Name</button>
         <label>
           New password
           <input id="account-new-password" type="password" maxlength="64" placeholder="new password" autocomplete="new-password" />
@@ -149,6 +159,7 @@
         <button type="button" class="settings-tab active" data-settings-tab="gameplay" role="tab" aria-selected="true">Gameplay</button>
         <button type="button" class="settings-tab" data-settings-tab="camera" role="tab" aria-selected="false">Camera</button>
         <button type="button" class="settings-tab" data-settings-tab="audio" role="tab" aria-selected="false">Audio</button>
+        <button type="button" class="settings-tab" data-settings-tab="songs" role="tab" aria-selected="false">Songs</button>
         <button type="button" class="settings-tab" data-settings-tab="keyboard" role="tab" aria-selected="false">Keyboard</button>
         <button type="button" class="settings-tab" data-settings-tab="controller" role="tab" aria-selected="false">Controller</button>
       </div>
@@ -206,38 +217,14 @@
             </section>
 
             <section class="audio-subsection">
-              <h4>Music</h4>
+              <h4>Music volume</h4>
               <label class="toggle-label"><input id="music-enabled" type="checkbox" /> Enable music</label>
               <label class="range-label">
                 Music volume
                 <input id="music-volume" type="range" min="0" max="1" step="0.01" />
                 <span id="music-volume-value" class="setting-value">45%</span>
               </label>
-              <label>
-                Menu / match music track
-                <select id="music-track-select">
-                  <option value="shuffle">Shuffle enabled songs</option>
-                  <option value="nitro">Nitro Boost Dreams</option>
-                  <option value="turbo">Turbo Boost Dreams</option>
-                  <option value="starlight">Boosting Through Starlight</option>
-                  <option value="ignite">Boost Ignite</option>
-                  <option value="hearts">Nitro Hearts Racing</option>
-                  <option value="overdrive">Neon Overdrive</option>
-                  <option value="anthem2">Boost Mode Anthem 2</option>
-                  <option value="anthem">Boost Mode Anthem</option>
-                </select>
-              </label>
-              <details id="music-track-details" class="track-toggle-details">
-                <summary>Choose which songs can play</summary>
-                <p class="hint">Collapsed by default. Turn off any tracks you do not want in shuffle or menu playback.</p>
-                <div id="music-track-toggles" class="music-track-toggles"></div>
-              </details>
-              <div class="audio-actions">
-                <button id="preview-music" type="button" class="secondary small-action">Preview music</button>
-                <button id="previous-music" type="button" class="secondary small-action">Restart / previous</button>
-                <button id="next-music" type="button" class="secondary small-action">Next song</button>
-              </div>
-              <p id="music-now-playing" class="hint">Loading first song… All included music is AI-generated.</p>
+              <p class="hint">Song choice and per-track toggles are now in the Songs tab.</p>
             </section>
 
             <section class="audio-subsection">
@@ -287,6 +274,42 @@
                 <select id="voice-output-device"><option value="">Default speaker/headphones</option></select>
               </label>
               <p class="hint">Some phones/browsers do not allow choosing a playback device, so the output list may only show the default device.</p>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-pane" data-settings-pane="songs" role="tabpanel" hidden>
+        <div class="settings-section audio-settings-section songs-settings-section">
+          <h3>Songs</h3>
+          <div class="audio-settings-grid songs-settings-grid">
+            <section class="audio-subsection song-picker-section">
+              <h4>Music playlist</h4>
+              <label>
+                Menu / match music track
+                <select id="music-track-select">
+                  <option value="shuffle">Shuffle enabled songs</option>
+                  <option value="nitro">Nitro Boost Dreams</option>
+                  <option value="turbo">Turbo Boost Dreams</option>
+                  <option value="starlight">Boosting Through Starlight</option>
+                  <option value="ignite">Boost Ignite</option>
+                  <option value="hearts">Nitro Hearts Racing</option>
+                  <option value="overdrive">Neon Overdrive</option>
+                  <option value="anthem2">Boost Mode Anthem 2</option>
+                  <option value="anthem">Boost Mode Anthem</option>
+                </select>
+              </label>
+              <details id="music-track-details" class="track-toggle-details">
+                <summary>Choose which songs can play</summary>
+                <p class="hint">Collapsed by default. Turn off any tracks you do not want in shuffle or menu playback.</p>
+                <div id="music-track-toggles" class="music-track-toggles"></div>
+              </details>
+              <div class="audio-actions">
+                <button id="preview-music" type="button" class="secondary small-action">Preview music</button>
+                <button id="previous-music" type="button" class="secondary small-action">Restart / previous</button>
+                <button id="next-music" type="button" class="secondary small-action">Next song</button>
+              </div>
+              <p id="music-now-playing" class="hint">Loading first song… All included music is AI-generated.</p>
             </section>
           </div>
         </div>
