@@ -3343,3 +3343,125 @@ body.lobby-open .slot {
     grid-template-columns: 1fr;
   }
 }
+
+/* V51: cleaner lobby dashboard with real scroll behavior */
+body.lobby-open #lobby-card {
+  width: min(1240px, calc(100vw - 28px));
+  max-height: calc(100svh - 68px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-content: start;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(89,255,208,.58) rgba(255,255,255,.08);
+}
+
+body.lobby-open #lobby-card::-webkit-scrollbar {
+  width: 10px;
+}
+
+body.lobby-open #lobby-card::-webkit-scrollbar-track {
+  background: rgba(255,255,255,.06);
+  border-radius: 999px;
+}
+
+body.lobby-open #lobby-card::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(24,200,255,.68), rgba(89,255,208,.62));
+  border: 2px solid rgba(5,8,14,.86);
+  border-radius: 999px;
+}
+
+body.lobby-open .lobby-main-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+body.lobby-open #lobby-card > .lobby-squad-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  overflow: visible;
+}
+
+body.lobby-open #lobby-card .match-setup-panel,
+body.lobby-open #lobby-card .car-setup-panel,
+body.lobby-open #lobby-card .squad-panel {
+  min-width: 0;
+  align-self: start;
+}
+
+body.lobby-open #lobby-card .panel-head {
+  position: sticky;
+  top: -18px;
+  z-index: 3;
+  padding-bottom: 12px;
+  background:
+    linear-gradient(180deg, rgba(12,18,31,.96), rgba(12,18,31,.84) 72%, rgba(12,18,31,0));
+  backdrop-filter: blur(12px);
+}
+
+body.lobby-open .car-setup-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.lobby-open .car-setup-panel #ready-btn,
+body.lobby-open .car-setup-panel #leave-lobby {
+  width: min(100%, 190px);
+}
+
+@media (min-width: 1080px) {
+  body.lobby-open #lobby-card {
+    display: grid;
+    grid-template-columns: minmax(280px, .88fr) minmax(280px, .88fr) minmax(380px, 1.22fr);
+    grid-template-rows: auto auto;
+    gap: 12px;
+  }
+
+  body.lobby-open #lobby-card > .panel-head {
+    grid-column: 1 / -1;
+  }
+
+  body.lobby-open #lobby-card > .lobby-main-grid {
+    display: contents !important;
+  }
+
+  body.lobby-open #lobby-card .match-setup-panel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  body.lobby-open #lobby-card .car-setup-panel {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  body.lobby-open #lobby-card > .lobby-squad-grid {
+    grid-column: 3;
+    grid-row: 2;
+    grid-template-columns: 1fr;
+    align-self: start;
+  }
+}
+
+@media (max-width: 1079px) {
+  body.lobby-open #lobby-card {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  body.lobby-open .lobby-main-grid,
+  body.lobby-open #lobby-card > .lobby-squad-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.lobby-open #lobby-card {
+    width: min(100vw - 16px, 620px);
+    max-height: calc(100svh - 16px);
+    padding: 12px;
+  }
+}
