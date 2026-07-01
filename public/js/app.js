@@ -3686,7 +3686,28 @@ if (ui.advancedAiList) ui.advancedAiList.addEventListener("change", e => {
   updateMetaPatch({ aiTuning: tuning });
 });
 
+function isBrowserCloseShortcut(e) {
+  return e.code === "KeyW" && (e.ctrlKey || e.metaKey) && !e.altKey;
+}
+
 window.addEventListener("keydown", e => {
+  if (!isBrowserCloseShortcut(e)) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  keys[e.code] = false;
+}, { capture: true });
+
+window.addEventListener("keyup", e => {
+  if (!isBrowserCloseShortcut(e)) return;
+  e.preventDefault();
+  keys[e.code] = false;
+}, { capture: true });
+
+window.addEventListener("keydown", e => {
+  if (isBrowserCloseShortcut(e)) {
+    e.preventDefault();
+    return;
+  }
   SFX.resume();
   Music.unlockAndMaybePlay();
   if (pendingKeyBind) {
