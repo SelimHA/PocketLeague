@@ -765,7 +765,7 @@ let aiCommandChunks = [];
 let aiCommandPressTimer = 0;
 let aiCommandPressStarted = 0;
 Object.assign(ui, {
-  aiCommandButton: $("#ai-command-button"), aiCommandWheel: $("#ai-command-wheel"), aiCommandOverlay: $("#ai-command-overlay"), mobileAiCommand: $("#mobile-ai-command"),
+  aiCommandButton: $("#ai-command-button"), aiCommandWheel: $("#ai-command-wheel"), aiCommandOverlay: $("#ai-command-overlay"), mobileAiCommand: $("#mobile-ai-command"), pauseAiCommand: $("#pause-ai-command"),
   aiCommandsEnabled: $("#ai-commands-enabled"), aiCommandInputMode: $("#ai-command-input-mode"), aiCommandServerAi: $("#ai-command-server-ai"), aiCommandServerStt: $("#ai-command-server-stt"), aiCommandLanguage: $("#ai-command-language"), aiCommandTranscript: $("#ai-command-transcript"), aiCommandAcks: $("#ai-command-acks"), aiCommandTimeout: $("#ai-command-timeout"), aiCommandStrength: $("#ai-command-strength"), aiCommandStoreHistory: $("#ai-command-store-history"), aiCommandSendAmbiguous: $("#ai-command-send-ambiguous"), aiCommandSendVoice: $("#ai-command-send-voice"), aiCommandSmarterOpponents: $("#ai-command-smarter-opponents"), aiCommandHelpOpen: $("#ai-command-help-open"), aiCommandHelp: $("#ai-command-help"), aiCommandHelpClose: $("#ai-command-help-close")
 });
 function aiCommandSettings() { return gameSettings.aiTeamCommands || DEFAULT_GAME_SETTINGS.aiTeamCommands; }
@@ -804,8 +804,20 @@ async function issueAiCommand(input, source = "quick") {
   showAiCommandOverlay(`${s.showTranscript !== false ? `Command heard: “${parsed.transcript || cmd.intent}” → ` : ""}${AI_COMMANDS.find(c => c[0] === cmd.intent)?.[1] || cmd.intent}`);
 }
 function renderAiCommandWheel() { if (!ui.aiCommandWheel) return; ui.aiCommandWheel.innerHTML = AI_COMMANDS.slice(0, 10).map(([intent, label], i) => `<button type="button" style="--i:${i}" data-ai-intent="${intent}">${escapeHtml(label)}</button>`).join(""); }
-function setAiCommandWheel(open) { aiCommandWheelOpen = !!open && canUseAiCommandsInMatch(); renderAiCommandWheel(); ui.aiCommandWheel?.classList.toggle("hidden", !aiCommandWheelOpen); ui.aiCommandButton?.setAttribute("aria-expanded", aiCommandWheelOpen ? "true" : "false"); }
-function updateAiCommandUi() { const enabled = canUseAiCommandsInMatch(); ui.aiCommandButton?.classList.toggle("hidden", !enabled); ui.mobileAiCommand?.classList.toggle("hidden", !enabled || !isPhonePortrait()); if (!enabled) { setAiCommandWheel(false); hideAiCommandOverlay(); } }
+function setAiCommandWheel(open) {
+  aiCommandWheelOpen = !!open && canUseAiCommandsInMatch();
+  renderAiCommandWheel();
+  ui.aiCommandWheel?.classList.toggle("hidden", !aiCommandWheelOpen);
+  [ui.aiCommandButton, ui.mobileAiCommand, ui.pauseAiCommand].forEach(btn => btn?.setAttribute("aria-expanded", aiCommandWheelOpen ? "true" : "false"));
+}
+function updateAiCommandUi() {
+  const enabled = canUseAiCommandsInMatch();
+  const phone = isPhonePortrait();
+  ui.aiCommandButton?.classList.toggle("hidden", !enabled || phone);
+  ui.mobileAiCommand?.classList.add("hidden");
+  ui.pauseAiCommand?.classList.toggle("hidden", !enabled || !phone);
+  if (!enabled) { setAiCommandWheel(false); hideAiCommandOverlay(); }
+}
 function applyAiCommandSettingsToUi() { const s = aiCommandSettings(); if (ui.aiCommandsEnabled) ui.aiCommandsEnabled.checked = !!s.enabled; if (ui.aiCommandInputMode) ui.aiCommandInputMode.value = s.inputMode; if (ui.aiCommandServerAi) ui.aiCommandServerAi.checked = !!s.serverAiEnabled; if (ui.aiCommandServerStt) ui.aiCommandServerStt.checked = !!s.serverSttEnabled; if (ui.aiCommandLanguage) ui.aiCommandLanguage.value = s.language || ""; if (ui.aiCommandTranscript) ui.aiCommandTranscript.checked = s.showTranscript !== false; if (ui.aiCommandAcks) ui.aiCommandAcks.checked = s.showAcknowledgements !== false; if (ui.aiCommandTimeout) ui.aiCommandTimeout.value = s.wheelTimeout || "medium"; if (ui.aiCommandStrength) ui.aiCommandStrength.value = s.commandStrength || "normal"; if (ui.aiCommandStoreHistory) ui.aiCommandStoreHistory.checked = !!s.storeHistory; if (ui.aiCommandSendAmbiguous) ui.aiCommandSendAmbiguous.checked = !!s.sendAmbiguousToServer; if (ui.aiCommandSendVoice) ui.aiCommandSendVoice.checked = !!s.sendVoiceToServer; if (ui.aiCommandSmarterOpponents) ui.aiCommandSmarterOpponents.checked = s.smarterOpponents !== false; updateAiCommandUi(); }
 function saveAiCommandSettingsFromUi() { gameSettings.aiTeamCommands = { ...aiCommandSettings(), enabled: !!ui.aiCommandsEnabled?.checked, inputMode: ui.aiCommandInputMode?.value || "quick", serverAiEnabled: !!ui.aiCommandServerAi?.checked, serverSttEnabled: !!ui.aiCommandServerStt?.checked, language: ui.aiCommandLanguage?.value || "", showTranscript: ui.aiCommandTranscript?.checked !== false, showAcknowledgements: ui.aiCommandAcks?.checked !== false, wheelTimeout: ui.aiCommandTimeout?.value || "medium", commandStrength: ui.aiCommandStrength?.value || "normal", storeHistory: !!ui.aiCommandStoreHistory?.checked, sendAmbiguousToServer: !!ui.aiCommandSendAmbiguous?.checked, sendVoiceToServer: !!ui.aiCommandSendVoice?.checked, smarterOpponents: ui.aiCommandSmarterOpponents?.checked !== false }; queueSettingsSave(); if (currentMeta) updateMetaPatch({ aiTeamCommands: commandSettingsForMeta() }); applyAiCommandSettingsToUi(); }
 async function startAiCommandRecording() { const s = aiCommandSettings(); if (!s.enabled || s.inputMode === "quick") return; try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); aiCommandChunks = []; aiCommandRecorder = new MediaRecorder(stream); aiCommandRecorder.ondataavailable = e => { if (e.data?.size) aiCommandChunks.push(e.data); }; aiCommandRecorder.onstop = async () => { stream.getTracks().forEach(t => t.stop()); showAiCommandOverlay("Voice command recorded. Use browser transcript or quick commands; server STT is optional."); if (s.serverSttEnabled && s.sendVoiceToServer && aiServerFallbackAvailable() && aiCommandChunks.length) { const blob = new Blob(aiCommandChunks, { type: aiCommandRecorder.mimeType || "audio/webm" }); const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onerror = () => r(""); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); }); try { const res = (await callAiCommandFunction("transcribeAiTeamCommand", { audioDataUrl: dataUrl, language: s.language || navigator.language }, 1800)).data; if (res?.transcript) await issueAiCommand(res.transcript, "voice"); else showAiCommandOverlay("Voice recorded, but no command was recognized. Quick commands still work."); } catch (err) { console.warn("Server STT failed; voice command ignored safely.", err); showAiCommandOverlay("Server voice parsing unavailable. Quick commands still work."); } } }; aiCommandRecorder.start(); showAiCommandOverlay("Listening for AI team command…"); } catch (err) { showAiCommandOverlay("Microphone permission is needed for voice commands."); } }
@@ -1096,14 +1108,25 @@ function setSettingsTab(tab = "gameplay") {
   if (safe === "audio") refreshAudioDevices({ requestPermission: false }).catch(() => {});
 }
 
+function hideModeChoicePanels() {
+  if (ui.gameMode) ui.gameMode.classList.add("hidden");
+  if (ui.tournamentCard) ui.tournamentCard.classList.add("hidden");
+}
+
+function closeAiCommandHelp() {
+  if (ui.aiCommandHelp) ui.aiCommandHelp.classList.add("hidden");
+}
+
 function openSettingsPanel(fromPause = false) {
   settingsOpenedFromPause = !!fromPause;
+  hideModeChoicePanels();
   document.body.classList.toggle("settings-open", !!fromPause || currentMeta?.status !== "running");
   showMenuPanel("settings");
   setSettingsTab(activeSettingsTab);
 }
 
 function closeSettingsPanel() {
+  closeAiCommandHelp();
   if (currentMeta?.status === "running") {
     if (ui.settingsCard) ui.settingsCard.classList.add("hidden");
     document.body.classList.remove("settings-open");
@@ -1602,12 +1625,14 @@ function openGameModeMenu() { showMenuPanel("mode"); }
 
 function openSingleSetup(mode = "single") {
   selectedGameMode = mode;
+  hideModeChoicePanels();
   renderTournamentScheduleOptions();
   startSinglePlayer();
 }
 
 function startQuickMatch() {
   selectedGameMode = "quick";
+  hideModeChoicePanels();
   if (ui.teamSize) ui.teamSize.value = "1";
   if (ui.matchLength) ui.matchLength.value = String(gameSettings.matchLength || DEFAULT_META.matchLength || 300);
   if (ui.customMatchMinutes) ui.customMatchMinutes.value = "";
@@ -1617,6 +1642,7 @@ function startQuickMatch() {
 
 function beginTournamentSetup() {
   selectedGameMode = "tournament";
+  hideModeChoicePanels();
   renderTournamentScheduleOptions();
   startSinglePlayer();
   setStatus("Tournament setup opened. Configure schedule, then start Match 1.");
@@ -1708,6 +1734,7 @@ function currentSoloMetaPatch() {
 
 async function createLobby() {
   isSinglePlayer = false;
+  hideModeChoicePanels();
   ui.create.disabled = true;
   try {
     if (!(await ensureFirebaseReady())) return;
@@ -1757,6 +1784,7 @@ async function createLobby() {
 
 async function joinLobby() {
   isSinglePlayer = false;
+  hideModeChoicePanels();
   ui.join.disabled = true;
   try {
     if (!(await ensureFirebaseReady())) return;
@@ -1789,6 +1817,8 @@ async function joinLobby() {
 function startSinglePlayer() {
   cleanupLobbyListeners();
   isSinglePlayer = true;
+  hideModeChoicePanels();
+  closeAiCommandHelp();
   singlePlayerId = LOCAL_UID;
   playerName = sanitizeName(isAccountUser() ? accountName() : ui.name.value);
   localStorage.setItem("rlcss_online_name", playerName);
@@ -1833,6 +1863,8 @@ function startSinglePlayer() {
 
 function startSoloMatch() {
   if (!isSinglePlayer || !currentMeta || !currentPlayers) return;
+  hideModeChoicePanels();
+  closeAiCommandHelp();
   saveRuleSettingsFromSetup();
   if (selectedGameMode === "tournament" && !tournamentState) resetTournamentState();
   if (selectedGameMode === "tournament") applyTournamentMatchLength();
@@ -1867,6 +1899,8 @@ function setStatus(text) {
 async function enterLobby(code) {
   cleanupLobbyListeners();
   isSinglePlayer = false;
+  hideModeChoicePanels();
+  closeAiCommandHelp();
   lobbyCode = code;
   ui.setup.classList.add("hidden");
   ui.lobby.classList.remove("hidden");
@@ -2107,6 +2141,7 @@ function updateGameVisibility() {
   const running = currentMeta && currentMeta.status === "running";
   document.body.classList.toggle("game-running", !!running);
   document.body.classList.toggle("game-paused", !!(running && currentMeta?.paused));
+  document.body.classList.toggle("lobby-open", !!(!running && lobbyCode));
   if (running) {
     if (ui.accountCard) ui.accountCard.classList.add("hidden");
     if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
@@ -2116,9 +2151,11 @@ function updateGameVisibility() {
       ui.settingsCard.classList.add("hidden");
       document.body.classList.remove("settings-open");
     }
+  } else if (lobbyCode) {
+    hideModeChoicePanels();
   }
   ui.hud.classList.toggle("hidden", !running);
-  ui.leaveGame.classList.toggle("hidden", !running);
+  if (ui.leaveGame) ui.leaveGame.classList.toggle("hidden", !running);
   if (ui.leaveGame) { ui.leaveGame.textContent = "↩"; ui.leaveGame.title = "Leave match"; ui.leaveGame.setAttribute("aria-label", "Leave match"); }
   const isHostPlayer = running && (isSinglePlayer || currentMeta?.hostId === activePlayerId());
   if (ui.pauseGame) {
@@ -2224,17 +2261,18 @@ async function leaveToMenu(message = "") {
   singlePlayerId = null;
   lobbyCode = null; currentLobby = null; currentMeta = null; currentPlayers = {}; currentChat = {}; latestState = null; latestInputs = {};
   ui.lobby.classList.remove("solo");
-  document.body.classList.remove("game-running", "settings-open");
+  document.body.classList.remove("game-running", "game-paused", "settings-open", "lobby-open");
   settingsOpenedFromPause = false;
   ui.setup.classList.remove("hidden");
   if (ui.accountCard) ui.accountCard.classList.add("hidden");
   if (ui.leaderboardCard) ui.leaderboardCard.classList.add("hidden");
   ui.lobby.classList.add("hidden");
   ui.hud.classList.add("hidden");
-  ui.leaveGame.classList.add("hidden");
+  if (ui.leaveGame) ui.leaveGame.classList.add("hidden");
   if (ui.pauseGame) ui.pauseGame.classList.add("hidden");
   if (ui.pauseOverlay) ui.pauseOverlay.classList.add("hidden");
   if (ui.breakOverlay) ui.breakOverlay.classList.add("hidden");
+  closeAiCommandHelp();
   if (ui.chatPanel) ui.chatPanel.classList.add("hidden");
   document.body.classList.remove("lobby-chat-enabled");
   if (ui.toggleChat) ui.toggleChat.classList.add("hidden");
@@ -2428,7 +2466,7 @@ function navButtonEdge(name, pressed) {
 function settingsTabDelta(delta) {
   if (pendingControllerBind || pendingKeyBind) return false;
   if (!ui.settingsCard || ui.settingsCard.classList.contains("hidden")) return false;
-  const tabs = ["gameplay", "camera", "audio", "songs", "keyboard", "controller", "mobile"];
+  const tabs = ["gameplay", "camera", "audio", "songs", "keyboard", "controller", "mobile", "aiCommands"];
   const idx = Math.max(0, tabs.indexOf(activeSettingsTab));
   setSettingsTab(tabs[(idx + delta + tabs.length) % tabs.length]);
   return true;
@@ -3311,10 +3349,11 @@ function safeUi(handler, label) {
 function showMenuPanel(which = "setup") {
   const running = currentMeta?.status === "running";
   const showAccount = which === "account";
-  const showMode = which === "mode";
+  const showMode = which === "mode" && !lobbyCode;
   const showTournament = which === "tournament";
   const showLeaderboard = which === "leaderboard";
   const showSettings = which === "settings";
+  if (!showSettings) closeAiCommandHelp();
   if (running) {
     document.body.classList.toggle("settings-open", showSettings && !!currentMeta?.paused);
     if (ui.setup) ui.setup.classList.add("hidden");
@@ -3330,6 +3369,7 @@ function showMenuPanel(which = "setup") {
   }
   settingsOpenedFromPause = false;
   document.body.classList.toggle("settings-open", showSettings);
+  if (lobbyCode && !showSettings) hideModeChoicePanels();
   if (ui.setup) ui.setup.classList.toggle("hidden", showAccount || showMode || showTournament || showLeaderboard || showSettings || !!lobbyCode);
   if (ui.gameMode) ui.gameMode.classList.toggle("hidden", !showMode);
   if (ui.tournamentCard) ui.tournamentCard.classList.toggle("hidden", !showTournament);
@@ -3536,7 +3576,7 @@ if (ui.resetController) ui.resetController.addEventListener("click", () => {
 });
 ui.copy.addEventListener("click", () => { if (!isSinglePlayer) navigator.clipboard?.writeText(lobbyCode || ""); });
 ui.leaveLobby.addEventListener("click", safeUi(() => leaveToMenu("Left lobby."), "Leave lobby"));
-ui.leaveGame.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
+if (ui.leaveGame) ui.leaveGame.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
 if (ui.pauseGame) ui.pauseGame.addEventListener("click", safeUi(togglePause, "Toggle pause"));
 if (ui.pauseResume) ui.pauseResume.addEventListener("click", safeUi(togglePause, "Resume match"));
 if (ui.pauseLeave) ui.pauseLeave.addEventListener("click", safeUi(() => leaveToMenu("Left match."), "Leave match"));
@@ -3657,6 +3697,16 @@ window.addEventListener("keydown", e => {
     saveBindings();
     return;
   }
+  if (e.code === "Escape") {
+    if (ui.aiCommandHelp && !ui.aiCommandHelp.classList.contains("hidden")) {
+      closeAiCommandHelp();
+      return;
+    }
+    if (ui.settingsCard && !ui.settingsCard.classList.contains("hidden")) {
+      closeSettingsPanel();
+      return;
+    }
+  }
   const tag = (e.target?.tagName || "").toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select") return;
   SFX.resume();
@@ -3708,9 +3758,11 @@ window.addEventListener("keyup", e => {
 if (ui.aiCommandWheel) ui.aiCommandWheel.addEventListener("click", e => { const btn = e.target.closest("[data-ai-intent]"); if (btn) { issueAiCommand(btn.dataset.aiIntent, "quick"); setAiCommandWheel(false); } });
 [ui.aiCommandsEnabled, ui.aiCommandInputMode, ui.aiCommandServerAi, ui.aiCommandServerStt, ui.aiCommandLanguage, ui.aiCommandTranscript, ui.aiCommandAcks, ui.aiCommandTimeout, ui.aiCommandStrength, ui.aiCommandStoreHistory, ui.aiCommandSendAmbiguous, ui.aiCommandSendVoice, ui.aiCommandSmarterOpponents].forEach(el => el && el.addEventListener("change", saveAiCommandSettingsFromUi));
 if (ui.aiCommandHelpOpen) ui.aiCommandHelpOpen.addEventListener("click", () => ui.aiCommandHelp?.classList.remove("hidden"));
-if (ui.aiCommandHelpClose) ui.aiCommandHelpClose.addEventListener("click", () => ui.aiCommandHelp?.classList.add("hidden"));
+if (ui.aiCommandHelpClose) ui.aiCommandHelpClose.addEventListener("click", closeAiCommandHelp);
+if (ui.aiCommandHelp) ui.aiCommandHelp.addEventListener("click", e => { if (e.target === ui.aiCommandHelp) closeAiCommandHelp(); });
 if (ui.aiCommandButton) { ui.aiCommandButton.addEventListener("click", () => setAiCommandWheel(!aiCommandWheelOpen)); ui.aiCommandButton.addEventListener("pointerdown", () => { if (!canUseAiCommandsInMatch()) return; aiCommandPressStarted = Date.now(); aiCommandPressTimer = setTimeout(() => startAiCommandRecording(), 320); }); ui.aiCommandButton.addEventListener("pointerup", () => { clearTimeout(aiCommandPressTimer); stopAiCommandRecording(); }); }
 if (ui.mobileAiCommand) { ui.mobileAiCommand.addEventListener("click", () => setAiCommandWheel(!aiCommandWheelOpen)); ui.mobileAiCommand.addEventListener("pointerdown", () => { if (!canUseAiCommandsInMatch()) return; aiCommandPressTimer = setTimeout(() => startAiCommandRecording(), 320); }); ui.mobileAiCommand.addEventListener("pointerup", () => { clearTimeout(aiCommandPressTimer); stopAiCommandRecording(); }); }
+if (ui.pauseAiCommand) { ui.pauseAiCommand.addEventListener("click", () => setAiCommandWheel(!aiCommandWheelOpen)); ui.pauseAiCommand.addEventListener("pointerdown", () => { if (!canUseAiCommandsInMatch()) return; aiCommandPressStarted = Date.now(); aiCommandPressTimer = setTimeout(() => startAiCommandRecording(), 320); }); ui.pauseAiCommand.addEventListener("pointerup", () => { clearTimeout(aiCommandPressTimer); stopAiCommandRecording(); }); }
 
 window.addEventListener("gamepadconnected", () => { renderSettingsUi(); setSettingsSyncStatus("Controller detected."); });
 window.addEventListener("gamepaddisconnected", () => { renderSettingsUi(); setSettingsSyncStatus("Controller disconnected."); });
@@ -3892,6 +3944,14 @@ sun.position.set(40, 75, 35);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
 scene.add(sun);
+const stadiumHemi = new THREE.HemisphereLight(0xbfefff, 0x05070d, 0.32);
+scene.add(stadiumHemi);
+const blueRimLight = new THREE.DirectionalLight(0x12b9ff, 0.34);
+blueRimLight.position.set(-55, 26, -42);
+scene.add(blueRimLight);
+const orangeRimLight = new THREE.DirectionalLight(0xff8a1f, 0.30);
+orangeRimLight.position.set(55, 24, 46);
+scene.add(orangeRimLight);
 
 function desiredPixelRatio() {
   const dpr = window.devicePixelRatio || 1;
@@ -3912,6 +3972,7 @@ function applyRenderPerformanceMode() {
 const world = new THREE.Group();
 scene.add(world);
 let arenaSignature = "";
+let arenaScoreboard = null;
 let ballMesh = null;
 const carMeshes = new Map();
 const boostPadMeshes = new Map();
@@ -3947,63 +4008,220 @@ function clearWorld() {
   }
 }
 
+function makeMenuDemoFieldTexture() {
+  const cnv = document.createElement("canvas");
+  cnv.width = 1024;
+  cnv.height = 1024;
+  const ctx = cnv.getContext("2d");
+  const grass = ctx.createLinearGradient(0, 0, 0, cnv.height);
+  grass.addColorStop(0, "#0b2d24");
+  grass.addColorStop(0.48, "#08241d");
+  grass.addColorStop(1, "#0d2a1b");
+  ctx.fillStyle = grass;
+  ctx.fillRect(0, 0, cnv.width, cnv.height);
+  for (let i = 0; i < 18; i++) {
+    ctx.fillStyle = i % 2 ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.045)";
+    ctx.fillRect(0, i * cnv.height / 18, cnv.width, cnv.height / 18);
+  }
+  const line = "rgba(248,251,255,0.74)";
+  ctx.strokeStyle = line;
+  ctx.lineWidth = 7;
+  ctx.strokeRect(66, 66, 892, 892);
+  ctx.beginPath();
+  ctx.moveTo(66, 512);
+  ctx.lineTo(958, 512);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(512, 512, 96, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(24,200,255,0.72)";
+  ctx.strokeRect(312, 66, 400, 118);
+  ctx.strokeStyle = "rgba(255,138,31,0.72)";
+  ctx.strokeRect(312, 840, 400, 118);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(255,255,255,0.075)";
+  for (let x = 84; x < 960; x += 52) {
+    ctx.beginPath();
+    ctx.moveTo(x, 76);
+    ctx.lineTo(x - 34, 948);
+    ctx.stroke();
+  }
+  ctx.save();
+  ctx.globalAlpha = 0.18;
+  const blue = ctx.createLinearGradient(0, 0, cnv.width, 0);
+  blue.addColorStop(0, "#18c8ff");
+  blue.addColorStop(1, "transparent");
+  ctx.fillStyle = blue;
+  ctx.fillRect(0, 0, cnv.width, 180);
+  const orange = ctx.createLinearGradient(0, 0, cnv.width, 0);
+  orange.addColorStop(0, "transparent");
+  orange.addColorStop(1, "#ff8a22");
+  ctx.fillStyle = orange;
+  ctx.fillRect(0, cnv.height - 180, cnv.width, 180);
+  ctx.restore();
+  const tex = new THREE.CanvasTexture(cnv);
+  tex.anisotropy = isPhonePortrait() ? 2 : 4;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  return tex;
+}
+
 function buildMenuDemo() {
   if (menuDemoBuilt) return;
   menuDemoBuilt = true;
-  const trackMat = new THREE.MeshStandardMaterial({ color: 0x08111f, roughness: 0.72, metalness: 0.02 });
-  const grassMat = new THREE.MeshStandardMaterial({ color: 0x0f5132, roughness: 0.86, metalness: 0.02 });
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0x12b9ff, transparent: true, opacity: 0.56 });
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(210, 150), grassMat);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -0.04;
-  menuDemo.add(floor);
-  const track = new THREE.Mesh(new THREE.RingGeometry(34, 50, 96), trackMat);
-  track.rotation.x = -Math.PI / 2;
-  track.scale.set(1.45, 1, 1);
-  menuDemo.add(track);
-  const inner = new THREE.Mesh(new THREE.RingGeometry(52, 52.7, 96), glowMat);
-  inner.rotation.x = -Math.PI / 2;
-  inner.scale.set(1.45, 1, 1);
-  inner.position.y = 0.03;
-  menuDemo.add(inner);
-  const outer = new THREE.Mesh(new THREE.RingGeometry(33, 33.7, 96), new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, opacity: 0.50 }));
-  outer.rotation.x = -Math.PI / 2;
-  outer.scale.set(1.45, 1, 1);
-  outer.position.y = 0.04;
-  menuDemo.add(outer);
-  const boardMat = new THREE.MeshStandardMaterial({ color: 0x0b1020, emissive: 0x0ea5e9, emissiveIntensity: 0.18, roughness: 0.45 });
-  for (let i = 0; i < 18; i++) {
-    const a = (i / 18) * Math.PI * 2;
-    const x = Math.cos(a) * 85;
-    const z = Math.sin(a) * 56;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(8.5, 2.2, 0.35), boardMat);
-    b.position.set(x, 1.35, z);
-    b.rotation.y = -a + Math.PI / 2;
-    menuDemo.add(b);
-  }
-  const colors = [0x12b9ff, 0xff8a1f, 0x52ffcf, 0xfacc15];
-  for (let i = 0; i < 4; i++) {
-    const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 5.0), new THREE.MeshStandardMaterial({ color: colors[i], roughness: 0.38, metalness: 0.18, emissive: colors[i], emissiveIntensity: 0.08 }));
-    body.position.y = 0.72;
-    g.add(body);
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.62, 2.0), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.24, metalness: 0.38 }));
-    cab.position.set(0, 1.26, -0.25);
-    g.add(cab);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 4.7), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }));
-    stripe.position.set(0, 1.15, 0.05);
-    g.add(stripe);
-    for (const sx of [-1, 1]) for (const sz of [-1.6, 1.6]) {
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.34, 12), new THREE.MeshStandardMaterial({ color: 0x05070c, roughness: 0.72 }));
-      wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(sx * 1.75, 0.48, sz);
-      g.add(wheel);
+
+  const fieldMat = new THREE.MeshStandardMaterial({
+    map: makeMenuDemoFieldTexture(),
+    roughness: 0.72,
+    metalness: 0.03
+  });
+  const field = new THREE.Mesh(new THREE.PlaneGeometry(142, 104), fieldMat);
+  field.rotation.x = -Math.PI / 2;
+  field.receiveShadow = true;
+  menuDemo.add(field);
+
+  const sideGlass = new THREE.MeshStandardMaterial({ color: 0x123049, emissive: 0x12b9ff, emissiveIntensity: 0.10, transparent: true, opacity: 0.28, roughness: 0.18, metalness: 0.16 });
+  const blueMat = new THREE.MeshStandardMaterial({ color: 0x12b9ff, emissive: 0x12b9ff, emissiveIntensity: 0.58, roughness: 0.28, metalness: 0.12 });
+  const orangeMat = new THREE.MeshStandardMaterial({ color: 0xff8a1f, emissive: 0xff8a1f, emissiveIntensity: 0.56, roughness: 0.30, metalness: 0.10 });
+  const steelMat = new THREE.MeshStandardMaterial({ color: 0x1b2738, roughness: 0.52, metalness: 0.28 });
+  const standMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.84, metalness: 0.02 });
+  const signMat = new THREE.MeshBasicMaterial({ map: makeStadiumScreenTexture(STADIUM_THEMES.neon || STADIUM_THEMES.v10, "RLCSS", 0x59ffd0), side: THREE.DoubleSide });
+
+  const addBox = (w, h, d, x, y, z, mat, rotY = 0) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    mesh.position.set(x, y, z);
+    mesh.rotation.y = rotY;
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    menuDemo.add(mesh);
+    return mesh;
+  };
+  const addPlane = (w, h, x, y, z, mat, rotY = 0) => {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    mesh.position.set(x, y, z);
+    mesh.rotation.y = rotY;
+    menuDemo.add(mesh);
+    return mesh;
+  };
+
+  for (const side of [-1, 1]) {
+    addBox(144, 3.2, 1.4, 0, 1.8, side * 53, side < 0 ? blueMat : orangeMat);
+    addBox(144, 9.5, 0.32, 0, 8.0, side * 53.4, sideGlass);
+    addBox(156, 2.6, 6.8, 0, 3.2, side * 63, standMat);
+    addBox(168, 2.2, 5.8, 0, 5.9, side * 69, standMat);
+    for (let i = 0; i < 9; i++) {
+      const x = -63 + i * 15.75;
+      addBox(8.2, 1.15, 0.44, x, 2.2, side * 54.4, i % 2 ? orangeMat : blueMat);
+      if (i % 3 === 1) addPlane(9.0, 2.6, x, 8.8, side * 62.2, signMat, side < 0 ? 0 : Math.PI);
     }
-    g.userData.phase = i * 0.24;
-    g.userData.speed = 0.00018 + i * 0.000018;
+  }
+  for (const side of [-1, 1]) {
+    addBox(1.2, 11.4, 104, side * 71.6, 5.9, 0, sideGlass);
+    addBox(5.0, 2.0, 118, side * 82.6, 4.2, 0, standMat);
+    for (let i = 0; i < 7; i++) {
+      const z = -42 + i * 14;
+      addBox(0.42, 4.6, 4.6, side * 73.5, 7.2, z, i % 2 ? orangeMat : blueMat);
+    }
+  }
+
+  const makeGoal = (side, mat) => {
+    const group = new THREE.Group();
+    const goalW = 28;
+    const goalH = 9;
+    const z = side * 52.8;
+    const post = new THREE.CylinderGeometry(0.34, 0.34, goalH, 14);
+    for (const x of [-goalW / 2, goalW / 2]) {
+      const p = new THREE.Mesh(post, mat);
+      p.position.set(x, goalH / 2, z);
+      group.add(p);
+    }
+    const cross = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, goalW, 14), mat);
+    cross.rotation.z = Math.PI / 2;
+    cross.position.set(0, goalH, z);
+    group.add(cross);
+    const net = new THREE.Mesh(
+      new THREE.PlaneGeometry(goalW, goalH),
+      new THREE.MeshBasicMaterial({ color: mat.color, wireframe: true, transparent: true, opacity: 0.36, side: THREE.DoubleSide })
+    );
+    net.position.set(0, goalH / 2, side * 57.2);
+    group.add(net);
+    menuDemo.add(group);
+  };
+  makeGoal(-1, blueMat);
+  makeGoal(1, orangeMat);
+
+  const ball = new THREE.Group();
+  const ballCore = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(2.25, 3),
+    new THREE.MeshPhysicalMaterial({ color: 0xf8fbff, roughness: 0.26, metalness: 0.18, clearcoat: 0.45, clearcoatRoughness: 0.24, emissive: 0x1f2937, emissiveIntensity: 0.08 })
+  );
+  ballCore.castShadow = true;
+  ball.add(ballCore);
+  const ballRingMat = new THREE.MeshBasicMaterial({ color: 0x0b1020, transparent: true, opacity: 0.72 });
+  for (const rot of [[0, 0, 0], [Math.PI / 2, 0, 0], [0, Math.PI / 2, 0]]) {
+    const seam = new THREE.Mesh(new THREE.TorusGeometry(2.32, 0.025, 8, 60), ballRingMat);
+    seam.rotation.set(rot[0], rot[1], rot[2]);
+    ball.add(seam);
+  }
+  ball.position.set(7, 2.45, -4);
+  menuDemo.userData.ball = ball;
+  menuDemo.add(ball);
+
+  const makeHeroCar = (team, modelKey, phase, lane, speed) => {
+    const cfg = VEHICLE_CONFIGS[modelKey] || VEHICLE_CONFIGS.default;
+    const [bodyW, bodyH, bodyD] = cfg.body || VEHICLE_CONFIGS.default.body;
+    const [cabinW, cabinH, cabinD] = cfg.cabin || VEHICLE_CONFIGS.default.cabin;
+    const [cabinX, cabinY, cabinZ] = cfg.cabinOffset || VEHICLE_CONFIGS.default.cabinOffset;
+    const g = new THREE.Group();
+    const body = createRoundedBoxMesh(bodyW, bodyH, bodyD, 0.22, carMaterial(team, true, modelKey, true), 5);
+    body.position.y = bodyH / 2;
+    body.castShadow = true;
+    const cabin = createRoundedBoxMesh(cabinW, cabinH, cabinD, 0.18, new THREE.MeshPhysicalMaterial({ color: 0x0a1019, roughness: 0.18, metalness: 0.42, clearcoat: 0.38 }), 5);
+    cabin.position.set(cabinX, cabinY, cabinZ);
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(Math.max(0.28, bodyW * 0.14), 0.055, bodyD * 0.84),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.82 })
+    );
+    stripe.position.set(0, bodyH + 0.048, 0.04);
+    const wheelScale = cfg.wheelScale || 1;
+    const wheelX = bodyW / 2 + 0.04;
+    const wheelZ = bodyD * 0.34;
+    g.add(
+      createWheelMesh(-wheelX, -wheelZ, wheelScale),
+      createWheelMesh(wheelX, -wheelZ, wheelScale),
+      createWheelMesh(-wheelX, wheelZ, wheelScale),
+      createWheelMesh(wheelX, wheelZ, wheelScale),
+      body,
+      cabin,
+      stripe
+    );
+    addVehicleLighting(g, bodyW, bodyH, bodyD, team, modelKey, true);
+    addAeroKit(g, bodyW, bodyH, bodyD, team, modelKey, true);
+    const trail = new THREE.Group();
+    const trailColor = team === "blue" ? 0x38d8ff : 0xff8a24;
+    for (let i = 0; i < 5; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ color: trailColor, transparent: true, opacity: 0.22 * (1 - i / 5), depthWrite: false, blending: THREE.AdditiveBlending }));
+      sprite.position.set(0, 0.62, -bodyD / 2 - 0.65 - i * 0.68);
+      sprite.scale.set(1.1 + i * 0.26, 0.72 + i * 0.18, 1);
+      trail.add(sprite);
+    }
+    g.add(trail);
+    g.userData = { phase, lane, speed, trail, bodyD };
     menuDemoCars.push(g);
     menuDemo.add(g);
+  };
+  makeHeroCar("blue", "sport", 0.06, 0, 0.000185);
+  makeHeroCar("orange", "muscle", 0.38, 1, 0.000174);
+  makeHeroCar("blue", "rally", 0.64, 2, 0.000156);
+  makeHeroCar("orange", "truck", 0.84, 3, 0.000148);
+
+  const gantryMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28 });
+  for (const z of [-35, 0, 35]) {
+    addBox(148, 0.18, 0.18, 0, 18.8, z, gantryMat);
+    addBox(0.18, 8.2, 0.18, -68, 14.8, z, steelMat);
+    addBox(0.18, 8.2, 0.18, 68, 14.8, z, steelMat);
   }
+
   menuDemo.visible = false;
 }
 
@@ -4026,18 +4244,34 @@ function updateMenuDemo(now) {
   for (let i = 0; i < menuDemoCars.length; i++) {
     const car = menuDemoCars[i];
     const a = (t * car.userData.speed + car.userData.phase) * Math.PI * 2;
-    const rx = 62;
-    const rz = 40;
+    const rx = 48 + (car.userData.lane % 2) * 7;
+    const rz = 28 + (car.userData.lane > 1 ? 6 : 0);
     const x = Math.cos(a) * rx;
     const z = Math.sin(a) * rz;
     const dx = -Math.sin(a) * rx;
     const dz = Math.cos(a) * rz;
-    car.position.set(x, 0, z);
+    car.position.set(x, 0.02 + Math.sin(t * 0.004 + i) * 0.035, z);
     car.rotation.y = Math.atan2(dx, dz);
+    car.rotation.z = Math.sin(a * 2 + i) * 0.035;
+    car.rotation.x = Math.cos(a * 2.4 + i) * 0.025;
+    if (car.userData.trail) {
+      let j = 0;
+      for (const sprite of car.userData.trail.children) {
+        sprite.material.opacity = (0.26 - j * 0.035) * (0.76 + Math.sin(t * 0.008 + i + j) * 0.24);
+        sprite.scale.set(1.1 + j * 0.28 + Math.sin(t * 0.012 + j) * 0.08, 0.72 + j * 0.18, 1);
+        j++;
+      }
+    }
   }
-  const camA = t * 0.000055;
-  camera.position.set(Math.cos(camA) * 72, 44, 72 + Math.sin(camA) * 18);
-  camera.lookAt(0, 0, 0);
+  if (menuDemo.userData.ball) {
+    const ball = menuDemo.userData.ball;
+    ball.position.set(7 + Math.sin(t * 0.0016) * 3.8, 2.45 + Math.sin(t * 0.0031) * 0.34, -4 + Math.cos(t * 0.00135) * 3.2);
+    ball.rotation.x += 0.018;
+    ball.rotation.z += 0.014;
+  }
+  const camA = t * 0.000082;
+  camera.position.set(-42 + Math.cos(camA) * 11, 19 + Math.sin(camA * 1.6) * 2.2, 54 + Math.sin(camA) * 9);
+  camera.lookAt(3, 2.6, -5);
   return true;
 }
 
@@ -4127,6 +4361,23 @@ function makeStadiumScreenTexture(theme, title, accentHex) {
   return tex;
 }
 
+function updateArenaScoreboard(state) {
+  if (!arenaScoreboard?.materials?.length || !state?.score) return;
+  const blue = Number(state.score.blue || 0);
+  const orange = Number(state.score.orange || 0);
+  const key = `${blue}:${orange}`;
+  if (arenaScoreboard.key === key) return;
+  const nextMap = makeStadiumScreenTexture(themeForState(state), `${blue}  :  ${orange}`, arenaScoreboard.accent);
+  const oldMaps = new Set();
+  for (const mat of arenaScoreboard.materials) {
+    if (mat.map) oldMaps.add(mat.map);
+    mat.map = nextMap;
+    mat.needsUpdate = true;
+  }
+  oldMaps.forEach(map => { if (map !== nextMap && map.dispose) map.dispose(); });
+  arenaScoreboard.key = key;
+}
+
 function applySceneTheme(theme) {
   scene.background = new THREE.Color(theme.background ?? 0x070912);
   scene.fog = new THREE.FogExp2(theme.fog ?? theme.background ?? 0x070912, theme.fogDensity ?? 0.0065);
@@ -4136,6 +4387,13 @@ function applySceneTheme(theme) {
   sun.intensity = theme.sunIntensity ?? 0.95;
   const pos = theme.sunPosition || [40, 75, 35];
   sun.position.set(pos[0], pos[1], pos[2]);
+  stadiumHemi.color.setHex(theme.lightBlue ?? theme.accentA ?? 0xbfefff);
+  stadiumHemi.groundColor.setHex(theme.background ?? 0x05070d);
+  stadiumHemi.intensity = isPhonePortrait() ? 0.24 : 0.38;
+  blueRimLight.color.setHex(theme.lightBlue ?? theme.accentA ?? 0x12b9ff);
+  orangeRimLight.color.setHex(theme.lightOrange ?? theme.accentB ?? 0xff8a1f);
+  blueRimLight.intensity = isPhonePortrait() ? 0.18 : 0.42;
+  orangeRimLight.intensity = isPhonePortrait() ? 0.16 : 0.38;
 }
 
 function makeFieldTexture(mode, arena, theme) {
@@ -4145,7 +4403,7 @@ function makeFieldTexture(mode, arena, theme) {
   cnv.width = texSize; cnv.height = texSize;
   const ctx = cnv.getContext("2d");
   const base = modeFieldColor(mode, theme);
-  const pitchShade = mode === "ice" ? 0.69 : mode === "snooker" ? 0.64 : 0.61;
+  const pitchShade = mode === "ice" ? 0.58 : mode === "snooker" ? 0.42 : 0.34;
   const shadedBase = base.map(v => Math.max(0, Math.round(v * pitchShade)));
   ctx.fillStyle = `rgb(${shadedBase[0]},${shadedBase[1]},${shadedBase[2]})`;
   ctx.fillRect(0, 0, texSize, texSize);
@@ -4153,7 +4411,7 @@ function makeFieldTexture(mode, arena, theme) {
   const cssHex = value => `#${(Number(value ?? 0xffffff) >>> 0).toString(16).padStart(6, "0").slice(-6)}`;
   const glowA = cssHex(theme.fieldGlowA ?? theme.accentA ?? 0x16c7ff);
   const glowB = cssHex(theme.fieldGlowB ?? theme.accentB ?? 0xff9a2b);
-  const identityAlpha = theme.style === "classic" ? 0.034 : 0.082;
+  const identityAlpha = theme.style === "classic" ? 0.026 : 0.064;
   ctx.globalAlpha = identityAlpha;
   ctx.fillStyle = glowA;
   ctx.fillRect(0, 0, texSize, texSize * 0.075);
@@ -4184,6 +4442,22 @@ function makeFieldTexture(mode, arena, theme) {
   ctx.strokeRect(m, m, texSize - m * 2, texSize - m * 2);
   ctx.beginPath(); ctx.moveTo(m, mid); ctx.lineTo(texSize - m, mid); ctx.stroke();
   ctx.beginPath(); ctx.arc(mid, mid, texSize * 0.088, 0, Math.PI * 2); ctx.stroke();
+  ctx.save();
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = `rgba(255,255,255,${mode === "ice" ? 0.72 : 0.46})`;
+  const boxW = texSize * 0.42;
+  const boxD = texSize * 0.13;
+  ctx.strokeRect(mid - boxW / 2, m, boxW, boxD);
+  ctx.strokeRect(mid - boxW / 2, texSize - m - boxD, boxW, boxD);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = `rgba(255,255,255,${mode === "ice" ? 0.42 : 0.28})`;
+  ctx.strokeRect(mid - boxW * 0.31, m, boxW * 0.62, boxD * 0.52);
+  ctx.strokeRect(mid - boxW * 0.31, texSize - m - boxD * 0.52, boxW * 0.62, boxD * 0.52);
+  ctx.fillStyle = `rgba(255,255,255,${mode === "ice" ? 0.82 : 0.58})`;
+  ctx.beginPath(); ctx.arc(mid, mid, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(mid, m + boxD * 0.72, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(mid, texSize - m - boxD * 0.72, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 
   const drawChevronLane = (y, dir, color, alpha) => {
     ctx.save();
@@ -4282,11 +4556,17 @@ function buildArena(state) {
   ballTrail.length = 0;
   nameSprites.clear();
   applySceneTheme(theme);
+  arenaScoreboard = { key: "", materials: [], accent: theme.trim ?? 0xffffff };
 
   const arena = state.arena;
   const field = new THREE.Mesh(
     new THREE.PlaneGeometry(arena.w, arena.l),
-    new THREE.MeshStandardMaterial({ map: makeFieldTexture(state.mode, arena, theme), roughness: state.mode === "ice" ? 0.24 : (arena.floorRoughness ?? 0.74), metalness: state.mode === "ice" ? 0.12 : (arena.floorMetalness ?? 0.03) })
+    new THREE.MeshStandardMaterial({
+      map: makeFieldTexture(state.mode, arena, theme),
+      color: state.mode === "ice" ? 0xffffff : 0x7a8576,
+      roughness: state.mode === "ice" ? 0.24 : (arena.floorRoughness ?? 0.74),
+      metalness: state.mode === "ice" ? 0.12 : (arena.floorMetalness ?? 0.03)
+    })
   );
   field.rotation.x = -Math.PI / 2;
   field.receiveShadow = true;
@@ -4349,7 +4629,7 @@ function buildArena(state) {
     goalTube(post * 0.30, arena.goalD, -halfW, arena.goalH, midZ, "z");
     goalTube(post * 0.30, arena.goalD,  halfW, arena.goalH, midZ, "z");
 
-    const netMat = new THREE.MeshBasicMaterial({ color: frameMat.color || new THREE.Color(0xffffff), wireframe: true, transparent: true, opacity: 0.26, side: THREE.DoubleSide });
+    const netMat = new THREE.MeshBasicMaterial({ color: frameMat.color || new THREE.Color(0xffffff), wireframe: true, transparent: true, opacity: mobilePerf ? 0.30 : 0.42, side: THREE.DoubleSide });
     const back = new THREE.Mesh(new THREE.PlaneGeometry(arena.goalW, arena.goalH), netMat);
     back.position.set(0, arena.goalH / 2, backZ);
     world.add(back);
@@ -4366,7 +4646,22 @@ function buildArena(state) {
     roof.position.set(0, arena.goalH, midZ);
     world.add(roof);
 
-    // Keep the goal mouth clear: no decorative floor panels, lower rails,
+    const goalWashMat = new THREE.MeshBasicMaterial({
+      color: frameMat.color || new THREE.Color(0xffffff),
+      transparent: true,
+      opacity: mobilePerf ? 0.10 : 0.16,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const floorWash = new THREE.Mesh(new THREE.PlaneGeometry(arena.goalW * 0.92, arena.goalD * 0.92), goalWashMat);
+    floorWash.rotation.x = -Math.PI / 2;
+    floorWash.position.set(0, 0.08, midZ);
+    world.add(floorWash);
+    const backGlow = new THREE.Mesh(new THREE.PlaneGeometry(arena.goalW * 0.86, arena.goalH * 0.82), goalWashMat.clone());
+    backGlow.position.set(0, arena.goalH * 0.46, backZ + side * 0.04);
+    world.add(backGlow);
+
+    // Keep the goal mouth clear: only transparent washes/nets, no lower rails,
     // backboards, or braces inside the posts during shots/replays.
   }
 
@@ -4559,6 +4854,7 @@ function buildArena(state) {
 
     const scoreTex = makeStadiumScreenTexture(theme, "0  :  0", trim);
     const scoreScreen = new THREE.MeshBasicMaterial({ map: scoreTex, side: THREE.DoubleSide, transparent: true, opacity: mobilePerf ? 0.72 : 0.88 });
+    arenaScoreboard.materials.push(scoreScreen);
     propBox(10.6, 2.8, 0.42, 0, 18.0, -3.3, equipmentMat);
     propBox(10.6, 2.8, 0.42, 0, 18.0, 3.3, equipmentMat);
     propPlane(9.2, 2.1, 0, 18.0, -3.55, scoreScreen, 0);
@@ -4880,25 +5176,26 @@ function createBoostPadMesh(pad) {
   const disk = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, 0.18, big ? 32 : 24), diskMat);
   disk.position.y = 0.09;
   disk.receiveShadow = true;
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.92, big ? 0.11 : 0.08, 8, big ? 36 : 28), new THREE.MeshBasicMaterial({ color: 0xfff2a8 }));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.88, big ? 0.095 : 0.065, 8, big ? 36 : 28), new THREE.MeshBasicMaterial({ color: 0xfff2a8 }));
   ring.rotation.x = Math.PI / 2;
   ring.position.y = 0.26;
   const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: big ? 0.72 : 0.52, depthWrite: false, side: THREE.DoubleSide });
-  const arrow = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.34, radius * 0.68, 3), arrowMat);
+  const arrow = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.32, radius * 0.62, 3), arrowMat);
   arrow.rotation.x = -Math.PI / 2;
   arrow.rotation.z = Math.PI;
   arrow.position.y = 0.31;
-  const orb = new THREE.Mesh(new THREE.SphereGeometry(big ? 0.76 : 0.56, big ? 18 : 14, big ? 12 : 10), new THREE.MeshBasicMaterial({ color: big ? 0xfff2a8 : 0xffd55a }));
-  orb.position.y = big ? 1.18 : 0.96;
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(big ? 0.62 : 0.44, big ? 18 : 14, big ? 12 : 10), new THREE.MeshBasicMaterial({ color: big ? 0xfff2a8 : 0xffd55a }));
+  const baseOrbY = big ? 1.02 : 0.82;
+  orb.position.y = baseOrbY;
   // V28 performance: boost pads glow with emissive meshes instead of one dynamic light per pad.
   const halo = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius * 1.45, radius * 1.45, 0.04, big ? 36 : 28),
+    new THREE.CylinderGeometry(radius * 1.22, radius * 1.22, 0.04, big ? 36 : 28),
     new THREE.MeshBasicMaterial({ color: 0xffb000, transparent: true, opacity: big ? 0.22 : 0.14, depthWrite: false })
   );
   halo.position.y = 0.04;
   g.add(halo, disk, ring, arrow, orb);
   g.position.set(pad.x, 0, pad.z);
-  g.userData = { orb, ring, disk, halo, arrow, baseHaloOpacity: halo.material.opacity };
+  g.userData = { orb, ring, disk, halo, arrow, baseOrbY, baseHaloOpacity: halo.material.opacity };
   world.add(g);
   boostPadMeshes.set(pad.id, g);
   return g;
@@ -4922,7 +5219,7 @@ function updateBoostPadVisuals(state) {
     mesh.userData.halo.visible = active;
     if (active) {
       const pulse = 1 + Math.sin(t * 2.5 + pad.x * 0.07 + pad.z * 0.03) * 0.12;
-      mesh.userData.orb.position.y = 1.03 + Math.sin(t + pad.x) * 0.18;
+      mesh.userData.orb.position.y = (mesh.userData.baseOrbY || 0.9) + Math.sin(t + pad.x) * (pad.big ? 0.14 : 0.10);
       mesh.userData.orb.scale.setScalar(pulse);
       mesh.userData.ring.rotation.z += 0.035;
       mesh.userData.arrow.rotation.z += pad.big ? 0.025 : 0.018;
@@ -4937,14 +5234,16 @@ function carMaterial(team, human, model = "default", isLocal = false) {
   const base = isLocal
     ? new THREE.Color(teamBase).lerp(new THREE.Color(0xffffff), team === "blue" ? 0.24 : 0.18).getHex()
     : teamBase;
-  const metalness = model === "truck" ? 0.08 : human ? 0.20 : 0.06;
-  const roughness = model === "sport" ? 0.26 : human ? 0.32 : 0.55;
-  return new THREE.MeshStandardMaterial({
+  const metalness = model === "truck" ? 0.14 : human ? 0.34 : 0.16;
+  const roughness = model === "sport" ? 0.20 : human ? 0.26 : 0.42;
+  return new THREE.MeshPhysicalMaterial({
     color: base,
     roughness: isLocal ? Math.max(0.22, roughness - 0.05) : roughness,
-    metalness: isLocal ? Math.min(0.34, metalness + 0.08) : metalness,
+    metalness: isLocal ? Math.min(0.48, metalness + 0.10) : metalness,
+    clearcoat: human || isLocal ? 0.72 : 0.42,
+    clearcoatRoughness: model === "truck" ? 0.32 : 0.18,
     emissive: teamBase,
-    emissiveIntensity: isLocal ? 0.11 : human ? 0.045 : 0.025
+    emissiveIntensity: isLocal ? 0.13 : human ? 0.055 : 0.03
   });
 }
 
@@ -5016,6 +5315,12 @@ function createWheelMesh(x, z, scale = 1) {
     new THREE.MeshBasicMaterial({ color: 0xb9c4d3, transparent: true, opacity: 0.72 })
   );
   wheel.add(rim);
+  const trim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.245 * scale, 0.022 * scale, 6, 18),
+    new THREE.MeshBasicMaterial({ color: 0xe5f4ff, transparent: true, opacity: 0.46 })
+  );
+  trim.rotation.x = Math.PI / 2;
+  wheel.add(trim);
   return wheel;
 }
 
@@ -5062,13 +5367,20 @@ function createCarMesh(car, state) {
   body.position.y = bodyH / 2;
   body.castShadow = true;
 
-  const cabin = createRoundedBoxMesh(cabinW, cabinH, cabinD, 0.18, new THREE.MeshStandardMaterial({ color: 0x10141e, roughness: 0.16, metalness: 0.55, transparent: true, opacity: 0.92 }), isPhonePortrait() ? 3 : 5);
+  const cabin = createRoundedBoxMesh(cabinW, cabinH, cabinD, 0.18, new THREE.MeshPhysicalMaterial({ color: 0x0b111b, roughness: 0.20, metalness: 0.42, clearcoat: 0.36 }), isPhonePortrait() ? 3 : 5);
   cabin.position.set(cabinX, cabinY, cabinZ);
   cabin.castShadow = true;
 
   const accentMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: car.team === "blue" ? 0x0044aa : 0xaa3300, emissiveIntensity: 0.25 });
   const nose = new THREE.Mesh(new THREE.BoxGeometry(Math.max(1.45, bodyW * 0.72), 0.30, 0.26), accentMat);
   nose.position.set(0, bodyH * 0.76, bodyD / 2 + 0.10);
+  const stripeMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0xffffff : (car.team === "blue" ? 0xbff4ff : 0xffe0b6), transparent: true, opacity: isLocal ? 0.92 : 0.72 });
+  const hoodStripe = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.22, bodyW * 0.12), 0.055, bodyD * 0.74), stripeMat);
+  hoodStripe.position.set(0, bodyH + 0.055, bodyD * 0.02);
+  const sideDecalA = new THREE.Mesh(new THREE.BoxGeometry(0.048, bodyH * 0.34, bodyD * 0.42), stripeMat);
+  sideDecalA.position.set(-(bodyW / 2 + 0.026), bodyH * 0.58, bodyD * 0.02);
+  const sideDecalB = sideDecalA.clone();
+  sideDecalB.position.x = bodyW / 2 + 0.026;
 
   const wheelScale = vehicle.wheelScale || 1;
   const wheelX = bodyW / 2 + 0.04;
@@ -5116,11 +5428,11 @@ function createCarMesh(car, state) {
   const flame = new THREE.Group();
   const flameOuter = new THREE.Mesh(
     new THREE.ConeGeometry(0.82, 2.9, 14).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: car.team === "blue" ? 0x33d6ff : 0xff8a00, transparent: true, opacity: 0.38, depthWrite: false })
+    new THREE.MeshBasicMaterial({ color: car.team === "blue" ? 0x33d6ff : 0xff8a00, transparent: true, opacity: 0.24, depthWrite: false, blending: THREE.AdditiveBlending })
   );
   const flameCore = new THREE.Mesh(
     new THREE.ConeGeometry(0.46, 2.1, 12).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: 0xfff2a8, transparent: true, opacity: 0.82, depthWrite: false })
+    new THREE.MeshBasicMaterial({ color: 0xfff2a8, transparent: true, opacity: 0.48, depthWrite: false, blending: THREE.AdditiveBlending })
   );
   flameOuter.position.z = -0.18;
   flame.add(flameOuter, flameCore);
@@ -5146,7 +5458,7 @@ function createCarMesh(car, state) {
     g.add(mirror, doorCut);
   }
 
-  g.add(body, cabin, nose, flame);
+  g.add(body, cabin, nose, hoodStripe, sideDecalA, sideDecalB, flame);
   addVehicleLighting(g, bodyW, bodyH, bodyD, car.team, modelKey, isLocal);
   addAeroKit(g, bodyW, bodyH, bodyD, car.team, modelKey, isLocal);
 
@@ -5203,14 +5515,21 @@ function createPreviewVehicleMesh(modelKey, team = "blue") {
   const [cabinX, cabinY, cabinZ] = vehicle.cabinOffset || VEHICLE_CONFIGS.default.cabinOffset;
   const body = createRoundedBoxMesh(bodyW, bodyH, bodyD, 0.22, carMaterial(team, true, modelKey), isPhonePortrait() ? 3 : 5);
   body.position.y = bodyH / 2;
-  const cabin = createRoundedBoxMesh(cabinW, cabinH, cabinD, 0.18, new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.16, metalness: 0.55, transparent: true, opacity: 0.92 }), isPhonePortrait() ? 3 : 5);
+  const cabin = createRoundedBoxMesh(cabinW, cabinH, cabinD, 0.18, new THREE.MeshPhysicalMaterial({ color: 0x0b111b, roughness: 0.20, metalness: 0.42, clearcoat: 0.36 }), isPhonePortrait() ? 3 : 5);
   cabin.position.set(cabinX, cabinY, cabinZ);
   const accent = new THREE.Mesh(new THREE.BoxGeometry(Math.max(1.45, bodyW * 0.72), 0.30, 0.26), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: team === "blue" ? 0x0a91ff : 0xff6a00, emissiveIntensity: 0.35 }));
   accent.position.set(0, bodyH * 0.76, bodyD / 2 + 0.10);
+  const previewStripeMat = new THREE.MeshBasicMaterial({ color: team === "blue" ? 0xbff4ff : 0xffe0b6, transparent: true, opacity: 0.82 });
+  const hoodStripe = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.22, bodyW * 0.12), 0.055, bodyD * 0.74), previewStripeMat);
+  hoodStripe.position.set(0, bodyH + 0.055, bodyD * 0.02);
+  const sideDecalA = new THREE.Mesh(new THREE.BoxGeometry(0.048, bodyH * 0.34, bodyD * 0.42), previewStripeMat);
+  sideDecalA.position.set(-(bodyW / 2 + 0.026), bodyH * 0.58, bodyD * 0.02);
+  const sideDecalB = sideDecalA.clone();
+  sideDecalB.position.x = bodyW / 2 + 0.026;
   const wheelScale = vehicle.wheelScale || 1;
   const wheelX = bodyW / 2 + 0.04;
   const wheelZ = bodyD * 0.34;
-  g.add(body, cabin, accent,
+  g.add(body, cabin, accent, hoodStripe, sideDecalA, sideDecalB,
     createWheelMesh(-wheelX, -wheelZ, wheelScale),
     createWheelMesh(wheelX, -wheelZ, wheelScale),
     createWheelMesh(-wheelX, wheelZ, wheelScale),
@@ -5353,6 +5672,26 @@ function makeTrailSprite(color, opacity, scale) {
   return sprite;
 }
 
+let boostTrailTexture = null;
+function getBoostTrailTexture() {
+  if (boostTrailTexture) return boostTrailTexture;
+  const cnv = document.createElement("canvas");
+  cnv.width = 96;
+  cnv.height = 96;
+  const ctx = cnv.getContext("2d");
+  const glow = ctx.createRadialGradient(48, 48, 0, 48, 48, 48);
+  glow.addColorStop(0, "rgba(255,255,255,0.92)");
+  glow.addColorStop(0.24, "rgba(255,255,255,0.48)");
+  glow.addColorStop(0.58, "rgba(255,255,255,0.12)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, cnv.width, cnv.height);
+  boostTrailTexture = new THREE.CanvasTexture(cnv);
+  boostTrailTexture.minFilter = THREE.LinearFilter;
+  boostTrailTexture.magFilter = THREE.LinearFilter;
+  return boostTrailTexture;
+}
+
 function updateBallTrail(state) {
   const phone = isPhonePortrait();
   const max = phone ? 7 : 14;
@@ -5388,9 +5727,10 @@ function updateCarEffects(car, mesh) {
   let trail = boostTrailMeshes.get(car.id);
   if (!trail) {
     trail = new THREE.Group();
+    const trailMap = getBoostTrailTexture();
     for (let i = 0; i < (isPhonePortrait() ? 3 : 6); i++) {
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
-      sprite.scale.set(0.8 + i * 0.25, 0.8 + i * 0.25, 1);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: trailMap, color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+      sprite.scale.set(0.9 + i * 0.18, 0.58 + i * 0.12, 1);
       trail.add(sprite);
     }
     world.add(trail);
@@ -5403,11 +5743,14 @@ function updateCarEffects(car, mesh) {
     trail.position.set(car.x - fwd.x * 2.35, car.y + 0.62, car.z - fwd.z * 2.35);
     trail.rotation.y = car.yaw;
     let i = 0;
+    const time = performance.now() * 0.006;
     for (const s of trail.children) {
-      const spread = (i - (trail.children.length - 1) / 2) * 0.12;
-      s.position.set(spread, 0, -i * 0.52);
-      s.material.opacity = (car.boosting ? 0.42 : 0.18) * (1 - i / trail.children.length);
-      s.scale.setScalar((car.boosting ? 1.25 : 0.82) + i * 0.26 + Math.random() * 0.18);
+      const falloff = 1 - i / trail.children.length;
+      const wave = 0.5 + Math.sin(time + i * 1.6 + car.x * 0.03) * 0.5;
+      const spread = (i - (trail.children.length - 1) / 2) * 0.10 + Math.sin(time * 0.7 + i) * 0.025;
+      s.position.set(spread, Math.sin(time + i) * 0.025, -i * 0.58);
+      s.material.opacity = (car.boosting ? 0.30 : 0.11) * falloff * (0.72 + wave * 0.22);
+      s.scale.set((car.boosting ? 1.20 : 0.78) + i * 0.18, (car.boosting ? 0.70 : 0.46) + i * 0.10, 1);
       i++;
     }
   }
@@ -5451,8 +5794,8 @@ function updateVisuals(state) {
       const boosting = !!car.boosting && (car.boost || 0) > 0;
       mesh.userData.flame.visible = boosting;
       if (boosting) {
-        const f = 0.85 + Math.random() * 0.45;
-        mesh.userData.flame.scale.set(1, f, 1 + Math.random() * 0.22);
+        const f = 0.92 + Math.sin(performance.now() * 0.018 + car.x * 0.05) * 0.12;
+        mesh.userData.flame.scale.set(0.90, f, 1.05 + Math.sin(performance.now() * 0.014 + car.z * 0.04) * 0.08);
       }
     }
   }
@@ -5466,6 +5809,7 @@ function updateVisuals(state) {
 function updateHud(state) {
   ui.scoreBlue.textContent = `BLUE ${state.score?.blue ?? 0}`;
   ui.scoreOrange.textContent = `${state.score?.orange ?? 0} ORANGE`;
+  updateArenaScoreboard(state);
   const t = Math.max(0, Math.ceil(state.timeLeft || 0));
   ui.clock.textContent = `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
   const localCar = state.cars?.[activePlayerId()];
@@ -5476,7 +5820,7 @@ function updateHud(state) {
     ui.boostBox.dataset.boost = `${boostPct}`;
     ui.boostBox.style.setProperty("--boost-pct", `${boostPct}%`);
   }
-  if (ui.boostLabel) ui.boostLabel.textContent = `BOOST ${boostPct}`;
+  if (ui.boostLabel) ui.boostLabel.textContent = "BOOST";
   // Phone: the BOOST button itself shows the amount and its fill drains live.
   if (ui.mobileBoostButton) {
     ui.mobileBoostButton.style.setProperty("--boost-pct", `${boostPct}%`);

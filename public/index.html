@@ -19,7 +19,6 @@
 
   <div id="round-countdown" class="round-countdown hidden" aria-live="polite">5</div>
 
-  <button id="leave-game" class="floating-btn hidden" type="button" aria-label="Leave match" title="Leave match">↩</button>
   <button id="pause-game" class="floating-btn pause-btn hidden" type="button" aria-label="Pause match" title="Pause match">⏸</button>
   <button id="toggle-chat" class="floating-btn chat-toggle hidden" type="button" aria-expanded="false" aria-controls="chat-panel" aria-label="Toggle chat" title="Toggle chat (T)">💬</button>
   <button id="toggle-voice" class="floating-btn voice-toggle hidden" type="button" aria-pressed="false" aria-label="Toggle voice chat" title="Join/leave voice chat (V)">🎙</button>
@@ -31,9 +30,9 @@
   <div id="pause-overlay" class="pause-overlay hidden" role="dialog" aria-live="polite" aria-label="Paused">
     <div class="pause-card">
       <div class="pause-title">PAUSED</div>
-      <p class="pause-copy">Take a quick break, adjust settings, or leave the match. Music controls stay available at the top of the screen.</p>
       <div class="pause-actions">
         <button id="pause-open-settings" type="button" class="secondary">⚙ Settings</button>
+        <button id="pause-ai-command" type="button" class="secondary pause-ai-command hidden" aria-expanded="false" aria-controls="ai-command-wheel">AI CMD</button>
         <button id="pause-resume" type="button" class="primary">▶ Resume</button>
         <button id="pause-leave" type="button" class="secondary danger-action">↩ Leave</button>
       </div>
@@ -402,8 +401,6 @@
           <p class="hint">When enabled in portrait, compact AIR L/R zones are added to the action pad without covering chat, voice, music, boost, jump, drift, or the boost meter.</p>
         </div>
       </div>
-    </section>
-
 
       <div class="settings-pane" data-settings-pane="aiCommands" role="tabpanel" hidden>
         <div class="settings-section ai-command-settings">
@@ -427,6 +424,7 @@
           <p class="hint">Raw audio is never written to Realtime Database. Server AI/STT is optional and uses backend function secrets.</p>
         </div>
       </div>
+    </section>
 
     <section id="leaderboard-card" class="panel leaderboard-panel hidden" aria-label="Leaderboard">
       <div class="panel-head compact-head">

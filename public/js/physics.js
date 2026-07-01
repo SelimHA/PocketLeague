@@ -283,14 +283,24 @@ const GOAL_H = 9;
 const GOAL_D = 8;
 
 const BALL_RADIUS = 1.85;
-// V26: a heavier-feeling ball, closer to the pre-multiplayer HTML-only game.
-// Max speed, bounce and car-hit lift are trimmed slightly so touches feel less floaty.
-const BALL_MAX_SPEED = 58;
-const BALL_GRAVITY = 39;
-const BALL_RESTITUTION = 0.70;
-const BALL_HEAVY_IMPULSE_SCALE = 0.95;
-const BALL_HEAVY_LIFT_SCALE = 0.78;
-const WALL_RESTITUTION = 0.78;
+// V48: slightly heavier, Rocket League-like ball response.
+// Touches still carry power, but bounce, lift and hang time are trimmed.
+const BALL_MAX_SPEED = 57;
+const BALL_GRAVITY = 44;
+const BALL_RESTITUTION = 0.64;
+const BALL_HEAVY_IMPULSE_SCALE = 0.84;
+const BALL_HEAVY_LIFT_SCALE = 0.58;
+const BALL_VERTICAL_DAMPING = 0.982;
+const BALL_AIR_DAMPING = 0.9986;
+const BALL_GROUND_FRICTION = 0.9865;
+const BALL_GROUND_SETTLE_SPEED = 1.85;
+const BALL_GROUNDED_TOUCH_LIFT_CAP = 8.6;
+const BALL_JUMP_TOUCH_LIFT_CAP = 12.4;
+const BALL_NON_BOOST_HIT_SCALE = 0.86;
+const BALL_BOOST_HIT_SCALE = 1.0;
+const WALL_RESTITUTION = 0.76;
+const WALL_TANGENT_DAMPING = 0.982;
+const CEILING_RESTITUTION = 0.58;
 const KICKOFF_COUNTDOWN_SECONDS = 5;
 
 const CAR_HALF_X = 1.35;
@@ -300,8 +310,8 @@ const CAR_RADIUS = 2.35;
 const CAR_GROUND_Y = CAR_HALF_Y + 0.08;
 const GRAVITY = 44;
 const BOOST_MAX = 100;
-const BOOST_PAD_RADIUS_SMALL = 1.85;
-const BOOST_PAD_RADIUS_BIG = 2.65;
+const BOOST_PAD_RADIUS_SMALL = 1.42;
+const BOOST_PAD_RADIUS_BIG = 2.08;
 // V38: slightly tighter boost economy. Everyone now starts with the same
 // amount and the tank drains a little faster, so kickoff/boost-pad decisions
 // matter more without making boost feel scarce.
@@ -348,8 +358,15 @@ export function getArenaSize(mode = "standard", teamSize = 1, pitchSize = "stand
   };
 }
 
-function makeBoostPads(arena) {
-  const raw = [
+function makeBoostPads(arena, mode = "standard") {
+  const standardRaw = [
+    [-arena.w * 0.40, -arena.l * 0.32, 100], [arena.w * 0.40, -arena.l * 0.32, 100],
+    [-arena.w * 0.40, arena.l * 0.32, 100], [arena.w * 0.40, arena.l * 0.32, 100],
+    [-arena.w * 0.20, -arena.l * 0.16, 36], [arena.w * 0.20, -arena.l * 0.16, 36],
+    [-arena.w * 0.20, arena.l * 0.16, 36], [arena.w * 0.20, arena.l * 0.16, 36],
+    [-arena.w * 0.43, 0, 36], [arena.w * 0.43, 0, 36]
+  ];
+  const fullRaw = [
     [0, 0, 100], [-arena.w * 0.35, 0, 100], [arena.w * 0.35, 0, 100],
     [-arena.w * 0.40, -arena.l * 0.32, 100], [arena.w * 0.40, -arena.l * 0.32, 100],
     [-arena.w * 0.40, arena.l * 0.32, 100], [arena.w * 0.40, arena.l * 0.32, 100],
@@ -358,6 +375,7 @@ function makeBoostPads(arena) {
     [-arena.w * 0.43, 0, 36], [arena.w * 0.43, 0, 36],
     [-arena.w * 0.14, -arena.l * 0.34, 36], [arena.w * 0.14, arena.l * 0.34, 36]
   ];
+  const raw = mode === "standard" ? standardRaw : fullRaw;
   return raw.map(([x, z, amount], i) => ({
     id: `pad_${i}`,
     x: clamp(x, -arena.w / 2 + 5, arena.w / 2 - 5),
@@ -514,7 +532,7 @@ export function makeInitialState(meta, players = {}) {
     arena,
     kickoffVariant,
     ball: { x: 0, y: BALL_RADIUS, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, rz: 0, lastTouchTick: 0, lastTouchCar: null, lastTouchImpulse: 0 },
-    boostPads: makeBoostPads(arena),
+    boostPads: makeBoostPads(arena, cleanMeta.mode),
     cars,
     goalFlash: null,
     sound: { roundSerial: 1, roundTick: 0, goalTick: 0, goalTeam: null, ballHitTick: 0, ballHitImpulse: 0, wallHitTick: 0, wallHitSpeed: 0, bounceTick: 0, bounceSpeed: 0, boostPadTick: 0, boostPadBig: false, boostPadCar: null, carBumpTick: 0, carBumpImpulse: 0 },
@@ -685,10 +703,10 @@ function aiSkill(meta) {
   // deliberately hesitates and over-commits sometimes; Pro rotates and saves;
   // All-Star anticipates touches and chooses boost/aerials much more reliably.
   return d === "rookie"
-    ? { think: 0.24, aim: 0.70, speed: 0.78, boost: 0.38, jump: 0.34, error: 7.4, read: 0.38, rotation: 0.46, challenge: 0.62, patience: 0.38, aerial: 0.18, save: 0.56, mistake: 0.28, kickoff: 0.42, intercept: 0.44, discipline: 0.48, shot: 0.55, fake: 0.10, recovery: 0.44, wallRead: 0.42 }
+    ? { think: 0.20, aim: 0.78, speed: 0.83, boost: 0.50, jump: 0.44, error: 5.8, read: 0.50, rotation: 0.58, challenge: 0.70, patience: 0.46, aerial: 0.28, save: 0.68, mistake: 0.22, kickoff: 0.56, intercept: 0.56, discipline: 0.58, shot: 0.64, fake: 0.12, recovery: 0.60, wallRead: 0.58, aerialBoost: 0.12, fastAerial: 0.04, padRouting: 0.34, recoveryAirRoll: 0.30, commit: 0.54 }
     : d === "allstar"
-      ? { think: 0.040, aim: 1.30, speed: 1.16, boost: 1.12, jump: 0.96, error: 0.72, read: 1.20, rotation: 1.26, challenge: 1.14, patience: 1.05, aerial: 0.92, save: 1.22, mistake: 0.035, kickoff: 0.99, intercept: 1.28, discipline: 1.28, shot: 1.24, fake: 0.42, recovery: 1.24, wallRead: 1.22 }
-      : { think: 0.085, aim: 1.03, speed: 1.02, boost: 0.88, jump: 0.68, error: 2.55, read: 0.80, rotation: 0.90, challenge: 0.90, patience: 0.74, aerial: 0.58, save: 0.90, mistake: 0.12, kickoff: 0.93, intercept: 0.86, discipline: 0.88, shot: 0.88, fake: 0.24, recovery: 0.86, wallRead: 0.82 };
+      ? { think: 0.032, aim: 1.38, speed: 1.20, boost: 1.24, jump: 1.08, error: 0.48, read: 1.34, rotation: 1.38, challenge: 1.22, patience: 1.12, aerial: 1.10, save: 1.34, mistake: 0.025, kickoff: 1.08, intercept: 1.42, discipline: 1.36, shot: 1.34, fake: 0.46, recovery: 1.36, wallRead: 1.34, aerialBoost: 1.10, fastAerial: 1.00, padRouting: 1.10, recoveryAirRoll: 1.08, commit: 1.18 }
+      : { think: 0.070, aim: 1.10, speed: 1.06, boost: 0.98, jump: 0.76, error: 1.95, read: 0.92, rotation: 1.02, challenge: 0.98, patience: 0.82, aerial: 0.70, save: 1.00, mistake: 0.09, kickoff: 1.00, intercept: 1.00, discipline: 0.98, shot: 0.98, fake: 0.26, recovery: 1.02, wallRead: 0.98, aerialBoost: 0.62, fastAerial: 0.46, padRouting: 0.78, recoveryAirRoll: 0.78, commit: 0.86 };
 }
 
 function styleConfig(meta) {
@@ -755,14 +773,15 @@ function predictBall(state, seconds) {
   while (t < seconds) {
     const step = Math.min(simDt, seconds - t);
     v.y -= BALL_GRAVITY * cfg.ballGravity * step;
-    v.y *= Math.pow(0.985, step * 120);
-    const airD = Math.pow(0.999, step * 120);
+    v.y *= Math.pow(BALL_VERTICAL_DAMPING, step * 120);
+    const airD = Math.pow(BALL_AIR_DAMPING, step * 120);
     v.x *= airD; v.y *= airD; v.z *= airD;
     p.x += v.x * step; p.y += v.y * step; p.z += v.z * step;
     if (p.y < BALL_RADIUS) {
       p.y = BALL_RADIUS;
-      if (v.y < 0) v.y *= -Math.min(0.88, BALL_RESTITUTION * cfg.ballRestitution);
-      const pf = 1 - (1 - 0.988) * cfg.ballFriction;
+      if (v.y < -BALL_GROUND_SETTLE_SPEED) v.y *= -Math.min(0.88, BALL_RESTITUTION * cfg.ballRestitution);
+      else if (v.y < 0) v.y = 0;
+      const pf = 1 - (1 - BALL_GROUND_FRICTION) * cfg.ballFriction;
       const pd = Math.pow(pf, step * 120);
       v.x *= pd; v.z *= pd;
     }
@@ -858,12 +877,17 @@ function selectAiIntercept(car, state, skill, danger01, roleCfg) {
     const p = ballAt(state, t);
     const eta = aiCarEta(car, p, state, skill, danger01);
     const timing = Math.abs(eta - t) * (skill.intercept > 1 ? 0.48 : 0.82);
-    const heightPenalty = Math.max(0, p.y - (skill.aerial > 0.75 ? 7.4 : 4.8)) * (1.25 - skill.aerial * 0.62);
+    const aerialReach = 4.4 + skill.aerial * 4.6 + roleCfg.aerial * 0.9 + clamp((car.boost || 0) / 100, 0, 1) * skill.aerial * 2.4;
+    const highBall = p.y > 3.2;
+    const aerialFeasible = highBall && p.y < aerialReach && skill.aerial > 0.42 && (car.boost > 10 || p.y < 5.2);
+    const heightPenalty = Math.max(0, p.y - (aerialFeasible ? aerialReach : skill.aerial > 0.75 ? 7.4 : 4.8)) * (1.30 - skill.aerial * 0.58);
+    const aerialBonus = aerialFeasible ? -0.10 * skill.aerial * (danger01 > 0.45 ? skill.save : roleCfg.attack) : 0;
+    const lowReadBonus = !highBall && skill.aerial < 0.45 ? -0.07 : 0;
     const behindBonus = carBehindBallForTeam(car, p, car.team) ? -0.18 * roleCfg.attack : 0.18 * roleCfg.discipline;
     const defenceBias = ownSign * p.z > state.arena.l * 0.12 ? -0.18 * roleCfg.defence * danger01 : 0;
     const attackBias = enemySign * p.z > state.arena.l * 0.12 ? -0.12 * roleCfg.attack : 0;
     const wallPenalty = Math.abs(p.x) > state.arena.w * 0.43 ? 0.12 * (1.35 - (skill.wallRead || skill.aim)) : 0;
-    const score = eta + timing + heightPenalty + behindBonus + defenceBias + attackBias + wallPenalty;
+    const score = eta + timing + heightPenalty + aerialBonus + lowReadBonus + behindBonus + defenceBias + attackBias + wallPenalty;
     if (!best || score < best.score) best = { point: p, time: t, eta, score };
   }
   return best || { point: ballAt(state, 0.2), time: 0.2, eta: 0.2, score: 0 };
@@ -1087,18 +1111,33 @@ function aiTouchSetup(car, state, ball, aim, skill, intent, role, danger01) {
   };
 }
 
-function nearestUsefulBoostPad(car, state, preferBig = false) {
+function nearestUsefulBoostPad(car, state, preferBig = false, routeTarget = null, skill = null, role = "balanced") {
   const pads = (state.boostPads || []).filter(p => p.active !== false && (preferBig ? p.big : true));
-  if (!pads.length && preferBig) return nearestUsefulBoostPad(car, state, false);
+  if (!pads.length && preferBig) return nearestUsefulBoostPad(car, state, false, routeTarget, skill, role);
   let best = null;
   let bestScore = Infinity;
   const ownSign = car.team === "blue" ? -1 : 1;
+  const enemySign = -ownSign;
+  const routeWeight = clamp(skill?.padRouting ?? 0.5, 0.15, 1.2);
+  const currentToTarget = routeTarget ? Math.hypot(car.x - routeTarget.x, car.z - routeTarget.z) : 0;
   for (const p of pads) {
     const d = Math.hypot(car.x - p.x, car.z - p.z);
     const ownHalfBonus = Math.sign(p.z || 0) === ownSign ? -6 : 0;
+    const roleForwardBonus = (role === "attack" || role === "midfield") && Math.sign(p.z || 0) === enemySign ? -3.5 : 0;
+    const defenderPullPenalty = (role === "goalkeeper" || role === "defence") && Math.sign(p.z || 0) === enemySign ? 8.5 * routeWeight : 0;
     const bigBonus = p.big ? -12 : 0;
     const airPenalty = Math.abs(car.y - CAR_GROUND_Y) > 2 ? 20 : 0;
-    const score = d + ownHalfBonus + bigBonus + airPenalty;
+    let routePenalty = 0;
+    if (routeTarget) {
+      const padToTarget = Math.hypot(p.x - routeTarget.x, p.z - routeTarget.z);
+      const extraRoute = Math.max(0, d + padToTarget - currentToTarget);
+      const midX = car.x * 0.42 + routeTarget.x * 0.58;
+      const midZ = car.z * 0.42 + routeTarget.z * 0.58;
+      const routeDeviation = Math.hypot(p.x - midX, p.z - midZ);
+      routePenalty = (extraRoute * 0.42 + routeDeviation * 0.22) * routeWeight;
+    }
+    const greedyDiscount = skill?.padRouting < 0.55 && d < 18 ? -4 : 0;
+    const score = d + routePenalty + ownHalfBonus + roleForwardBonus + defenderPullPenalty + bigBonus + airPenalty + greedyDiscount;
     if (score < bestScore) { bestScore = score; best = p; }
   }
   return best;
@@ -1116,6 +1155,12 @@ function aiRoundRoll(car, state, salt = 0) {
   const serial = Number(state.sound?.roundSerial || 1);
   const seed = Number(car.aiNoiseSeed || 0);
   const v = Math.sin(serial * 12.9898 + seed * 78.233 + salt * 37.719) * 43758.5453123;
+  return v - Math.floor(v);
+}
+
+function aiFrameRoll(car, state, salt = 0) {
+  const seed = Number(car.aiNoiseSeed || 0);
+  const v = Math.sin((state.tick || 0) * 12.9898 + seed * 78.233 + salt * 37.719) * 43758.5453123;
   return v - Math.floor(v);
 }
 
@@ -1231,8 +1276,8 @@ function makeDriveInput(car, target, state, skill, intent, opts = {}) {
     && driftSkill > 0.38
     && driftWindow;
   const boostIntent = ["challenge", "shot", "pass", "save", "kickoff", "boost"].includes(intent);
-  const boostAngle = intent === "kickoff" ? 0.50 : intent === "save" ? 0.38 : 0.34;
-  const boostMinDist = intent === "kickoff" ? 9 : intent === "save" ? 13 : 18;
+  const boostAngle = (intent === "kickoff" ? 0.50 : intent === "save" ? 0.38 : 0.34) + clamp((skill.boost - 0.75) * 0.08 + (skill.commit - 0.75) * 0.05, -0.05, 0.12);
+  const boostMinDist = Math.max(7, (intent === "kickoff" ? 9 : intent === "save" ? 13 : 18) - clamp((skill.boost - 0.55) * 4.0, 0, 4.5));
   const boostAllowed = throttle >= 0.04 && car.boost > (precise ? 14 : 7) && (car.grounded || state.mode === "flying");
   const boost = boostAllowed
     && boostIntent
@@ -1245,6 +1290,7 @@ function makeDriveInput(car, target, state, skill, intent, opts = {}) {
 
 export function makeAIInput(car, state, meta, players = {}) {
   const cfg = MODE_CONFIGS[state.mode] || MODE_CONFIGS.standard;
+  const difficulty = meta.difficulty || "pro";
   const tune = aiTuningForCar(meta, car);
   const skill = { ...aiSkill(meta) };
   const style = { ...styleConfig(meta) };
@@ -1257,6 +1303,10 @@ export function makeAIInput(car, state, meta, players = {}) {
   }
   skill.speed *= (0.96 + (tune.aggression - 1) * 0.35 + (tune.boost - 1) * 0.18);
   skill.boost *= tune.boost;
+  skill.aerialBoost *= (0.96 + (tune.boost - 1) * 0.28 + (tune.aggression - 1) * 0.16);
+  skill.fastAerial *= (0.96 + (tune.aggression - 1) * 0.20);
+  skill.padRouting *= (0.96 + (tune.boost - 1) * 0.34);
+  skill.commit *= (0.98 + (tune.aggression - 1) * 0.22 + (tune.defence - 1) * -0.10);
   skill.jump *= (0.94 + (tune.aggression - 1) * 0.25);
   skill.save *= (0.96 + (tune.defence - 1) * 0.34);
   skill.challenge *= roleCfg.challenge;
@@ -1264,6 +1314,8 @@ export function makeAIInput(car, state, meta, players = {}) {
   skill.aerial *= roleCfg.aerial;
   skill.patience *= roleCfg.patience;
   skill.discipline *= roleCfg.discipline;
+  skill.commit *= role === "attack" ? 1.08 : role === "midfield" ? 1.00 : role === "balanced" ? 0.96 : role === "defence" ? 0.84 : 0.72;
+  skill.aerialBoost *= roleCfg.aerial;
   style.attack *= tune.aggression * roleCfg.attack;
   style.defence *= tune.defence * roleCfg.defence;
   style.chase *= (0.98 + (tune.aggression - 1) * 0.34) * roleCfg.challenge;
@@ -1298,6 +1350,8 @@ export function makeAIInput(car, state, meta, players = {}) {
   const inEnemyHalf = enemySign * predicted.z > 0;
   const canWinRace = ownEta < opponentEta + (skill.discipline > 1 ? 0.20 : 0.05);
   const shouldPressureOpponent = opponentEta < ownEta + 0.42 && (firstMan || style.chase > 1.15) && role !== "goalkeeper";
+  const losesRaceBadly = opponentEta + (0.10 + skill.commit * 0.22) < ownEta;
+  const rookieBadFifty = skill.commit < 0.65 && aiRoundRoll(car, state, 10) < 0.38;
 
   let intent = "support";
   let target = { x: predicted.x, z: predicted.z };
@@ -1326,11 +1380,12 @@ export function makeAIInput(car, state, meta, players = {}) {
   const shouldDefend = danger01 > (role === "goalkeeper" ? 0.26 : role === "defence" ? 0.35 : role === "balanced" ? 0.46 : 0.60 / Math.max(0.65, style.defence));
   const disciplinedChallenge = canChallenge
     && (canWinRace || shouldPressureOpponent || danger01 > 0.68 || style.chaos)
-    && (behindBall || danger01 > 0.52 || role === "attack" || skill.discipline < 0.82);
+    && (behindBall || danger01 > 0.52 || role === "attack" || skill.discipline < 0.82)
+    && (!losesRaceBadly || danger01 > 0.70 || rookieBadFifty || (role === "attack" && style.chase > 1.22 && skill.discipline < 1.05));
 
   if (kickoffActive && (role === "attack" || role === "balanced" || rank === 0)) {
     intent = "kickoff";
-    const kickoffShot = (meta.difficulty || "pro") !== "rookie" && aiRoundRoll(car, state, 2) < (meta.difficulty === "allstar" ? 0.52 : 0.28);
+    const kickoffShot = difficulty !== "rookie" && aiRoundRoll(car, state, 2) < (difficulty === "allstar" ? 0.52 : 0.28);
     aim = kickoffShot ? goalTargetForShot(state, car.team, ball) : { x: 0, z: enemyGoalZ };
     target = distToBall > 13
       ? { x: 0, z: 0 }
@@ -1433,7 +1488,7 @@ export function makeAIInput(car, state, meta, players = {}) {
   const urgent = intent === "save" || (intent === "challenge" && danger01 > 0.62) || intent === "kickoff";
   if (teamCommand?.intent === "GET_BOOST" && !urgent && car.boost < 78) { intent = "boost"; }
   if ((lowBoost || routeBoost || intent === "boost") && !urgent && !cfg.snooker && car.grounded && (role !== "goalkeeper" || danger01 < 0.32)) {
-    const pad = nearestUsefulBoostPad(car, state, car.boost < 12 || (routeBoost && skill.rotation > 0.9));
+    const pad = nearestUsefulBoostPad(car, state, car.boost < 12 || (routeBoost && skill.rotation > 0.9), target, skill, role);
     const maxPadRange = state.arena.l * (routeBoost ? 0.34 : (skill.rotation > 0.9 ? 0.55 : 0.38));
     if (pad && Math.hypot(car.x - pad.x, car.z - pad.z) < maxPadRange) {
       intent = "boost";
@@ -1507,7 +1562,7 @@ export function makeAIInput(car, state, meta, players = {}) {
 
   if (intent === "kickoff") {
     drive.throttle = 1;
-    const kickoffFast = (meta.difficulty || "pro") !== "rookie" && aiRoundRoll(car, state, 1) < skill.kickoff;
+    const kickoffFast = difficulty !== "rookie" && aiRoundRoll(car, state, 1) < skill.kickoff;
     if (kickoffFast && car.boost > 2 && (car.grounded || state.mode === "flying") && drive.dist > 6 && Math.abs(drive.delta) < 0.72) drive.boost = true;
     if (kickoffFast && car.grounded && carSpeed2(car) > 9 && Math.abs(drive.delta) > 0.34 && Math.abs(drive.delta) < 1.35) drive.drift = true;
   }
@@ -1521,14 +1576,36 @@ export function makeAIInput(car, state, meta, players = {}) {
     return (dx * fwd.x + dz * fwd.z) / d;
   })();
   const shotAligned = ballAhead > (intent === "save" ? 0.35 : 0.55) && Math.abs(drive.delta) < (intent === "save" ? 0.65 : 0.42);
-  const reachableHeight = state.mode === "flying" ? 16 : (skill.aerial > 0.7 ? 7.6 : 5.8);
+  const aerialIntent = ["shot", "challenge", "pass", "save"].includes(intent);
+  const reachableHeight = state.mode === "flying"
+    ? 16
+    : clamp(4.8 + skill.aerial * 4.4 + (car.boost > 16 ? skill.aerial * 1.8 : 0), 5.1, difficulty === "allstar" ? 10.8 : difficulty === "pro" ? 8.8 : 6.4);
+  const aerialHeight = Math.max(ball.y || 0, predicted.y || 0);
+  const aerialDistLimit = difficulty === "allstar" ? 14.5 : difficulty === "pro" ? 11.2 : 8.2;
+  const aerialCommitChance = clamp(skill.aerial * (intent === "save" ? skill.save : intent === "shot" ? skill.shot : 1) * (danger01 > 0.55 ? 1.12 : 1), 0, 1.25);
+  const roleAerialAllowed = role === "attack" || role === "midfield" || role === "balanced" || intent === "save" || danger01 > 0.58;
+  const aerialPlanWindow = aerialIntent
+    && aerialHeight > (difficulty === "rookie" ? 3.25 : 2.85)
+    && aerialHeight < reachableHeight
+    && ballDist < aerialDistLimit
+    && shotAligned
+    && (car.boost > (difficulty === "rookie" ? 18 : 7) || aerialHeight < 5.2)
+    && roleAerialAllowed
+    && (role !== "goalkeeper" || intent === "save" || danger01 > 0.58);
   let jump = false;
   if (car.aiTouchJump && (intent === "shot" || intent === "challenge" || intent === "pass")) jump = true;
+  if (aerialPlanWindow && aiFrameRoll(car, state, 16) < aerialCommitChance * (difficulty === "rookie" ? 0.36 : difficulty === "pro" ? 0.74 : 0.98)) {
+    car.aiAerialUntil = state.tick + Math.round((0.36 + skill.fastAerial * 0.34 + (intent === "save" ? 0.12 : 0)) * 120);
+    if (car.grounded) jump = true;
+  }
   if ((intent === "shot" || intent === "challenge" || intent === "pass" || intent === "save" || intent === "kickoff") && ballDist < (intent === "save" ? 9.5 : 7.4) && shotAligned) {
     if (ball.y > 2.35 && ball.y < reachableHeight && car.grounded && Math.random() < clamp(skill.jump * (intent === "save" ? skill.save : 1), 0, 1.15)) jump = true;
-    if (intent === "kickoff" && ballDist < 7.2 && car.grounded && (skill.jump > 0.55 || ((meta.difficulty || "pro") !== "rookie" && aiRoundRoll(car, state, 3) < 0.86))) jump = true;
+    if (intent === "kickoff" && ballDist < 7.2 && car.grounded && (skill.jump > 0.55 || (difficulty !== "rookie" && aiRoundRoll(car, state, 3) < 0.86))) jump = true;
   }
-  if (!car.grounded && !car.doubleJumpUsed && ballDist < 8.6 && ball.y > car.y + 0.8 && shotAligned && skill.aerial > 0.55 && Math.random() < skill.aerial * 0.34) {
+  const ticksSinceJump = state.tick - Number(car.jumpEventTick || 0);
+  if (!car.grounded && !car.doubleJumpUsed && ticksSinceJump >= 0 && ticksSinceJump < (difficulty === "allstar" ? 7 : 10)) {
+    jump = false;
+  } else if (!car.grounded && !car.doubleJumpUsed && ballDist < (aerialPlanWindow ? 10.8 : 8.6) && ball.y > car.y + 0.65 && shotAligned && skill.aerial > 0.50 && aiFrameRoll(car, state, 17) < skill.aerial * (aerialPlanWindow ? 0.62 : 0.34)) {
     jump = true;
   }
 
@@ -1541,11 +1618,25 @@ export function makeAIInput(car, state, meta, players = {}) {
   const airDz = aerialTarget.z - car.z;
   const desiredAirYaw = Math.atan2(airDx, airDz);
   const airYawDelta = angleNorm(desiredAirYaw - (car.yaw || 0));
-  const aiAirRoll = !car.grounded && skill.aerial > 0.5 && (Math.abs(car.roll || 0) > 0.16 || Math.abs(airYawDelta) > 0.35);
-  const desiredRollSign = Math.abs(car.roll || 0) > 0.16 ? Math.sign(car.roll || 0) : Math.sign(airYawDelta || drive.steer || 0);
+  const aerialPlanActive = !car.grounded && state.tick < Number(car.aiAerialUntil || 0) && aerialIntent;
+  const aerialBoost = aerialPlanActive
+    && car.boost > 1.5
+    && skill.aerialBoost > 0.08
+    && Math.abs(airYawDelta) < 0.92 + skill.aerial * 0.16
+    && (aerialTarget.y > car.y + 0.15 || ballDist > 5.2)
+    && aiFrameRoll(car, state, 18) < clamp(skill.aerialBoost, 0, 1.1);
+  if (aerialBoost) drive.boost = true;
+  const recoveryRoll = !car.grounded
+    && skill.recoveryAirRoll > 0.22
+    && (Math.abs(car.roll || 0) > (difficulty === "rookie" ? 0.45 : 0.24) || (car.y < CAR_GROUND_Y + 3.2 && Math.abs(car.pitch || 0) > 0.34));
+  const aerialAimRoll = aerialPlanActive && skill.aerial > 0.52 && Math.abs(airYawDelta) > (difficulty === "allstar" ? 0.24 : 0.34);
+  const rollAllowed = aiFrameRoll(car, state, 19) < clamp(Math.max(skill.recoveryAirRoll, skill.aerialBoost), 0, 1.08);
+  const aiAirRoll = !car.grounded && rollAllowed && (recoveryRoll || aerialAimRoll);
+  const desiredRollSign = recoveryRoll && Math.abs(car.roll || 0) > 0.08 ? Math.sign(car.roll || 0) : Math.sign(airYawDelta || drive.steer || 0);
   if (!car.grounded) drive.drift = false;
   if (cfg.snooker) drive.boost = false;
 
+  const aerialControlScale = aerialPlanActive ? clamp(skill.aerial * 1.12, 0, 1.2) : clamp(skill.aerial, 0, 1);
   setAiDebug(car, intent, target.x, target.z);
   return {
     throttle: drive.throttle,
@@ -1555,10 +1646,11 @@ export function makeAIInput(car, state, meta, players = {}) {
     drift: drive.drift,
     airRollLeft: aiAirRoll && desiredRollSign > 0,
     airRollRight: aiAirRoll && desiredRollSign < 0,
-    pitchUp: !car.grounded && aerialTarget.y > car.y + 0.35 ? clamp(skill.aerial, 0, 1) : 0,
-    pitchDown: !car.grounded && aerialTarget.y < car.y - 0.25 ? clamp(skill.aerial * 0.6, 0, 1) : 0,
-    yawLeft: !car.grounded && airYawDelta > 0 ? clamp(Math.abs(airYawDelta) * skill.aerial, 0, 1) : 0,
-    yawRight: !car.grounded && airYawDelta < 0 ? clamp(Math.abs(airYawDelta) * skill.aerial, 0, 1) : 0,
+    airRollScale: clamp(0.75 + skill.recoveryAirRoll * 0.42, 0.65, 1.28),
+    pitchUp: !car.grounded && aerialTarget.y > car.y + 0.35 ? aerialControlScale : 0,
+    pitchDown: !car.grounded && aerialTarget.y < car.y - 0.25 ? clamp(aerialControlScale * 0.64, 0, 1) : 0,
+    yawLeft: !car.grounded && airYawDelta > 0 ? clamp(Math.abs(airYawDelta) * aerialControlScale, 0, 1) : 0,
+    yawRight: !car.grounded && airYawDelta < 0 ? clamp(Math.abs(airYawDelta) * aerialControlScale, 0, 1) : 0,
     cam: false,
     reset: false
   };
@@ -1901,7 +1993,7 @@ function updateCar(car, input, state, cfg, dt) {
 }
 
 function updateBoostPads(state, dt) {
-  if (!Array.isArray(state.boostPads)) state.boostPads = makeBoostPads(state.arena);
+  if (!Array.isArray(state.boostPads)) state.boostPads = makeBoostPads(state.arena, state.mode);
   for (const pad of state.boostPads) {
     pad.big = !!pad.big || (pad.amount || 0) >= 100;
     const defaultRadius = pad.big ? BOOST_PAD_RADIUS_BIG : BOOST_PAD_RADIUS_SMALL;
@@ -2000,8 +2092,8 @@ function updateBall(state, cfg, dt) {
   b.vy -= BALL_GRAVITY * cfg.ballGravity * dt;
   // The HTML-only version damped vertical arcs a little more than the
   // multiplayer rebuild. Restoring that damping makes the ball feel heavier.
-  b.vy *= Math.pow(0.985, dt * 120);
-  const air = Math.pow(0.999, dt * 120);
+  b.vy *= Math.pow(BALL_VERTICAL_DAMPING, dt * 120);
+  const air = Math.pow(BALL_AIR_DAMPING, dt * 120);
   b.vx *= air; b.vy *= air; b.vz *= air;
   const speed = Math.hypot(b.vx, b.vy, b.vz);
   if (speed > maxBallSpeed) {
@@ -2016,7 +2108,7 @@ function updateBall(state, cfg, dt) {
   if (b.y < BALL_RADIUS) {
     b.y = BALL_RADIUS;
     const impactY = Math.abs(b.vy);
-    if (b.vy < -1.2) {
+    if (b.vy < -BALL_GROUND_SETTLE_SPEED) {
       b.vy *= -ballRestitution;
       if (impactY > 3.2) {
         if (!state.sound) state.sound = {};
@@ -2024,7 +2116,7 @@ function updateBall(state, cfg, dt) {
         state.sound.bounceSpeed = impactY;
       }
     } else b.vy = 0;
-    const groundFriction = 1 - (1 - 0.988) * cfg.ballFriction;
+    const groundFriction = 1 - (1 - BALL_GROUND_FRICTION) * cfg.ballFriction;
     const d = Math.pow(groundFriction, dt * 120);
     b.vx *= d; b.vz *= d;
   }
@@ -2033,7 +2125,7 @@ function updateBall(state, cfg, dt) {
   if (b.y > ceilingH - BALL_RADIUS) {
     b.y = ceilingH - BALL_RADIUS;
     const hitSpeed = Math.abs(b.vy);
-    if (b.vy > 0) b.vy *= -0.62;
+    if (b.vy > 0) b.vy *= -CEILING_RESTITUTION;
     if (hitSpeed > 4) {
       if (!state.sound) state.sound = {};
       state.sound.wallHitTick = state.tick;
@@ -2046,7 +2138,7 @@ function updateBall(state, cfg, dt) {
     const hitSpeed = Math.abs(b.vx);
     b.x = Math.sign(b.x) * sideLim;
     b.vx *= -wallRestitution;
-    b.vz *= 0.985;
+    b.vz *= WALL_TANGENT_DAMPING;
     if (hitSpeed > 3.5) {
       if (!state.sound) state.sound = {};
       state.sound.wallHitTick = state.tick;
@@ -2062,7 +2154,7 @@ function updateBall(state, cfg, dt) {
     const hitSpeed = Math.abs(b.vz);
     b.z = Math.sign(b.z) * zLim;
     b.vz *= -wallRestitution;
-    b.vx *= 0.985;
+    b.vx *= WALL_TANGENT_DAMPING;
     if (hitSpeed > 3.5) {
       if (!state.sound) state.sound = {};
       state.sound.wallHitTick = state.tick;
@@ -2086,7 +2178,7 @@ function updateBall(state, cfg, dt) {
     if (b.y > arena.goalH - BALL_RADIUS) {
       const hitSpeed = Math.abs(b.vy);
       b.y = arena.goalH - BALL_RADIUS;
-      if (b.vy > 0) b.vy *= -0.62;
+      if (b.vy > 0) b.vy *= -CEILING_RESTITUTION;
       if (hitSpeed > 3.5) {
         if (!state.sound) state.sound = {};
         state.sound.wallHitTick = state.tick;
@@ -2220,18 +2312,23 @@ function resolveCarBallOBB(car, b, state, cfg) {
   const relativeZ = b.vz - contactVz;
   const closing = -(relativeX * nx + relativeY * ny + relativeZ * nz);
   const speed = horizontalSpeed(car);
-  const frontBonus = clamp(fwd.x * nx + fwd.z * nz, -0.2, 1) * 6.2;
-  const jumpBonus = car.justJumped ? 7.4 : 0;
-  const impulse = (Math.max(0, closing * 1.18) + 4.0 + speed * 0.39 + frontBonus + jumpBonus) * vehicle.hit * BALL_HEAVY_IMPULSE_SCALE;
+  const frontness = clamp(fwd.x * nx + fwd.z * nz, -0.2, 1);
+  const hitScale = car.boosting ? BALL_BOOST_HIT_SCALE : BALL_NON_BOOST_HIT_SCALE;
+  const speedHitScale = car.boosting ? 1 : 0.74;
+  const frontBonus = frontness * (car.boosting ? 6.0 : 5.2);
+  const jumpBonus = car.justJumped ? 6.8 : 0;
+  const impulse = (Math.max(0, closing * 1.12) + 3.7 + speed * 0.36 * speedHitScale + frontBonus + jumpBonus) * vehicle.hit * BALL_HEAVY_IMPULSE_SCALE * hitScale;
   b.vx += nx * impulse;
   b.vy += ny * impulse * BALL_HEAVY_LIFT_SCALE;
   b.vz += nz * impulse;
-  if (ny < 0.25) b.vy += clamp((speed * 0.082 + (car.justJumped ? 4.0 : 1.55)) * BALL_HEAVY_LIFT_SCALE, 1.0, 5.7);
-  if (car.boosting) { b.vx += fwd.x * 5.1; b.vz += fwd.z * 5.1; }
+  if (ny < 0.25) b.vy += clamp((speed * 0.070 * speedHitScale + (car.justJumped ? 3.7 : 1.2)) * BALL_HEAVY_LIFT_SCALE, 0.72, 4.8);
+  if (car.boosting) { b.vx += fwd.x * 4.8; b.vz += fwd.z * 4.8; }
+  const groundedTouch = b.y < BALL_RADIUS + 0.75 && car.grounded && ny < 0.35;
+  if (groundedTouch) b.vy = Math.min(b.vy, car.justJumped ? BALL_JUMP_TOUCH_LIFT_CAP : BALL_GROUNDED_TOUCH_LIFT_CAP);
   const maxBallSpeed = BALL_MAX_SPEED * cfg.ballMax;
   const bs = Math.hypot(b.vx, b.vy, b.vz);
   if (bs > maxBallSpeed) { const s = maxBallSpeed / bs; b.vx *= s; b.vy *= s; b.vz *= s; }
-  const recoil = Math.min(7, impulse * 0.085) / vehicle.mass;
+  const recoil = Math.min(7.4, impulse * 0.095) / vehicle.mass;
   car.vx -= nx * recoil;
   car.vy -= ny * recoil;
   car.vz -= nz * recoil;
