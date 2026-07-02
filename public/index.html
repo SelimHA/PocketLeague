@@ -444,7 +444,11 @@
           <h2>Lobby <span id="lobby-code-label">----</span></h2>
           <p id="lobby-status" class="muted">Waiting for players…</p>
         </div>
-        <button id="copy-code" type="button" class="secondary">Copy Code</button>
+        <div class="lobby-actions" aria-label="Lobby actions">
+          <button id="copy-code" type="button" class="secondary">Copy Code</button>
+          <button id="ready-btn" type="button" class="ready">Ready</button>
+          <button id="leave-lobby" type="button" class="secondary">Leave Lobby</button>
+        </div>
       </div>
 
       <div class="grid two-col lobby-main-grid">
@@ -606,8 +610,6 @@
               <span id="vehicle-preview-desc">Balanced starter car</span>
             </div>
           </div>
-          <button id="ready-btn" type="button" class="ready">Ready</button>
-          <button id="leave-lobby" type="button" class="secondary">Leave Lobby</button>
         </div>
       </div>
 
