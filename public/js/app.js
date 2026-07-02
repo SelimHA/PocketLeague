@@ -3999,6 +3999,8 @@ const carMeshes = new Map();
 const boostPadMeshes = new Map();
 const nameSprites = new Map();
 const boostTrailMeshes = new Map();
+const surfaceEffectPool = [];
+const surfaceEffectActive = [];
 const ballTrail = [];
 const menuDemo = new THREE.Group();
 scene.add(menuDemo);
@@ -4574,6 +4576,8 @@ function buildArena(state) {
   carMeshes.clear();
   boostPadMeshes.clear();
   boostTrailMeshes.clear();
+  surfaceEffectPool.length = 0;
+  surfaceEffectActive.length = 0;
   ballTrail.length = 0;
   nameSprites.clear();
   applySceneTheme(theme);
@@ -4581,7 +4585,7 @@ function buildArena(state) {
 
   const arena = state.arena;
   const field = new THREE.Mesh(
-    new THREE.PlaneGeometry(arena.w, arena.l),
+    new THREE.PlaneGeometry(arena.w, arena.l, mobilePerf ? 1 : 2, mobilePerf ? 1 : 2),
     new THREE.MeshStandardMaterial({
       map: makeFieldTexture(state.mode, arena, theme),
       color: state.mode === "ice" ? 0xffffff : 0x7a8576,
@@ -4592,6 +4596,7 @@ function buildArena(state) {
   field.rotation.x = -Math.PI / 2;
   field.receiveShadow = true;
   world.add(field);
+  addPitchMaterialOverlays(state, arena, theme, mobilePerf);
 
   const wallColor = state.mode === "ice" ? 0xa6ddff : (theme.wall ?? 0x1d2438);
   const wallMat = new THREE.MeshStandardMaterial({ color: wallColor, transparent: true, opacity: theme.wallOpacity ?? 0.48, roughness: 0.4 });
@@ -5323,13 +5328,14 @@ function addAeroKit(g, bodyW, bodyH, bodyD, team, modelKey, isLocal = false) {
   }
 }
 
-function createWheelMesh(x, z, scale = 1) {
+function createWheelMesh(x, z, scale = 1, front = false) {
   const wheel = new THREE.Mesh(
     new THREE.CylinderGeometry(0.34 * scale, 0.34 * scale, 0.42 * scale, 14),
     new THREE.MeshStandardMaterial({ color: 0x07080b, roughness: 0.72, metalness: 0.08 })
   );
   wheel.rotation.z = Math.PI / 2;
   wheel.position.set(x, 0.36 * scale, z);
+  wheel.userData = { baseY: wheel.position.y, front, spin: 0, side: Math.sign(x) || 1 };
   wheel.castShadow = true;
   const rim = new THREE.Mesh(
     new THREE.CylinderGeometry(0.18 * scale, 0.18 * scale, 0.44 * scale, 10),
@@ -5406,12 +5412,15 @@ function createCarMesh(car, state) {
   const wheelScale = vehicle.wheelScale || 1;
   const wheelX = bodyW / 2 + 0.04;
   const wheelZ = bodyD * 0.34;
-  g.add(
-    createWheelMesh(-wheelX, -wheelZ, wheelScale),
-    createWheelMesh(wheelX, -wheelZ, wheelScale),
-    createWheelMesh(-wheelX, wheelZ, wheelScale),
-    createWheelMesh(wheelX, wheelZ, wheelScale)
-  );
+  const wheels = [
+    createWheelMesh(-wheelX, -wheelZ, wheelScale, true),
+    createWheelMesh(wheelX, -wheelZ, wheelScale, true),
+    createWheelMesh(-wheelX, wheelZ, wheelScale, false),
+    createWheelMesh(wheelX, wheelZ, wheelScale, false)
+  ];
+  g.userData.wheels = wheels;
+  g.userData.bodyMetrics = { bodyH, bodyD, wheelScale };
+  g.add(...wheels);
 
   if (modelKey === "rally") {
     const rollBar = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.055, 8, 18, Math.PI), new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.36, metalness: 0.5 }));
@@ -5460,6 +5469,15 @@ function createCarMesh(car, state) {
   flame.position.set(0, Math.max(0.44, bodyH * 0.52), -bodyD / 2 - 0.58);
   flame.visible = false;
   g.userData.flame = flame;
+  const contactShadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(bodyW * 1.22, bodyD * 0.90),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.30, depthWrite: false, side: THREE.DoubleSide })
+  );
+  contactShadow.rotation.x = -Math.PI / 2;
+  contactShadow.position.y = 0.045;
+  g.userData.contactShadow = contactShadow;
+  g.add(contactShadow);
+
   const localBeacon = isLocal ? new THREE.Mesh(
     new THREE.RingGeometry(Math.max(bodyW, bodyD) * 0.50, Math.max(bodyW, bodyD) * 0.64, 40),
     new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide })
@@ -5742,6 +5760,74 @@ function updateBallTrail(state) {
   }
 }
 
+function clearSurfaceEffects() {
+  for (const item of surfaceEffectActive.splice(0)) item.sprite.visible = false;
+  for (const sprite of surfaceEffectPool) sprite.visible = false;
+}
+
+function surfaceEffectPreset(mode) {
+  if (mode === "ice") return { color: 0xdff8ff, opacity: 0.26, scale: 1.25, life: 0.75 };
+  if (mode === "snooker") return { color: 0xd9c08a, opacity: 0.18, scale: 0.9, life: 0.62 };
+  if (mode === "flying") return { color: 0x9cc9ff, opacity: 0.16, scale: 1.05, life: 0.55 };
+  return { color: 0xb7e6a5, opacity: 0.20, scale: 1.0, life: 0.66 };
+}
+
+function getSurfaceEffectSprite() {
+  let sprite = surfaceEffectPool.find(s => !s.visible);
+  if (!sprite) {
+    sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: getBoostTrailTexture(), transparent: true, opacity: 0, depthWrite: false }));
+    surfaceEffectPool.push(sprite);
+    world.add(sprite);
+  }
+  sprite.visible = true;
+  return sprite;
+}
+
+function spawnSurfaceEffect(x, z, mode, intensity = 1) {
+  if (isPhonePortrait() && surfaceEffectActive.length > 18) return;
+  if (!isPhonePortrait() && surfaceEffectActive.length > 42) return;
+  const preset = surfaceEffectPreset(mode);
+  const sprite = getSurfaceEffectSprite();
+  sprite.material.color.setHex(preset.color);
+  sprite.material.opacity = preset.opacity * clamp(intensity, 0.35, 1.4);
+  sprite.position.set(x + (Math.random() - 0.5) * 0.55, 0.18, z + (Math.random() - 0.5) * 0.55);
+  sprite.scale.setScalar(preset.scale * (0.55 + Math.random() * 0.65) * clamp(intensity, 0.7, 1.6));
+  surfaceEffectActive.unshift({ sprite, life: preset.life, maxLife: preset.life, driftX: (Math.random() - 0.5) * 0.018, driftZ: (Math.random() - 0.5) * 0.018 });
+}
+
+function updateSurfaceEffects() {
+  for (let i = surfaceEffectActive.length - 1; i >= 0; i--) {
+    const item = surfaceEffectActive[i];
+    item.life -= 0.045;
+    item.sprite.position.x += item.driftX;
+    item.sprite.position.z += item.driftZ;
+    item.sprite.scale.multiplyScalar(1.012);
+    item.sprite.material.opacity *= 0.91;
+    if (item.life <= 0 || item.sprite.material.opacity < 0.01) {
+      item.sprite.visible = false;
+      surfaceEffectActive.splice(i, 1);
+    }
+  }
+}
+
+function addPitchMaterialOverlays(state, arena, theme, mobilePerf) {
+  const mode = state.mode;
+  const markCount = mobilePerf ? 18 : 34;
+  const color = mode === "ice" ? 0xffffff : mode === "snooker" ? 0xb68b57 : mode === "flying" ? (theme.accentA ?? 0x7dd3fc) : 0x132415;
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: mode === "ice" ? 0.12 : 0.075, depthWrite: false, side: THREE.DoubleSide });
+  let seed = ((arena.w * 31 + arena.l * 17 + String(mode).length * 97) >>> 0) || 1;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < markCount; i++) {
+    const w = (mode === "ice" ? 5.2 : 2.6) + rand() * (mode === "ice" ? 8.0 : 5.5);
+    const h = 0.08 + rand() * 0.22;
+    const mark = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat.clone());
+    mark.rotation.x = -Math.PI / 2;
+    mark.rotation.z = rand() * Math.PI;
+    mark.position.set((rand() - 0.5) * arena.w * 0.86, 0.055, (rand() - 0.5) * arena.l * 0.86);
+    world.add(mark);
+  }
+}
+
 function updateCarEffects(car, mesh) {
   const speed = Math.hypot(car.vx || 0, car.vz || 0);
   const color = car.team === "blue" ? 0x38d8ff : 0xff8a24;
@@ -5758,6 +5844,27 @@ function updateCarEffects(car, mesh) {
     boostTrailMeshes.set(car.id, trail);
   }
   const fwd = new THREE.Vector3(Math.sin(car.yaw), 0, Math.cos(car.yaw));
+  const grounded = car.grounded !== false && (car.y || 0) < 1.25;
+  if (mesh.userData.contactShadow) {
+    const shadow = mesh.userData.contactShadow;
+    shadow.visible = grounded && !(car.demoTimer > 0);
+    shadow.material.opacity = clamp(0.34 - Math.max(0, (car.y || 0) - 0.15) * 0.16, 0.08, 0.34);
+    shadow.scale.set(1 + clamp(speed / 48, 0, 0.16), 1 + clamp(speed / 48, 0, 0.10), 1);
+  }
+  if (mesh.userData.wheels) {
+    const steer = clamp(car.steer ?? car.inputSteer ?? 0, -1, 1);
+    const spinDelta = speed * 0.030 * (car.throttle < 0 ? -1 : 1);
+    for (const wheel of mesh.userData.wheels) {
+      wheel.userData.spin = (wheel.userData.spin || 0) + spinDelta;
+      wheel.rotation.z = Math.PI / 2 + (wheel.userData.front ? steer * 0.34 : 0);
+      wheel.rotation.x = wheel.userData.spin;
+      wheel.position.y = (wheel.userData.baseY || wheel.position.y) - (grounded ? clamp(speed / 95, 0, 0.10) : -0.035);
+    }
+  }
+  if (grounded && speed > 8 && (car.drifting || car.boosting || Math.abs(car.vx || 0) + Math.abs(car.vz || 0) > 18)) {
+    const rate = isPhonePortrait() ? 0.18 : 0.34;
+    if (Math.random() < rate) spawnSurfaceEffect(car.x - fwd.x * 1.55, car.z - fwd.z * 1.55, currentMeta?.mode || "standard", clamp(speed / 32, 0.45, 1.35));
+  }
   const active = (!!car.boosting && (car.boost || 0) > 0) || speed > 31;
   trail.visible = active && !(car.demoTimer > 0);
   if (trail.visible) {
@@ -5795,6 +5902,7 @@ function updateVisuals(state) {
   }
   updateBoostPadVisuals(state);
   updateBallTrail(state);
+  updateSurfaceEffects();
   for (const car of Object.values(state.cars || {})) {
     let mesh = carMeshes.get(car.id);
     const modelKey = VEHICLE_CONFIGS[car.model] ? car.model : "default";
